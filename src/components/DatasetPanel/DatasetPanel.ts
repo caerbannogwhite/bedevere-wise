@@ -1,7 +1,7 @@
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
 
-interface DatasetInfo {
+export interface DatasetInfo {
   metadata: DatasetMetadata;
   dataset: DataProvider;
   isLoaded: boolean;

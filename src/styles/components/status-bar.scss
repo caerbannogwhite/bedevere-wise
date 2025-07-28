@@ -62,7 +62,7 @@
 
     &--clickable {
       cursor: pointer;
-      
+
       &:hover {
         background-color: rgba(255, 255, 255, 0.1);
       }
@@ -82,7 +82,7 @@
     }
 
     &--info {
-      color: #75beff;
+      color: #ffffff;
     }
 
     &--success {
@@ -112,15 +112,15 @@
 @media (max-width: 768px) {
   .status-bar {
     padding: 0 4px;
-    
+
     &__section {
       gap: 8px;
     }
-    
+
     &__item {
       padding: 0 4px;
       font-size: 10px;
-      
+
       // Hide less important items on mobile
       &[data-id="cell-value"],
       &[data-id="command-palette"] {
@@ -152,7 +152,7 @@ body.theme-dark {
     &--clickable:hover {
       background-color: rgba(255, 255, 255, 0.1);
     }
-    
+
     &--clickable:active {
       background-color: rgba(255, 255, 255, 0.2);
     }
@@ -164,9 +164,9 @@ body.theme-light {
     &--clickable:hover {
       background-color: rgba(0, 0, 0, 0.1);
     }
-    
+
     &--clickable:active {
       background-color: rgba(0, 0, 0, 0.2);
     }
   }
-} 
+}

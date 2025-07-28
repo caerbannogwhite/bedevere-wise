@@ -1,12 +1,22 @@
+export interface CommandParameter {
+  name: string;
+  type: string;
+  description?: string;
+  required?: boolean;
+  default?: string;
+  options?: string[];
+}
+
 export interface Command {
   id: string;
   title: string;
+  parameters?: CommandParameter[];
   description?: string;
   category?: string;
   keybinding?: string;
   icon?: string;
   when?: () => boolean;
-  execute: () => void | Promise<void>;
+  execute: (params?: Record<string, any>) => void | Promise<void>;
 }
 
 export class CommandPalette {
@@ -14,10 +24,14 @@ export class CommandPalette {
   private overlay!: HTMLElement;
   private input!: HTMLInputElement;
   private commandList!: HTMLElement;
+  private parameterForm!: HTMLElement;
   private commands: Map<string, Command> = new Map();
   private filteredCommands: Command[] = [];
   private selectedIndex: number = 0;
   private isVisible: boolean = false;
+  private showingParameters: boolean = false;
+  private currentCommand?: Command;
+  private parameterValues: Record<string, any> = {};
   private onHideCallback?: () => void;
 
   constructor(parent: HTMLElement) {
@@ -44,10 +58,14 @@ export class CommandPalette {
 
   public show(): void {
     this.isVisible = true;
+    this.showingParameters = false;
+    this.currentCommand = undefined;
+    this.parameterValues = {};
     this.container.style.display = "block";
     this.overlay.style.display = "block";
     this.input.value = "";
     this.input.focus();
+    this.showCommandList();
     this.filterCommands();
     this.selectedIndex = 0;
     this.updateSelection();
@@ -110,10 +128,16 @@ export class CommandPalette {
     this.commandList = document.createElement("div");
     this.commandList.className = "command-palette__list";
 
+    // Parameter form
+    this.parameterForm = document.createElement("div");
+    this.parameterForm.className = "command-palette__parameters";
+    this.parameterForm.style.display = "none";
+
     document.body.appendChild(this.overlay);
 
     this.container.appendChild(this.input);
     this.container.appendChild(this.commandList);
+    this.container.appendChild(this.parameterForm);
   }
 
   private setupEventListeners(): void {
@@ -155,7 +179,6 @@ export class CommandPalette {
 
   private filterCommands(): void {
     const query = this.input.value.toLowerCase();
-    console.log("filterCommands", query);
     this.filteredCommands = Array.from(this.commands.values())
       .filter((command) => {
         // Check if command should be shown (when condition)
@@ -241,6 +264,26 @@ export class CommandPalette {
   private handleKeyDown(e: KeyboardEvent): void {
     e.stopPropagation();
 
+    // Handle parameter form navigation
+    if (this.showingParameters) {
+      switch (e.key) {
+        case "Escape":
+          e.preventDefault();
+          e.stopPropagation();
+          this.showCommandList();
+          this.filterCommands();
+          this.selectedIndex = 0;
+          this.updateSelection();
+          break;
+        case "Enter":
+          e.preventDefault();
+          this.executeWithParameters();
+          break;
+      }
+      return;
+    }
+
+    // Handle command list navigation
     switch (e.key) {
       case "ArrowDown":
         e.preventDefault();
@@ -276,12 +319,180 @@ export class CommandPalette {
     });
   }
 
+  private showCommandList(): void {
+    this.input.style.display = "block";
+    this.input.focus();
+    this.commandList.style.display = "block";
+    this.parameterForm.style.display = "none";
+    this.input.placeholder = "Type a command...";
+    this.showingParameters = false;
+  }
+
+  private showParameterForm(): void {
+    this.input.style.display = "none";
+    this.commandList.style.display = "none";
+    this.parameterForm.style.display = "block";
+    this.input.placeholder = "Press Escape to go back...";
+    this.showingParameters = true;
+  }
+
   private async executeCommand(command: Command): Promise<void> {
     try {
+      // Check if command has parameters
+      if (command.parameters && command.parameters.length > 0) {
+        this.currentCommand = command;
+        this.parameterValues = {};
+        this.renderParameterForm();
+        this.showParameterForm();
+        return;
+      }
+
+      // Execute command without parameters
       await command.execute();
       this.hide();
     } catch (error) {
       console.error("Error executing command:", error);
+    }
+  }
+
+  private renderParameterForm(): void {
+    if (!this.currentCommand?.parameters) return;
+
+    this.parameterForm.innerHTML = "";
+
+    // Title
+    const title = document.createElement("div");
+    title.className = "command-palette__parameter-title";
+    title.textContent = this.currentCommand.title;
+    this.parameterForm.appendChild(title);
+
+    // Parameters
+    this.currentCommand.parameters.forEach((param) => {
+      const paramContainer = document.createElement("div");
+      paramContainer.className = "command-palette__parameter";
+
+      // const label = document.createElement("label");
+      // label.className = "command-palette__parameter-label";
+      // label.textContent = `${param.name}${param.required ? " *" : ""}`;
+      // if (param.description) {
+      //   label.title = param.description;
+      // }
+
+      let input: HTMLElement;
+
+      if (param.options && param.options.length > 0) {
+        // Dropdown for options
+        const select = document.createElement("select");
+        select.className = "command-palette__parameter-input";
+
+        if (!param.required) {
+          const emptyOption = document.createElement("option");
+          emptyOption.value = "";
+          emptyOption.textContent = "-- Select --";
+          select.appendChild(emptyOption);
+        }
+
+        param.options.forEach((option) => {
+          const optionElement = document.createElement("option");
+          optionElement.value = option;
+          optionElement.textContent = option;
+          if (param.default === option) {
+            optionElement.selected = true;
+          }
+          select.appendChild(optionElement);
+        });
+
+        select.addEventListener("change", () => {
+          this.parameterValues[param.name] = select.value;
+        });
+
+        if (param.default) {
+          this.parameterValues[param.name] = param.default;
+        }
+
+        input = select;
+      } else if (param.type === "boolean") {
+        // Checkbox for boolean
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.className = "command-palette__parameter-input";
+        checkbox.checked = param.default === "true";
+
+        checkbox.addEventListener("change", () => {
+          this.parameterValues[param.name] = checkbox.checked;
+        });
+
+        this.parameterValues[param.name] = checkbox.checked;
+        input = checkbox;
+      } else {
+        // Text input for other types
+        const textInput = document.createElement("input");
+        textInput.type = param.type === "number" ? "number" : "text";
+        textInput.className = "command-palette__parameter-input";
+        textInput.placeholder = param.description || "";
+        textInput.value = param.default || "";
+
+        textInput.addEventListener("input", () => {
+          const value = param.type === "number" ? (textInput.value ? parseFloat(textInput.value) : undefined) : textInput.value;
+          this.parameterValues[param.name] = value;
+        });
+
+        if (param.default) {
+          const value = param.type === "number" ? parseFloat(param.default) : param.default;
+          this.parameterValues[param.name] = value;
+        }
+
+        input = textInput;
+      }
+
+      // paramContainer.appendChild(label);
+      paramContainer.appendChild(input);
+      this.parameterForm.appendChild(paramContainer);
+    });
+
+    // Focus on the first parameter
+    const firstParam = this.parameterForm.querySelector(".command-palette__parameter-input");
+    if (firstParam) {
+      (firstParam as HTMLInputElement).focus();
+    }
+
+    // Buttons
+    const buttonContainer = document.createElement("div");
+    buttonContainer.className = "command-palette__parameter-buttons";
+
+    const executeButton = document.createElement("button");
+    executeButton.className = "command-palette__parameter-button command-palette__parameter-button--execute";
+    executeButton.textContent = "Execute";
+    executeButton.addEventListener("click", () => this.executeWithParameters());
+
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "command-palette__parameter-button command-palette__parameter-button--cancel";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => this.showCommandList());
+
+    buttonContainer.appendChild(executeButton);
+    buttonContainer.appendChild(cancelButton);
+    this.parameterForm.appendChild(buttonContainer);
+  }
+
+  private async executeWithParameters(): Promise<void> {
+    if (!this.currentCommand) return;
+
+    try {
+      // Validate required parameters
+      const missingRequired = this.currentCommand.parameters?.filter(
+        (param) => param.required && (this.parameterValues[param.name] === undefined || this.parameterValues[param.name] === "")
+      );
+
+      if (missingRequired && missingRequired.length > 0) {
+        alert(`Please fill in required parameters: ${missingRequired.map((p) => p.name).join(", ")}`);
+        return;
+      }
+
+      await this.currentCommand.execute(this.parameterValues);
+      this.hide();
+    } catch (error) {
+      console.error("Error executing command with parameters:", error);
     }
   }
 
@@ -320,6 +531,69 @@ export class CommandPalette {
         } else {
           document.documentElement.requestFullscreen();
         }
+      },
+    });
+
+    // Example command with parameters for testing
+    this.registerCommand({
+      id: "developer.action.showAlert",
+      title: "Show Alert",
+      description: "Show a custom alert message with various options",
+      category: "Developer",
+      parameters: [
+        {
+          name: "message",
+          type: "string",
+          description: "The message to display",
+          required: true,
+        },
+        {
+          name: "title",
+          type: "string",
+          description: "Optional title for the alert",
+          required: false,
+          default: "Alert",
+        },
+        {
+          name: "type",
+          type: "string",
+          description: "Type of alert to show",
+          required: false,
+          default: "info",
+          options: ["info", "warning", "error", "success"],
+        },
+        {
+          name: "showConfirm",
+          type: "boolean",
+          description: "Show a confirmation button",
+          required: false,
+          default: "false",
+        },
+        {
+          name: "timeout",
+          type: "number",
+          description: "Auto-hide timeout in seconds",
+          required: false,
+        },
+      ],
+      execute: (params) => {
+        const { message, title, type, showConfirm, timeout } = params || {};
+
+        let alertMessage = `${title || "Alert"}: ${message || "No message"}`;
+        if (type) {
+          alertMessage = `[${type.toUpperCase()}] ${alertMessage}`;
+        }
+        if (showConfirm) {
+          alertMessage += "\n\nPress OK to continue.";
+        }
+        if (timeout) {
+          alertMessage += `\n\nThis alert will auto-close in ${timeout} seconds.`;
+          setTimeout(() => {
+            console.log("Alert auto-closed after timeout");
+          }, timeout * 1000);
+        }
+
+        alert(alertMessage);
       },
     });
   }
