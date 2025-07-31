@@ -586,46 +586,23 @@ export class SpreadsheetVisualizer {
       if (!cell) return false;
       const { col } = cell;
 
-      let hasStatusPanelChanged = false;
-      if (this.selectedCols.includes(col)) {
-        this.selectedCols = this.selectedCols.filter((i) => i !== col);
-        this.statsVisualizer?.hide();
-        this.hasStatsPanel = false;
-        hasStatusPanelChanged = true;
-      } else {
-        hasStatusPanelChanged = !this.hasStatsPanel;
-        if (this.singleColSelectionMode) {
-          this.selectedCols = [col]; // Only allow one column selection at a time
-        } else {
-          this.selectedCols.push(col);
-        }
-
-        if (this.statsVisualizer) {
-          await this.statsVisualizer.showStats(this.columns[col]);
-          this.hasStatsPanel = true;
-        }
-      }
-
-      this.updateToDraw(ToDraw.Selection);
-      if (hasStatusPanelChanged) {
-        this.updateLayout();
-      }
+      await this.selectColumn(col);
     }
 
     // Row Index
-    else if (this.isMouseOverRowIndex(x, y)) {
-      const cell = this.getCellAtPosition(x, y);
-      if (!cell) return false;
-      const { row } = cell;
+    // else if (this.isMouseOverRowIndex(x, y)) {
+    //   const cell = this.getCellAtPosition(x, y);
+    //   if (!cell) return false;
+    //   const { row } = cell;
 
-      if (this.selectedRows.includes(row)) {
-        this.selectedRows = this.selectedRows.filter((i) => i !== row);
-      } else {
-        this.selectedRows.push(row);
-      }
+    //   if (this.selectedRows.includes(row)) {
+    //     this.selectedRows = this.selectedRows.filter((i) => i !== row);
+    //   } else {
+    //     this.selectedRows.push(row);
+    //   }
 
-      this.updateToDraw(ToDraw.Selection);
-    }
+    //   this.updateToDraw(ToDraw.Selection);
+    // }
 
     // Handle cell selection
     else {
@@ -636,7 +613,21 @@ export class SpreadsheetVisualizer {
 
       const cell = this.getCellAtPosition(x, y);
       if (cell) {
+        if (this.selectedCols.length > 0) {
+          this.selectedCols = [];
+          this.selectedRows = [];
+          this.selectedCells = null;
+
+          if (this.statsVisualizer) {
+            this.statsVisualizer.hide();
+            this.hasStatsPanel = false;
+          }
+        }
+
         this.mouseState = MouseState.Dragging;
+
+        this.selectedCols = [];
+        this.selectedRows = [];
         this.selectedCells = {
           startRow: cell.row,
           endRow: cell.row,
@@ -651,6 +642,37 @@ export class SpreadsheetVisualizer {
 
     await this.draw();
     return true;
+  }
+
+  private async selectColumn(col: number) {
+    let hasStatusPanelChanged = false;
+    if (this.selectedCols.includes(col)) {
+      this.selectedCols = this.selectedCols.filter((i) => i !== col);
+      this.statsVisualizer?.hide();
+      this.hasStatsPanel = false;
+      hasStatusPanelChanged = true;
+    } else {
+      hasStatusPanelChanged = !this.hasStatsPanel;
+      if (this.singleColSelectionMode) {
+        this.selectedCols = [col]; // Only allow one column selection at a time
+        this.selectedRows = [];
+        this.selectedCells = null;
+      } else {
+        this.selectedCols.push(col);
+      }
+
+      if (this.statsVisualizer) {
+        await this.statsVisualizer.showStats(this.columns[col]);
+        this.hasStatsPanel = true;
+      }
+    }
+
+    this.updateToDraw(ToDraw.Selection);
+    this.notifySelectionChange();
+
+    if (hasStatusPanelChanged) {
+      this.updateLayout();
+    }
   }
 
   protected async _handleMouseMove(event: MouseEvent): Promise<boolean> {
@@ -758,98 +780,181 @@ export class SpreadsheetVisualizer {
   }
 
   protected async _handleKeyDown(event: KeyboardEvent): Promise<boolean> {
-    if (!this.selectedCells) return false;
-
-    const { startRow, endRow, startCol, endCol } = this.selectedCells;
-    const row = event.shiftKey ? endRow : startRow;
-    const col = event.shiftKey ? endCol : startCol;
-
-    const prevScrollY = this.scrollY;
-    const prevScrollX = this.scrollX;
-
     let handled = true;
+    let col: number;
+
     switch (event.key) {
       case "ArrowUp":
-        this.selectedCells = {
-          startRow: event.shiftKey ? startRow : row - 1,
-          endRow: event.shiftKey ? row - 1 : row - 1,
-          startCol: event.shiftKey ? startCol : col,
-          endCol: event.shiftKey ? endCol : col,
-        };
+        if (this.selectedCells) {
+          const { startRow, endRow, startCol, endCol } = this.selectedCells;
+          const row = event.shiftKey ? endRow : startRow;
+          const col = event.shiftKey ? endCol : startCol;
 
-        this.selectedCells.startRow = Math.max(1, this.selectedCells.startRow);
-        this.selectedCells.endRow = Math.max(1, this.selectedCells.endRow);
+          const prevScrollY = this.scrollY;
 
-        this.scrollY = minMax((row - 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
-        if (prevScrollY !== this.scrollY) {
-          this.updateToDraw(ToDraw.Cells);
-          this.notifySelectionChange();
-        } else {
-          this.updateToDraw(ToDraw.Selection);
-          this.notifySelectionChange();
+          this.selectedCells = {
+            startRow: event.shiftKey ? startRow : row - 1,
+            endRow: event.shiftKey ? row - 1 : row - 1,
+            startCol: event.shiftKey ? startCol : col,
+            endCol: event.shiftKey ? endCol : col,
+          };
+
+          const firstRow = this.selectedCells.startRow == 0;
+          this.selectedCells.startRow = Math.max(1, this.selectedCells.startRow);
+          this.selectedCells.endRow = Math.max(1, this.selectedCells.endRow);
+
+          const selectionWidth = Math.abs(this.selectedCells.endCol - this.selectedCells.startCol) + 1;
+          const selectionHeight = Math.abs(this.selectedCells.endRow - this.selectedCells.startRow) + 1;
+
+          if (selectionWidth == 1 && selectionHeight == 1 && firstRow) {
+            this.selectColumn(this.selectedCells.startCol);
+          } else {
+            this.scrollY = minMax((row - 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
+            if (prevScrollY !== this.scrollY) {
+              this.updateToDraw(ToDraw.Cells);
+              this.notifySelectionChange();
+            } else {
+              this.updateToDraw(ToDraw.Selection);
+              this.notifySelectionChange();
+            }
+          }
         }
         break;
 
       case "ArrowDown":
-        this.selectedCells = {
-          startRow: event.shiftKey ? startRow : row + 1,
-          endRow: event.shiftKey ? row + 1 : row + 1,
-          startCol: event.shiftKey ? startCol : col,
-          endCol: event.shiftKey ? endCol : col,
-        };
+        if (this.selectedCols.length > 0) {
+          const col = this.selectedCols[0];
 
-        this.selectedCells.startRow = Math.min(this.totalRows, this.selectedCells.startRow);
-        this.selectedCells.endRow = Math.min(this.totalRows, this.selectedCells.endRow);
+          this.selectedCols = [];
+          this.selectedRows = [];
+          this.selectedCells = {
+            startRow: 1,
+            endRow: 1,
+            startCol: col,
+            endCol: col,
+          };
 
-        this.scrollY = minMax((row + 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
-        if (prevScrollY !== this.scrollY) {
-          this.updateToDraw(ToDraw.Cells);
-          this.notifySelectionChange();
-        } else {
+          if (this.statsVisualizer) {
+            this.statsVisualizer.hide();
+            this.hasStatsPanel = false;
+          }
+
           this.updateToDraw(ToDraw.Selection);
           this.notifySelectionChange();
+          break;
+        }
+
+        if (this.selectedCells) {
+          const { startRow, endRow, startCol, endCol } = this.selectedCells;
+          const row = event.shiftKey ? endRow : startRow;
+          const col = event.shiftKey ? endCol : startCol;
+
+          const prevScrollY = this.scrollY;
+
+          this.selectedCells = {
+            startRow: event.shiftKey ? startRow : row + 1,
+            endRow: event.shiftKey ? row + 1 : row + 1,
+            startCol: event.shiftKey ? startCol : col,
+            endCol: event.shiftKey ? endCol : col,
+          };
+
+          this.selectedCells.startRow = Math.min(this.totalRows, this.selectedCells.startRow);
+          this.selectedCells.endRow = Math.min(this.totalRows, this.selectedCells.endRow);
+
+          this.scrollY = minMax((row + 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
+          if (prevScrollY !== this.scrollY) {
+            this.updateToDraw(ToDraw.Cells);
+            this.notifySelectionChange();
+          } else {
+            this.updateToDraw(ToDraw.Selection);
+            this.notifySelectionChange();
+          }
         }
         break;
 
       case "ArrowLeft":
-        this.selectedCells = {
-          startRow: event.shiftKey ? startRow : row,
-          endRow: event.shiftKey ? endRow : row,
-          startCol: event.shiftKey ? startCol : col - 1,
-          endCol: event.shiftKey ? col - 1 : col - 1,
-        };
+        col = -1;
+        if (this.selectedCols.length > 0) {
+          col = Math.max(0, this.selectedCols[0] - 1);
+          this.selectedCols = [col];
+          this.selectedRows = [];
+          this.selectedCells = null;
 
-        this.selectedCells.startCol = Math.max(0, this.selectedCells.startCol);
-        this.selectedCells.endCol = Math.max(0, this.selectedCells.endCol);
+          if (this.statsVisualizer) {
+            await this.statsVisualizer.showStats(this.columns[col]);
+            this.hasStatsPanel = true;
+          }
+        }
 
-        this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
-        if (prevScrollX !== this.scrollX) {
-          this.updateToDraw(ToDraw.Cells);
-          this.notifySelectionChange();
-        } else {
-          this.updateToDraw(ToDraw.Selection);
-          this.notifySelectionChange();
+        if (this.selectedCells) {
+          const { startRow, endRow, startCol, endCol } = this.selectedCells;
+          const row = event.shiftKey ? endRow : startRow;
+          col = event.shiftKey ? endCol : startCol;
+
+          this.selectedCells = {
+            startRow: event.shiftKey ? startRow : row,
+            endRow: event.shiftKey ? endRow : row,
+            startCol: event.shiftKey ? startCol : col - 1,
+            endCol: event.shiftKey ? col - 1 : col - 1,
+          };
+
+          this.selectedCells.startCol = Math.max(0, this.selectedCells.startCol);
+          this.selectedCells.endCol = Math.max(0, this.selectedCells.endCol);
+        }
+
+        if (col !== -1) {
+          const prevScrollX = this.scrollX;
+          this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
+          if (prevScrollX !== this.scrollX) {
+            this.updateToDraw(ToDraw.Cells);
+            this.notifySelectionChange();
+          } else {
+            this.updateToDraw(ToDraw.Selection);
+            this.notifySelectionChange();
+          }
         }
         break;
 
       case "ArrowRight":
-        this.selectedCells = {
-          startRow: event.shiftKey ? startRow : row,
-          endRow: event.shiftKey ? endRow : row,
-          startCol: event.shiftKey ? startCol : col + 1,
-          endCol: event.shiftKey ? col + 1 : col + 1,
-        };
+        col = -1;
+        if (this.selectedCols.length > 0) {
+          col = Math.min(this.totalCols - 1, this.selectedCols[0] + 1);
+          this.selectedCols = [col];
+          this.selectedRows = [];
+          this.selectedCells = null;
 
-        this.selectedCells.startCol = Math.min(this.totalCols - 1, this.selectedCells.startCol);
-        this.selectedCells.endCol = Math.min(this.totalCols - 1, this.selectedCells.endCol);
+          if (this.statsVisualizer) {
+            await this.statsVisualizer.showStats(this.columns[col]);
+            this.hasStatsPanel = true;
+          }
+        }
 
-        this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
-        if (prevScrollX !== this.scrollX) {
-          this.updateToDraw(ToDraw.Cells);
-          this.notifySelectionChange();
-        } else {
-          this.updateToDraw(ToDraw.Selection);
-          this.notifySelectionChange();
+        if (this.selectedCells) {
+          const { startRow, endRow, startCol, endCol } = this.selectedCells;
+          const row = event.shiftKey ? endRow : startRow;
+          col = event.shiftKey ? endCol : startCol;
+
+          this.selectedCells = {
+            startRow: event.shiftKey ? startRow : row,
+            endRow: event.shiftKey ? endRow : row,
+            startCol: event.shiftKey ? startCol : col + 1,
+            endCol: event.shiftKey ? col + 1 : col + 1,
+          };
+
+          this.selectedCells.startCol = Math.min(this.totalCols - 1, this.selectedCells.startCol);
+          this.selectedCells.endCol = Math.min(this.totalCols - 1, this.selectedCells.endCol);
+        }
+
+        if (col !== -1) {
+          const prevScrollX = this.scrollX;
+          this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
+          if (prevScrollX !== this.scrollX) {
+            this.updateToDraw(ToDraw.Cells);
+            this.notifySelectionChange();
+          } else {
+            this.updateToDraw(ToDraw.Selection);
+            this.notifySelectionChange();
+          }
         }
         break;
 
