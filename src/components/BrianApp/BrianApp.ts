@@ -8,10 +8,17 @@ import { FocusManager } from "./FocusManager";
 import { EventDispatcher } from "./EventDispatcher";
 import { EventHandler } from "./types";
 import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
+import { DatasetInfo } from "../DatasetPanel/DatasetPanel";
+
+export const BRIAN_APP_VERSION = "0.5.0-who-goes-there";
+
+export type BrianAppTheme = "light" | "dark" | "auto";
+
+export type BrianAppMessageType = "info" | "warning" | "error" | "success";
 
 export interface BrianAppOptions {
   spreadsheetOptions?: SpreadsheetOptions;
-  theme?: "light" | "dark" | "auto";
+  theme?: BrianAppTheme;
   showLeftPanel?: boolean;
   statusBarVisible?: boolean;
   commandPaletteEnabled?: boolean;
@@ -32,7 +39,7 @@ export class BrianApp implements EventHandler {
   private statusBar!: StatusBar;
 
   private options: BrianAppOptions;
-  private theme: "light" | "dark" = "dark";
+  private theme: BrianAppTheme = "dark";
 
   // Event system
   private focusManager: FocusManager;
@@ -88,7 +95,7 @@ export class BrianApp implements EventHandler {
     document.body.classList.add(`theme-${this.theme}`);
   }
 
-  public showMessage(message: string, type: "info" | "warning" | "error" = "info"): void {
+  public showMessage(message: string, type: BrianAppMessageType = "info"): void {
     this.statusBar?.showMessage(message, type);
   }
 
@@ -278,9 +285,9 @@ export class BrianApp implements EventHandler {
 
     // View commands
     this.commandPalette.registerCommand({
-      id: "view.toggleDatasetPanel",
-      title: "Toggle Dataset Panel",
-      description: "Show or hide the dataset panel",
+      id: "view.toggleLeftPanel",
+      title: "Toggle Left Panel",
+      description: "Show or hide the left panel",
       category: "View",
       execute: () => this.toggleDatasetPanel(),
     });
@@ -294,6 +301,21 @@ export class BrianApp implements EventHandler {
     });
 
     // Dataset commands
+    this.commandPalette.registerCommand({
+      id: "dataset.open",
+      title: "Open Dataset",
+      description: "Open a dataset",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "dataset",
+          type: "string",
+          description: "The name of the dataset to open",
+        },
+      ],
+      execute: (params?: Record<string, any>) => this.openDataset(params?.dataset),
+    });
+
     this.commandPalette.registerCommand({
       id: "dataset.export",
       title: "Export Current Dataset",
@@ -364,6 +386,40 @@ export class BrianApp implements EventHandler {
     }
   }
 
+  protected async findDatasetByName(name: string): Promise<DatasetInfo | undefined> {
+    return this.leftPanel.getAvailableDatasets().find((d) => d.metadata.name === name);
+  }
+
+  private async _openDataset(datasetInfo: DatasetInfo): Promise<void> {
+    // Add to dataset panel
+    this.addDataset(datasetInfo.dataset);
+
+    // Create data provider and add to visualizer
+    await this.multiDatasetVisualizer.addDataset(datasetInfo.metadata, datasetInfo.dataset);
+
+    // Mark as loaded in panel
+    this.leftPanel.markDatasetAsLoaded(datasetInfo.metadata.name);
+
+    // Update status bar
+    this.updateStatusBarDatasetInfo();
+
+    // Destroy drag drop zone
+    this.dragDropZone?.destroy();
+    this.dragDropZone = null;
+
+    await this.multiDatasetVisualizer.switchToDataset(datasetInfo.metadata.name);
+  }
+
+  protected async openDataset(name: string): Promise<void> {
+    const datasetInfo = await this.findDatasetByName(name);
+    if (!datasetInfo) {
+      this.showMessage(`Dataset "${name}" not found`, "error");
+      return;
+    }
+
+    await this._openDataset(datasetInfo);
+  }
+
   private closeAllDatasets(): void {
     const datasetIds = this.multiDatasetVisualizer.getDatasetIds();
     datasetIds.forEach((id) => this.multiDatasetVisualizer.closeDataset(id));
@@ -403,23 +459,10 @@ export class BrianApp implements EventHandler {
     this.dragDropZone?.setOnFileDroppedCallback(async (dataset: DataProvider): Promise<void> => {
       try {
         const metadata = await dataset.getMetadata();
-
-        // Add to dataset panel
-        this.addDataset(dataset);
-
-        // Create data provider and add to visualizer
-        await this.multiDatasetVisualizer.addDataset(metadata, dataset);
-
-        // Mark as loaded in panel
-        this.leftPanel.markDatasetAsLoaded(metadata.name);
-
-        // Update status bar
-        this.updateStatusBarDatasetInfo();
+        await this._openDataset({ metadata, dataset, isLoaded: true });
 
         // Show success message
-        this.showMessage(`Dataset "${metadata.name}" loaded successfully`, "info");
-        this.dragDropZone?.destroy();
-        this.dragDropZone = null;
+        this.showMessage(`Dataset "${metadata.name}" loaded successfully`, "success");
       } catch (error) {
         console.error("Error adding dropped dataset:", error);
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
