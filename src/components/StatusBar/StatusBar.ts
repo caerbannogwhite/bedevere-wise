@@ -1,3 +1,5 @@
+import { BRIAN_APP_VERSION, BrianAppMessageType } from "../BrianApp/BrianApp";
+
 export interface StatusBarItem {
   id: string;
   text: string;
@@ -83,13 +85,13 @@ export class StatusBar {
     });
   }
 
-  public showMessage(message: string, type: "info" | "warning" | "error" = "info", duration: number = 3000): void {
+  public showMessage(message: string, type: BrianAppMessageType = "info", duration: number = 3000): void {
     const messageItem: StatusBarItem = {
       id: "temp-message",
       text: message,
       priority: 1000,
       alignment: "left",
-      color: type === "error" ? "#f14c4c" : type === "warning" ? "#ffcc02" : "#007acc",
+      color: type === "error" ? "#f14c4c" : type === "warning" ? "#ffcc02" : type === "success" ? "#89d185" : "#007acc",
       visible: true,
     };
 
@@ -170,6 +172,29 @@ export class StatusBar {
 
     leftItems.forEach((item) => this.renderItem(item, this.leftSection));
     rightItems.forEach((item) => this.renderItem(item, this.rightSection));
+
+    // Add created by and version information
+    const createdByElement = document.createElement("div");
+    createdByElement.className = "status-bar__item status-bar__item--created-by";
+    createdByElement.title = "Visit the creator's GitHub profile";
+    createdByElement.innerHTML = `
+      <span class="created-by__text">Created with</span>
+      <span class="created-by__heart">❤️</span>
+      <span class="created-by__text">by</span>
+      <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer" class="created-by__link">
+        caerbannogwhite
+      </a>
+    `;
+    this.rightSection.appendChild(createdByElement);
+
+    const versionElement = document.createElement("div");
+    versionElement.className = "status-bar__item status-bar__item--clickable";
+    versionElement.title = `Brian App Version ${BRIAN_APP_VERSION}\nClick to view changelog`;
+    versionElement.textContent = `v${BRIAN_APP_VERSION}`;
+    versionElement.addEventListener("click", () => {
+      window.open("https://github.com/caerbannogwhite/brian/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
+    });
+    this.rightSection.appendChild(versionElement);
   }
 
   private renderItem(item: StatusBarItem, container: HTMLElement): void {

@@ -34,7 +34,6 @@
   &__section {
     display: flex;
     align-items: center;
-    gap: 12px;
     flex-shrink: 0;
 
     &--left {
@@ -58,7 +57,6 @@
     border: none;
     cursor: default;
     transition: all 0.2s ease;
-    border-radius: 2px;
 
     &--clickable {
       cursor: pointer;
@@ -105,6 +103,48 @@
       padding: 2px 6px;
       margin-left: 8px;
     }
+
+    // Created by styling
+    &--created-by {
+      font-size: 10px;
+      opacity: 0.8;
+      padding: 0 6px;
+      display: flex;
+      align-items: center;
+      gap: 3px;
+      transition: opacity 0.2s ease;
+
+      &:hover {
+        opacity: 1;
+      }
+
+      .created-by__text {
+        color: inherit;
+      }
+
+      .created-by__heart {
+        color: #ff6b6b;
+        font-size: 9px;
+        animation: heartbeat 2s ease-in-out infinite;
+      }
+
+      .created-by__link {
+        color: inherit;
+        text-decoration: none;
+        font-weight: 500;
+        border-bottom: 1px solid transparent;
+        transition: all 0.2s ease;
+
+        &:hover {
+          border-bottom-color: currentColor;
+          color: #ffffff;
+        }
+
+        &:active {
+          transform: translateY(1px);
+        }
+      }
+    }
   }
 }
 
@@ -126,6 +166,31 @@
       &[data-id="command-palette"] {
         display: none;
       }
+
+      // Simplified mobile styling for created by
+      &--created-by {
+        font-size: 9px;
+        padding: 0 4px;
+        gap: 2px;
+
+        .created-by__text:first-child,
+        .created-by__text:last-of-type {
+          display: none; // Hide "Created with" and "by" text on mobile
+        }
+      }
+    }
+  }
+}
+
+// Extra small screens
+@media (max-width: 480px) {
+  .status-bar {
+    &__item {
+      &--created-by {
+        .created-by__heart {
+          display: none; // Hide heart emoji on very small screens
+        }
+      }
     }
   }
 }
@@ -143,6 +208,22 @@
   to {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes heartbeat {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  25% {
+    transform: scale(1.1);
+  }
+  50% {
+    transform: scale(1);
+  }
+  75% {
+    transform: scale(1.05);
   }
 }
 
@@ -167,6 +248,12 @@ body.theme-light {
 
     &--clickable:active {
       background-color: rgba(0, 0, 0, 0.2);
+    }
+
+    &--created-by {
+      .created-by__link:hover {
+        color: #333333;
+      }
     }
   }
 }
