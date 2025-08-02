@@ -958,6 +958,19 @@ export class SpreadsheetVisualizer {
         }
         break;
 
+      case "Enter":
+        if (this.selectedCells == null && this.selectedCols.length === 0 && this.selectedRows.length === 0) {
+          this.selectedCells = {
+            startRow: 1,
+            endRow: 1,
+            startCol: 0,
+            endCol: 0,
+          };
+          this.updateToDraw(ToDraw.Selection);
+          this.notifySelectionChange();
+        }
+        break;
+
       // Copy
       case "c":
       case "C":
