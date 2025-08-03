@@ -1,4 +1,5 @@
 import { BRIAN_APP_VERSION, BrianAppMessageType } from "../BrianApp/BrianApp";
+import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 export interface StatusBarItem {
   id: string;
@@ -65,23 +66,27 @@ export class StatusBar {
     });
   }
 
-  public updateSelection(startRow: number, endRow: number, startCol: number, endCol: number): void {
-    const rowCount = endRow - startRow + 1;
-    const colCount = endCol - startCol + 1;
-    const selectionText =
-      rowCount === 1 && colCount === 1 ? `Row ${startRow + 1}, Col ${startCol + 1}` : `${rowCount} × ${colCount} selected`;
+  public updateSelection(cellSelection?: ICellSelection): void {
+    if (!cellSelection) {
+      this.updateItem("selection-info", {
+        text: "No selection",
+        tooltip: "No selection",
+      });
+      return;
+    } else if (cellSelection.columns.length > 0) {
+      this.updateItem("selection-info", {
+        text: `${cellSelection.columns.length} columns selected`,
+        tooltip: `Selection: ${cellSelection.columns.length} columns`,
+      });
+      return;
+    }
+
+    const rowCount = cellSelection.rows.length;
+    const colCount = cellSelection.columns.length;
 
     this.updateItem("selection-info", {
-      text: selectionText,
+      text: `${rowCount} × ${colCount} cells selected`,
       tooltip: `Selection: ${rowCount} rows × ${colCount} columns`,
-    });
-  }
-
-  public updateCellValue(value: any, dataType: string): void {
-    const displayValue = value == null ? "null" : String(value);
-    this.updateItem("cell-value", {
-      text: `${displayValue} (${dataType})`,
-      tooltip: `Cell value: ${displayValue}\nData type: ${dataType}`,
     });
   }
 
@@ -173,20 +178,7 @@ export class StatusBar {
     leftItems.forEach((item) => this.renderItem(item, this.leftSection));
     rightItems.forEach((item) => this.renderItem(item, this.rightSection));
 
-    // Add created by and version information
-    const createdByElement = document.createElement("div");
-    createdByElement.className = "status-bar__item status-bar__item--created-by";
-    createdByElement.title = "Visit the creator's GitHub profile";
-    createdByElement.innerHTML = `
-      <span class="created-by__text">Created with</span>
-      <span class="created-by__heart">❤️</span>
-      <span class="created-by__text">by</span>
-      <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer" class="created-by__link">
-        caerbannogwhite
-      </a>
-    `;
-    this.rightSection.appendChild(createdByElement);
-
+    // Add version and made by information
     const versionElement = document.createElement("div");
     versionElement.className = "status-bar__item status-bar__item--clickable";
     versionElement.title = `Brian App Version ${BRIAN_APP_VERSION}\nClick to view changelog`;
@@ -195,6 +187,19 @@ export class StatusBar {
       window.open("https://github.com/caerbannogwhite/brian/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
     });
     this.rightSection.appendChild(versionElement);
+
+    const createdByElement = document.createElement("div");
+    createdByElement.className = "status-bar__item status-bar__item--created-by";
+    createdByElement.title = "Visit the creator's GitHub profile";
+    createdByElement.innerHTML = `
+      <span class="created-by__text">Made with</span>
+      <span class="created-by__heart">❤️</span>
+      <span class="created-by__text">by</span>
+      <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer" class="created-by__link">
+        caerbannogwhite
+      </a>
+    `;
+    this.rightSection.appendChild(createdByElement);
   }
 
   private renderItem(item: StatusBarItem, container: HTMLElement): void {
