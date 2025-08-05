@@ -54,6 +54,10 @@ export class EventDispatcher implements IEventDispatcher {
     this.focusManager.setFocus(component);
   }
 
+  public popFocus(): void {
+    this.focusManager.popFocus();
+  }
+
   public getFocusedComponent(): FocusableComponent | null {
     const focusedComponent = this.focusManager.getFocusedComponent();
     return focusedComponent ? this.components.get(focusedComponent.componentId) || null : null;

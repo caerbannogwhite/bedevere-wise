@@ -47,6 +47,7 @@ export interface EventDispatcher {
 
   // Focus management
   setFocus(componentId: string): void;
+  popFocus(): void;
   getFocusedComponent(): FocusableComponent | null;
 
   // Event handling

@@ -21,7 +21,10 @@ export class FocusManager implements IFocusManager {
       console.log(`FocusManager: Setting focus from "${previous?.componentId}" to "${current.componentId}"`);
     }
 
-    previous?.blur();
+    if (previous) {
+      previous.blur();
+      this.focusStack.push(previous);
+    }
     current.focus();
 
     this.focusedComponent = current;

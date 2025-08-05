@@ -45,7 +45,7 @@ async function initApplication() {
       brianApp.showMessage("Error loading sample datasets", "error");
     }
   } else {
-    brianApp.showMessage("Drop a CSV, TSV, or TXT file to get started", "info");
+    brianApp.showMessage("Drop a CSV or TSV file to get started", "info");
   }
 
   // Make brianApp globally available for debugging
