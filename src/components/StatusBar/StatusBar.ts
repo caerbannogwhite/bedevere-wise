@@ -144,23 +144,23 @@ export class StatusBar {
       command: "workbench.action.showCommands",
     });
 
-    this.addItem({
-      id: "column-stats",
-      text: "Stats",
-      priority: 90,
-      alignment: "right",
-      tooltip: "Toggle Column Statistics",
-      command: "view.toggleColumnStats",
-    });
+    // this.addItem({
+    //   id: "column-stats",
+    //   text: "Stats",
+    //   priority: 90,
+    //   alignment: "right",
+    //   tooltip: "Toggle Column Statistics",
+    //   command: "view.toggleColumnStats",
+    // });
 
-    this.addItem({
-      id: "export-data",
-      text: "Export",
-      priority: 80,
-      alignment: "right",
-      tooltip: "Export current dataset",
-      command: "dataset.export",
-    });
+    // this.addItem({
+    //   id: "export-data",
+    //   text: "Export",
+    //   priority: 80,
+    //   alignment: "right",
+    //   tooltip: "Export current dataset",
+    //   command: "dataset.export",
+    // });
   }
 
   private render(): void {
