@@ -37,7 +37,6 @@ export class CommandPalette implements FocusableComponent {
   private isVisible: boolean = false;
   private showingParameterForm: boolean = false;
   private currentCommand?: Command;
-  private parameterValues: Record<string, any> = {};
   private eventDispatcher?: EventDispatcher;
   private _isFocused: boolean = false;
   private onHideCallback?: () => void;
@@ -122,10 +121,6 @@ export class CommandPalette implements FocusableComponent {
           this.filterCommands();
           this.selectedIndex = 0;
           this.updateSelection();
-          break;
-
-        case "Enter":
-          this.executeWithParameters();
           break;
       }
       return true;
@@ -394,15 +389,13 @@ export class CommandPalette implements FocusableComponent {
     }
   }
 
-  private async executeWithParameters(): Promise<void> {
+  private async executeWithParameters(parameters: Record<string, any>): Promise<void> {
     if (!this.currentCommand) return;
-
-    console.log(this.parameterValues);
 
     try {
       // Validate required parameters
       const missingRequired = this.currentCommand.parameters?.filter(
-        (param) => param.required && (this.parameterValues[param.name] === undefined || this.parameterValues[param.name] === "")
+        (param) => param.required && (parameters[param.name] === undefined || parameters[param.name] === "")
       );
 
       if (missingRequired && missingRequired.length > 0) {
@@ -410,7 +403,7 @@ export class CommandPalette implements FocusableComponent {
         return;
       }
 
-      await this.currentCommand.execute(this.parameterValues);
+      await this.currentCommand.execute(parameters);
       this.hide();
     } catch (error) {
       console.error("Error executing command with parameters:", error);

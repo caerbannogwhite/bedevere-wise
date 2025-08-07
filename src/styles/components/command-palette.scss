@@ -279,15 +279,58 @@
 }
 
 .command-palette__parameters {
-  padding: 16px;
+  padding: 0;
   padding-bottom: 70px; // Extra space for floating button
   max-height: calc(60vh - 40px);
   overflow-y: auto;
 }
 
+.command-palette__parameter-row {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  border-bottom: 1px solid transparent;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
+  min-height: 32px;
+
+  &:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+  }
+
+  &.focused {
+    background-color: rgba(0, 122, 204, 0.1);
+    border-bottom-color: #007acc;
+  }
+
+  body.theme-light & {
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.05) !important;
+    }
+
+    &.focused {
+      background-color: rgba(0, 122, 204, 0.1) !important;
+      border-bottom-color: #007acc !important;
+    }
+  }
+}
+
+.command-palette__parameter-name {
+  font-size: 13px;
+  font-weight: 500;
+  color: #cccccc;
+  min-width: 120px;
+  margin-right: 16px;
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+
+  body.theme-light & {
+    color: #666666 !important;
+  }
+}
+
 .command-palette__parameter-input-container {
   position: relative;
   width: 100%;
+  flex: 1;
 }
 
 .command-palette__parameter-prompt {
@@ -297,60 +340,26 @@
   margin-bottom: 8px;
 }
 
-.command-palette__parameter-title {
-  padding: 8px 8px;
-  font-size: 14px;
-  color: #ffffff;
-  margin-bottom: 8px;
-  padding-bottom: 4px;
 
-  body.theme-light & {
-    color: #333333 !important;
-    border-bottom-color: #e5e5e5 !important;
-  }
-}
-
-.command-palette__parameter {
-  margin-bottom: 16px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-}
-
-.command-palette__parameter-label {
-  display: block;
-  font-size: 13px;
-  font-weight: 500;
-  color: #cccccc;
-  margin-bottom: 6px;
-  cursor: help;
-
-  body.theme-light & {
-    color: #666666 !important;
-  }
-}
 
 .command-palette__parameter-input {
   width: 100%;
-  background-color: #2d2d30;
-  border: 1px solid #666666;
-  border-radius: 4px;
+  background-color: transparent;
+  border: none;
+  outline: none;
   font-size: 14px;
-  padding: 8px 12px;
+  padding: 4px 0;
   color: #ffffff;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  transition: none;
 
   &::placeholder {
-    color: #cccccc;
+    color: #666666;
     font-style: italic;
   }
 
   &:focus {
     outline: none;
-    border-color: #007acc;
-    box-shadow: 0 0 0 1px #007acc;
   }
 
   // When dropdown is open, modify the input appearance
@@ -361,17 +370,15 @@
   }
 
   body.theme-light & {
-    background-color: #ffffff !important;
-    border-color: #cccccc !important;
+    background-color: transparent !important;
     color: #333333 !important;
 
     &::placeholder {
-      color: #666666 !important;
+      color: #999999 !important;
     }
 
     &:focus {
-      border-color: #007acc !important;
-      box-shadow: 0 0 0 1px #007acc !important;
+      outline: none;
     }
 
     &.has-dropdown {

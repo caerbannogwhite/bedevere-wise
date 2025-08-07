@@ -43,6 +43,26 @@ export class ParameterForm implements FocusableComponent {
     this.container.remove();
   }
 
+  public async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
+    if (!this._isFocused || !this.currentOptionsDropdown) return false;
+
+    switch (e.key) {
+      case "ArrowDown":
+        e.preventDefault();
+        this.currentSelectedIndex = Math.min(this.currentSelectedIndex + 1, this.currentOptionsDropdown.children.length - 1);
+        this.updateDropdownSelection();
+        return true;
+
+      case "ArrowUp":
+        e.preventDefault();
+        this.currentSelectedIndex = Math.max(this.currentSelectedIndex - 1, 0);
+        this.updateDropdownSelection();
+        return true;
+    }
+
+    return false;
+  }
+
   public async handleKeyUp(e: KeyboardEvent): Promise<boolean> {
     if (e.key === "Enter") {
       // If there's a dropdown and an item is selected, use that value
@@ -60,27 +80,12 @@ export class ParameterForm implements FocusableComponent {
       this.executeWithParameters();
       return true;
     }
-    
-    if (e.key === "ArrowDown" && this.currentOptionsDropdown) {
-      this.currentSelectedIndex = Math.min(
-        this.currentSelectedIndex + 1, 
-        this.currentOptionsDropdown.children.length - 1
-      );
-      this.updateDropdownSelection();
-      return true;
-    }
-    
-    if (e.key === "ArrowUp" && this.currentOptionsDropdown) {
-      this.currentSelectedIndex = Math.max(this.currentSelectedIndex - 1, 0);
-      this.updateDropdownSelection();
-      return true;
-    }
-    
+
     if (e.key === "Escape" && this.currentOptionsDropdown) {
       this.hideOptionsDropdown();
       return true;
     }
-    
+
     return false;
   }
 
@@ -98,33 +103,33 @@ export class ParameterForm implements FocusableComponent {
     // Parameters section
     const parametersSection = document.createElement("div");
     parametersSection.className = "command-palette__parameters";
-    
+
     currentCommand.parameters.forEach((param) => {
-      const parameterWrapper = document.createElement("div");
-      parameterWrapper.className = "command-palette__parameter";
-      
-      // Label
-      const label = document.createElement("label");
-      label.className = "command-palette__parameter-label";
-      label.textContent = `${param.name}${param.required ? ' *' : ''}`;
+      const parameterRow = document.createElement("div");
+      parameterRow.className = "command-palette__parameter-row";
+
+      // Parameter name/label
+      const paramName = document.createElement("span");
+      paramName.className = "command-palette__parameter-name";
+      paramName.textContent = `${param.name}${param.required ? " *" : ""}`;
       if (param.description) {
-        label.title = param.description;
+        paramName.title = param.description;
       }
-      
+
       // Input container (for positioning dropdown)
       const inputContainer = document.createElement("div");
       inputContainer.className = "command-palette__parameter-input-container";
       inputContainer.style.position = "relative";
-      
+
       // Input field
       const input = document.createElement("input");
       input.type = "text";
       input.className = "command-palette__parameter-input";
       input.setAttribute("data-param-name", param.name);
-      
+
       const placeholder = param.description || param.name;
       input.placeholder = placeholder;
-      
+
       if (param.default) {
         input.value = param.default;
         this.parameterValues[param.name] = param.default;
@@ -134,7 +139,7 @@ export class ParameterForm implements FocusableComponent {
       input.addEventListener("input", (e) => {
         const target = e.target as HTMLInputElement;
         this.parameterValues[param.name] = target.value;
-        
+
         // Show/filter options dropdown if available
         const options = this.getParameterOptions(param);
         if (options.length > 0) {
@@ -143,6 +148,9 @@ export class ParameterForm implements FocusableComponent {
       });
 
       input.addEventListener("focus", (e) => {
+        // Add focus highlighting to the row
+        parameterRow.classList.add("focused");
+
         const target = e.target as HTMLInputElement;
         const options = this.getParameterOptions(param);
         if (options.length > 0) {
@@ -151,6 +159,9 @@ export class ParameterForm implements FocusableComponent {
       });
 
       input.addEventListener("blur", () => {
+        // Remove focus highlighting from the row
+        parameterRow.classList.remove("focused");
+
         // Hide dropdown after a short delay to allow for clicks
         setTimeout(() => {
           this.hideOptionsDropdown();
@@ -158,9 +169,9 @@ export class ParameterForm implements FocusableComponent {
       });
 
       inputContainer.appendChild(input);
-      parameterWrapper.appendChild(label);
-      parameterWrapper.appendChild(inputContainer);
-      parametersSection.appendChild(parameterWrapper);
+      parameterRow.appendChild(paramName);
+      parameterRow.appendChild(inputContainer);
+      parametersSection.appendChild(parameterRow);
     });
 
     this.container.appendChild(parametersSection);
@@ -202,9 +213,7 @@ export class ParameterForm implements FocusableComponent {
   private showOptionsDropdown(input: HTMLInputElement, options: string[], currentValue: string): void {
     this.hideOptionsDropdown();
 
-    const filteredOptions = options.filter(option => 
-      option.toLowerCase().includes(currentValue.toLowerCase())
-    );
+    const filteredOptions = options.filter((option) => option.toLowerCase().includes(currentValue.toLowerCase()));
 
     if (filteredOptions.length === 0) {
       input.classList.remove("has-dropdown");
@@ -213,7 +222,7 @@ export class ParameterForm implements FocusableComponent {
 
     const dropdown = document.createElement("div");
     dropdown.className = "command-palette__parameter-dropdown";
-    
+
     filteredOptions.forEach((option) => {
       const optionElement = document.createElement("div");
       optionElement.className = "command-palette__parameter-dropdown-item";
@@ -233,7 +242,7 @@ export class ParameterForm implements FocusableComponent {
       inputContainer.appendChild(dropdown);
       this.currentOptionsDropdown = dropdown;
       this.currentSelectedIndex = -1;
-      
+
       // Add visual class to connect input and dropdown
       input.classList.add("has-dropdown");
     }
@@ -243,8 +252,8 @@ export class ParameterForm implements FocusableComponent {
     if (this.currentOptionsDropdown) {
       // Remove the visual connection class from all inputs
       const inputs = this.container.querySelectorAll(".command-palette__parameter-input");
-      inputs.forEach(input => input.classList.remove("has-dropdown"));
-      
+      inputs.forEach((input) => input.classList.remove("has-dropdown"));
+
       this.currentOptionsDropdown.remove();
       this.currentOptionsDropdown = undefined;
       this.currentSelectedIndex = -1;
