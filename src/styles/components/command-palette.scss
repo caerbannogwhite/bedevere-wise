@@ -279,11 +279,15 @@
 }
 
 .command-palette__parameters {
-  padding: 0 8px;
+  padding: 16px;
+  padding-bottom: 70px; // Extra space for floating button
   max-height: calc(60vh - 40px);
   overflow-y: auto;
-  display: flex;
-  align-items: center;
+}
+
+.command-palette__parameter-input-container {
+  position: relative;
+  width: 100%;
 }
 
 .command-palette__parameter-prompt {
@@ -328,29 +332,32 @@
 }
 
 .command-palette__parameter-input {
-  width: fit-content;
-  background-color: transparent;
-  border: none;
-  border-radius: 6px;
+  width: 100%;
+  background-color: #2d2d30;
+  border: 1px solid #666666;
+  border-radius: 4px;
   font-size: 14px;
-  padding: 2px 4px;
+  padding: 8px 12px;
+  color: #ffffff;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
   transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
 
   &::placeholder {
+    color: #cccccc;
     font-style: italic;
   }
 
   &:focus {
     outline: none;
     border-color: #007acc;
-    background-color: #007acc;
-    color: #ffffff;
-    &::placeholder {
-      color: #ffffff;
-    }
+    box-shadow: 0 0 0 1px #007acc;
+  }
 
-    box-shadow: 0 0 0 2px #007acc;
+  // When dropdown is open, modify the input appearance
+  &.has-dropdown {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom-color: transparent;
   }
 
   body.theme-light & {
@@ -358,93 +365,175 @@
     border-color: #cccccc !important;
     color: #333333 !important;
 
+    &::placeholder {
+      color: #666666 !important;
+    }
+
     &:focus {
       border-color: #007acc !important;
       box-shadow: 0 0 0 1px #007acc !important;
     }
-  }
 
-  // Checkbox specific styles
-  &[type="checkbox"] {
-    width: auto;
-    height: auto;
-    margin: 0;
-    accent-color: #007acc;
+    &.has-dropdown {
+      border-bottom-color: transparent !important;
+    }
   }
 }
 
-.command-palette__parameter-buttons {
-  padding: 16px;
-  display: flex;
-  gap: 8px;
-  margin-top: 20px;
-  padding-top: 16px;
-  border-top: 1px solid #666666;
+// Parameter dropdown styles
+.command-palette__parameter-dropdown {
+  position: absolute;
+  top: calc(100% - 1px);
+  left: 0;
+  right: 0;
+  background-color: #2d2d30;
+  border: 1px solid #007acc;
+  border-top: none;
+  border-radius: 0 0 4px 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10000;
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.2);
 
   body.theme-light & {
-    border-top-color: #e5e5e5 !important;
+    background-color: #ffffff !important;
+    border-color: #007acc !important;
+    box-shadow: 0 4px 12px rgba(0, 122, 204, 0.15) !important;
+  }
+
+  // Custom scrollbar
+  &::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background-color: #777777;
+    border-radius: 3px;
+
+    &:hover {
+      background-color: #888888;
+    }
+  }
+
+  body.theme-light &::-webkit-scrollbar-thumb {
+    background-color: #e1e5e9;
+
+    &:hover {
+      background-color: #d6dade;
+    }
   }
 }
 
-.command-palette__parameter-button {
-  height: 32px;
-  padding: 0 16px;
-  font-size: 13px;
-  font-weight: 500;
-  border: 1px solid;
-  border-radius: 4px;
+.command-palette__parameter-dropdown-item {
+  padding: 8px 12px;
   cursor: pointer;
-  transition: background-color 0.15s ease-in-out, border-color 0.15s ease-in-out;
+  color: #ffffff;
+  font-size: 14px;
+  border-bottom: 1px solid #3c3c3c;
+  transition: background-color 0.1s ease;
   font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
 
-  &--execute {
-    background-color: #007acc;
-    border-color: #007acc;
+  &:first-child {
+    padding-top: 10px;
+  }
+
+  &:last-child {
+    border-bottom: none;
+    border-radius: 0 0 4px 4px;
+  }
+
+  &:hover {
+    background-color: #3c3c3c;
+  }
+
+  &--selected {
+    background-color: #0078d4;
     color: #ffffff;
 
     &:hover {
       background-color: #106ebe;
-      border-color: #106ebe;
-    }
-
-    &:active {
-      background-color: #005a9e;
-      border-color: #005a9e;
     }
   }
 
-  &--cancel {
-    background-color: transparent;
-    border-color: #666666;
-    color: #cccccc;
+  body.theme-light & {
+    color: #333333 !important;
+    border-bottom-color: #f0f0f0 !important;
 
     &:hover {
-      background-color: #3e3e42;
-      border-color: #808080;
+      background-color: #f8f9fa !important;
     }
 
-    &:active {
-      background-color: #2d2d30;
-    }
-
-    body.theme-light & {
-      color: #666666 !important;
-      border-color: #cccccc !important;
+    &--selected {
+      background-color: #0078d4 !important;
+      color: #ffffff !important;
 
       &:hover {
-        background-color: #f0f0f0 !important;
-        border-color: #999999 !important;
-      }
-
-      &:active {
-        background-color: #e5e5e5 !important;
+        background-color: #106ebe !important;
       }
     }
+  }
+}
+
+.command-palette__parameter-execute-floating {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  width: 40px;
+  height: 40px;
+  background-color: #007acc;
+  border: none;
+  border-radius: 8px;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4);
+  transition: all 0.15s ease-in-out;
+  z-index: 1000;
+
+  &:hover {
+    background-color: #106ebe;
+    box-shadow: 0 6px 16px rgba(0, 122, 204, 0.5);
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    background-color: #005a9e;
+    transform: translateY(0);
+    box-shadow: 0 2px 8px rgba(0, 122, 204, 0.4);
   }
 
   &:focus {
     outline: none;
-    box-shadow: 0 0 0 1px #007acc;
+    box-shadow: 0 4px 12px rgba(0, 122, 204, 0.4), 0 0 0 2px rgba(0, 122, 204, 0.3);
+  }
+
+  svg {
+    flex-shrink: 0;
+  }
+
+  body.theme-light & {
+    background-color: #007acc !important;
+    box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3) !important;
+
+    &:hover {
+      background-color: #106ebe !important;
+      box-shadow: 0 6px 16px rgba(0, 122, 204, 0.4) !important;
+    }
+
+    &:active {
+      background-color: #005a9e !important;
+      box-shadow: 0 2px 8px rgba(0, 122, 204, 0.3) !important;
+    }
+
+    &:focus {
+      box-shadow: 0 4px 12px rgba(0, 122, 204, 0.3), 0 0 0 2px rgba(0, 122, 204, 0.3) !important;
+    }
   }
 }
 
@@ -462,7 +551,15 @@
     transition: none;
   }
 
-  .command-palette__parameter-button {
+  .command-palette__parameter-execute-floating {
     transition: none;
+    
+    &:hover {
+      transform: none;
+    }
+    
+    &:active {
+      transform: none;
+    }
   }
 }
