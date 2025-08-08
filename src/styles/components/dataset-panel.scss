@@ -12,7 +12,6 @@
     height: 100%;
     background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
     border-right: 1px solid #e8ecf0;
-    box-shadow: 2px 0 12px rgba(0, 0, 0, 0.08), 2px 0 2px rgba(0, 0, 0, 0.04);
     display: flex;
     flex-direction: column;
     transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
@@ -22,7 +21,6 @@
     body.theme-dark & {
       background: linear-gradient(180deg, #252526 0%, #1f1f1f 100%);
       border-right-color: #404040;
-      box-shadow: 2px 0 12px rgba(0, 0, 0, 0.4), 2px 0 2px rgba(0, 0, 0, 0.2);
     }
 
     &--minimized {
