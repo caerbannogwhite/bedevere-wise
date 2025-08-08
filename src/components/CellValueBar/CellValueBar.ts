@@ -1,4 +1,5 @@
 import { Column } from "../../data/types";
+import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 export interface CellValueBarOptions {
   container: HTMLElement;
@@ -34,20 +35,40 @@ export class CellValueBar {
     this.valueElement = this.element.querySelector(".cell-value-bar__value") as HTMLSpanElement;
   }
 
-  public updateCell(cell: { row: number; col: number; value: any; formatted: string; column: Column } | null): void {
-    if (!cell) {
+  public updateCell(selection?: ICellSelection): void {
+    if (!selection) {
       this.positionElement.textContent = "";
       this.valueElement.textContent = "";
       this.valueElement.className = "cell-value-bar__value";
       return;
     }
 
-    // Format position as "column name":"row index"
-    const position = `${cell.column.name}:${cell.row}`;
-    this.positionElement.textContent = position;
+    if (selection.columns.length > 0 && selection.rows.length === 0) {
+      this.positionElement.textContent = "";
+      this.valueElement.textContent = "";
+      this.valueElement.className = "cell-value-bar__value cell-value-bar__value--column";
+      return;
+    }
 
-    this.valueElement.innerHTML = this.formatValueDisplay(cell.value, cell.formatted);
-    this.valueElement.className = `cell-value-bar__value cell-value-bar__value--${cell.column.dataType}`;
+    if (selection.rows.length === 1 && selection.columns.length === 1) {
+      this.positionElement.innerHTML = this.formatPosition(selection.rows[0], selection.columns[0].name);
+    } else if (selection.columns.length > 0 && selection.rows.length > 0) {
+      const position = `${this.formatPosition(
+        selection.rows[0],
+        selection.columns[0].name
+      )}<span class="cell-value-bar__position-separator">:</span>${this.formatPosition(
+        selection.rows[selection.rows.length - 1],
+        selection.columns[selection.columns.length - 1].name
+      )}`;
+      this.positionElement.innerHTML = position;
+    }
+
+    this.valueElement.innerHTML = this.formatValueDisplay(selection.values[0][0], selection.formatted[0][0]);
+    this.valueElement.className = `cell-value-bar__value cell-value-bar__value--${selection.columns[0].dataType}`;
+  }
+
+  private formatPosition(row: number, columnName: string): string {
+    return `<span class="cell-value-bar__position-column">${columnName}</span><span class="cell-value-bar__position-row">${row}</span>`;
   }
 
   private formatValueDisplay(raw: any, formatted: string): string {
