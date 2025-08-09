@@ -4,6 +4,7 @@ import { ColumnStatsVisualizerFocusable } from "../ColumnStatsVisualizer/ColumnS
 import { CellValueBar } from "../CellValueBar";
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { EventDispatcher } from "../BrianApp/EventDispatcher";
+import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 interface DatasetTab {
   metadata: DatasetMetadata;
@@ -25,7 +26,9 @@ export class MultiDatasetVisualizer {
   private sharedStatsVisualizer: ColumnStatsVisualizerFocusable;
   private cellValueBar: CellValueBar | null = null;
   private eventDispatcher?: EventDispatcher;
+  private onCellSelectionCallback?: (cellSelection?: ICellSelection) => void;
   private onCloseTabCallback?: () => void;
+  private onSelectCallback?: (dataset: DataProvider) => void;
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
@@ -113,11 +116,11 @@ export class MultiDatasetVisualizer {
     );
 
     // Connect selection change to cell value bar
-    spreadsheetVisualizer.setOnSelectionChange((cell) => {
-      if (this.cellValueBar && cell) {
-        this.cellValueBar.updateCell(cell);
+    spreadsheetVisualizer.addOnSelectionChangeSubscription((selection) => {
+      if (this.cellValueBar && selection) {
+        this.cellValueBar.updateCell(selection);
       } else if (this.cellValueBar) {
-        this.cellValueBar.updateCell(null);
+        this.cellValueBar.updateCell(undefined);
       }
     });
 
@@ -201,6 +204,10 @@ export class MultiDatasetVisualizer {
     return this.activeTabId;
   }
 
+  public getActiveDataset(): DataProvider | null {
+    return this.tabs.find((t) => t.isActive)?.dataProvider || null;
+  }
+
   public getDatasetIds(): string[] {
     return this.tabs.map((t) => t.metadata.name);
   }
@@ -212,6 +219,14 @@ export class MultiDatasetVisualizer {
     for (const tab of this.tabs) {
       this.eventDispatcher.registerComponent(tab.spreadsheetVisualizer);
     }
+  }
+
+  public setOnCellSelectionCallback(callback: (cellSelection?: ICellSelection) => void): void {
+    this.onCellSelectionCallback = callback;
+  }
+
+  public setOnSelectCallback(callback: (dataset: DataProvider) => void): void {
+    this.onSelectCallback = callback;
   }
 
   public setOnCloseTabCallback(callback: () => void): void {
@@ -280,6 +295,16 @@ export class MultiDatasetVisualizer {
 
       // Update the shared stats visualizer with the new spreadsheet visualizer
       await this.sharedStatsVisualizer.setSpreadsheetVisualizer(newTab.spreadsheetVisualizer);
+
+      if (this.onCellSelectionCallback) {
+        newTab.spreadsheetVisualizer.addOnSelectionChangeSubscription(this.onCellSelectionCallback);
+      }
+
+      if (this.onSelectCallback) {
+        this.onSelectCallback(newTab.dataProvider);
+      }
+
+      this.eventDispatcher?.setFocus(newTab.spreadsheetVisualizer.componentId);
     }
   }
 
