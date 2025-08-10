@@ -1,3 +1,5 @@
+import { Column } from "@/data/types";
+
 export interface SpreadsheetOptions {
   // Viewport options
   maxHeight?: number;
@@ -53,4 +55,11 @@ export interface SpreadsheetOptions {
 
   maxFormatGuessLength?: number;
   percentFormatGuessFit?: number;
+}
+
+export interface ICellSelection {
+  rows: number[];
+  columns: Column[];
+  values: any[][];
+  formatted: string[][];
 }

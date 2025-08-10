@@ -64,17 +64,4 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizer implem
   public async handleResize(_: Event): Promise<boolean> {
     return await this._handleResize();
   }
-
-  public async handleContextMenu(event: MouseEvent): Promise<boolean> {
-    if (!this._isFocused) return false;
-
-    // if (this.contextMenu.isVisible()) {
-    //   this.contextMenu.hide();
-    //   this.eventDispatcher?.setFocus(this.componentId);
-    //   return true;
-    // }
-
-    this.contextMenu.show(event);
-    return true;
-  }
 }

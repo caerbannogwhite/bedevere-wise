@@ -41,12 +41,11 @@ import {
   DEFAULT_DATETIME_LOCALE,
 } from "./defaults";
 import { listenForThemeChanges } from "./utils/theme";
-import { SpreadsheetOptions } from "./types";
+import { ICellSelection, SpreadsheetOptions } from "./types";
 import { DataProvider, DatasetMetadata, Column } from "../../data/types";
 import { ColumnInternal } from "./internals";
 import { minMax } from "./utils/drawing";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
-import { ContextMenu } from "./ContextMenu";
 import { getFormattedValueAndStyle } from "./utils/formatting";
 
 type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | "width"> & {
@@ -118,14 +117,11 @@ export class SpreadsheetVisualizer {
   private hasStatsPanel = false;
   private statsVisualizer: ColumnStatsVisualizer | null;
 
-  // Context menu for export options
-  protected contextMenu: ContextMenu;
-
   // Theme management
   private themeCleanup: (() => void) | null = null;
 
   // Selection change callback
-  private onSelectionChange?: (cell: { row: number; col: number; value: any; formatted: string; column: ColumnInternal } | null) => void;
+  private onSelectionChange: ((selection?: ICellSelection) => void)[] = [];
 
   constructor(
     container: HTMLElement,
@@ -246,9 +242,6 @@ export class SpreadsheetVisualizer {
       this.statsVisualizer = new ColumnStatsVisualizer(this.container, this, this.statsPanelWidth);
     }
 
-    // Create context menu for export options
-    this.contextMenu = new ContextMenu(this);
-
     // Setup theme change listener
     this.themeCleanup = listenForThemeChanges(() => {
       this.updateThemeColors();
@@ -282,10 +275,12 @@ export class SpreadsheetVisualizer {
     return this.selectedCols.map((colIndex) => this.columns[colIndex] as Column).filter((col) => col !== undefined);
   }
 
-  public setOnSelectionChange(
-    callback: (cell: { row: number; col: number; value: any; formatted: string; column: Column } | null) => void
-  ): void {
-    this.onSelectionChange = callback;
+  public addOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
+    this.onSelectionChange.push(callback);
+  }
+
+  public removeOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
+    this.onSelectionChange = this.onSelectionChange.filter((cb) => cb !== callback);
   }
 
   public destroy(): void {
@@ -294,9 +289,6 @@ export class SpreadsheetVisualizer {
       this.themeCleanup();
       this.themeCleanup = null;
     }
-
-    // Hide context menu
-    this.contextMenu.hide();
 
     // Hide stats visualizer if we own it
     if (this.statsVisualizer && !this.hasStatsPanel) {
@@ -371,8 +363,6 @@ export class SpreadsheetVisualizer {
     this.options.scrollbarColor = getDefaultScrollbarColor();
     this.options.scrollbarThumbColor = getDefaultScrollbarThumbColor();
     this.options.scrollbarHoverColor = getDefaultScrollbarHoverColor();
-
-    this.contextMenu.updateThemeColors();
   }
 
   private async updateLayout() {
@@ -841,6 +831,7 @@ export class SpreadsheetVisualizer {
 
           this.updateToDraw(ToDraw.Selection);
           this.notifySelectionChange();
+          this.updateLayout();
           break;
         }
 
@@ -975,7 +966,7 @@ export class SpreadsheetVisualizer {
       case "c":
       case "C":
         if (event.ctrlKey || event.metaKey) {
-          this.contextMenu.exportAsCSV();
+          // TODO: Implement copy
         }
         break;
 
@@ -1449,36 +1440,58 @@ export class SpreadsheetVisualizer {
 
   private async notifySelectionChange(): Promise<void> {
     if (!this.onSelectionChange) return;
+    else if (this.selectedCols.length > 0) {
+      this.onSelectionChange.forEach((callback) =>
+        callback({
+          rows: [],
+          columns: this.selectedCols.map((col) => this.columns[col] as Column),
+          values: [],
+          formatted: [],
+        })
+      );
+    } else if (this.selectedCells) {
+      try {
+        // TODO: Don't fetch the cell data, use the current data
+        // Fetch the cell data
+        const data = (await this.dataProvider.fetchData(
+          this.selectedCells.startRow - 1,
+          this.selectedCells.endRow - 1,
+          this.selectedCells.startCol,
+          this.selectedCells.endCol
+        )) as any[][];
 
-    if (!this.selectedCells) {
-      this.onSelectionChange(null);
-      return;
-    }
+        const formatted = data.map((row) =>
+          row.map((cell, index) => {
+            const column = this.columns[index + this.selectedCells!.startCol];
+            if (!column) return "";
+            return getFormattedValueAndStyle(cell, column, this.options).formatted;
+          })
+        );
 
-    // For now, only handle single cell selection (start cell)
-    const { startRow, startCol } = this.selectedCells;
+        const rows = Array.from(
+          { length: this.selectedCells.endRow - this.selectedCells.startRow + 1 },
+          (_, i) => this.selectedCells!.startRow + i
+        );
+        const columns = this.columns.filter(
+          (_, index) => this.selectedCells!.startCol <= index && index <= this.selectedCells!.endCol
+        ) as Column[];
 
-    try {
-      // TODO: Don't fetch the cell data, use the current data
-      // Fetch the cell data
-      const data = await this.dataProvider.fetchData(startRow - 1, startRow - 1, startCol, startCol);
-      const cellValue = data[0] && data[0][0];
-      const column = this.columns[startCol];
-
-      const { formatted } = getFormattedValueAndStyle(cellValue, column, this.options);
-
-      if (column) {
-        this.onSelectionChange({
-          row: startRow,
-          col: startCol,
-          value: cellValue,
-          formatted: formatted,
-          column,
-        });
+        if (columns.length > 0) {
+          this.onSelectionChange.forEach((callback) =>
+            callback({
+              rows,
+              columns,
+              values: data,
+              formatted,
+            })
+          );
+        }
+      } catch (error) {
+        console.error("Failed to fetch cell data for selection:", error);
+        this.onSelectionChange.forEach((callback) => callback());
       }
-    } catch (error) {
-      console.error("Failed to fetch cell data for selection:", error);
-      this.onSelectionChange(null);
+    } else {
+      this.onSelectionChange.forEach((callback) => callback());
     }
   }
 }
