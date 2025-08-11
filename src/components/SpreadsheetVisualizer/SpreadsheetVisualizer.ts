@@ -1438,17 +1438,15 @@ export class SpreadsheetVisualizer {
     }
   }
 
-  private async notifySelectionChange(): Promise<void> {
-    if (!this.onSelectionChange) return;
-    else if (this.selectedCols.length > 0) {
-      this.onSelectionChange.forEach((callback) =>
-        callback({
-          rows: [],
-          columns: this.selectedCols.map((col) => this.columns[col] as Column),
-          values: [],
-          formatted: [],
-        })
-      );
+  public async getSelection(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
+    if (!this.onSelectionChange) return null;
+    if (this.selectedCols.length > 0) {
+      return {
+        rows: [],
+        columns: this.selectedCols.map((col) => this.columns[col] as Column),
+        values: [],
+        formatted: [],
+      };
     } else if (this.selectedCells) {
       try {
         // TODO: Don't fetch the cell data, use the current data
@@ -1476,22 +1474,23 @@ export class SpreadsheetVisualizer {
           (_, index) => this.selectedCells!.startCol <= index && index <= this.selectedCells!.endCol
         ) as Column[];
 
-        if (columns.length > 0) {
-          this.onSelectionChange.forEach((callback) =>
-            callback({
-              rows,
-              columns,
-              values: data,
-              formatted,
-            })
-          );
-        }
+        return {
+          rows,
+          columns,
+          values: data,
+          formatted,
+        };
       } catch (error) {
         console.error("Failed to fetch cell data for selection:", error);
-        this.onSelectionChange.forEach((callback) => callback());
+        return null;
       }
     } else {
-      this.onSelectionChange.forEach((callback) => callback());
+      return null;
     }
+  }
+
+  private async notifySelectionChange(): Promise<void> {
+    const selection = await this.getSelection();
+    this.onSelectionChange.forEach((callback) => callback(selection as ICellSelection | undefined));
   }
 }
