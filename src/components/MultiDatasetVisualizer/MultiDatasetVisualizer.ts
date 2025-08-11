@@ -200,16 +200,12 @@ export class MultiDatasetVisualizer {
     }
   }
 
-  public getActiveDatasetId(): string | null {
-    return this.activeTabId;
-  }
-
-  public getActiveDataset(): DataProvider | null {
-    return this.tabs.find((t) => t.isActive)?.dataProvider || null;
-  }
-
   public getDatasetIds(): string[] {
     return this.tabs.map((t) => t.metadata.name);
+  }
+
+  public getActiveDatasetTab(): DatasetTab | null {
+    return this.tabs.find((t) => t.isActive) || null;
   }
 
   public setEventDispatcher(eventDispatcher: EventDispatcher): void {
