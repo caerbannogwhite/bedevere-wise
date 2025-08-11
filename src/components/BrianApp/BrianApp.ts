@@ -9,6 +9,7 @@ import { EventDispatcher } from "./EventDispatcher";
 import { EventHandler } from "./types";
 import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
 import { DatasetInfo } from "../DatasetPanel/DatasetPanel";
+import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
 
 export const BRIAN_APP_VERSION = "0.5.0-who-goes-there";
 
@@ -175,7 +176,9 @@ export class BrianApp implements EventHandler {
 
     // Command palette
     if (this.options.commandPaletteEnabled) {
-      this.commandPalette = new CommandPalette(this.container);
+      this.commandPalette = new CommandPalette(this.container, "command-palette");
+      this.commandPalette.setEventDispatcher(this.eventDispatcher);
+      this.eventDispatcher.registerComponent(this.commandPalette);
     }
 
     // Drag drop zone
@@ -193,6 +196,7 @@ export class BrianApp implements EventHandler {
     // Set event dispatcher on multi-dataset visualizer
     this.multiDatasetVisualizer.setEventDispatcher(this.eventDispatcher);
     this.setOnCloseTabCallback();
+    this.setOnCellSelectionCallback();
 
     // Dataset panel
     if (this.options.showLeftPanel) {
@@ -272,9 +276,9 @@ export class BrianApp implements EventHandler {
 
   private updateFocusAfterDatasetChange(): void {
     // Set focus to the active dataset's spreadsheet, or clear focus if no active dataset
-    const activeDatasetId = this.multiDatasetVisualizer.getActiveDatasetId();
-    if (activeDatasetId) {
-      this.eventDispatcher.setFocus(`spreadsheet-${activeDatasetId}`);
+    const activeDatasetTab = this.multiDatasetVisualizer.getActiveDatasetTab();
+    if (activeDatasetTab) {
+      this.eventDispatcher.setFocus(`spreadsheet-${activeDatasetTab.metadata.name}`);
     } else {
       this.focusManager.clearFocus();
     }
@@ -311,9 +315,43 @@ export class BrianApp implements EventHandler {
           name: "dataset",
           type: "string",
           description: "The name of the dataset to open",
+          required: true,
+          options: () => this.leftPanel.getAvailableDatasets().map((d) => d.metadata.name),
         },
       ],
       execute: (params?: Record<string, any>) => this.openDataset(params?.dataset),
+    });
+
+    this.commandPalette.registerCommand({
+      id: "dataset.exportSelection",
+      title: "Export Selection",
+      description: "Export the current selection",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "format",
+          type: "string",
+          description: "The format to export the selection in",
+          required: true,
+          options: () => ["csv", "tsv", "html", "markdown"],
+        },
+        {
+          name: "includeHeader",
+          type: "boolean",
+          description: "Whether to include the header row in the export",
+          required: false,
+          default: "true",
+        },
+        {
+          name: "includeIndex",
+          type: "boolean",
+          description: "Whether to include the index column in the export",
+          required: false,
+          default: "true",
+        },
+      ],
+      when: () => this.multiDatasetVisualizer.getActiveDatasetTab() !== null,
+      execute: (params?: Record<string, any>) => this.exportSelection(params),
     });
 
     this.commandPalette.registerCommand({
@@ -321,7 +359,7 @@ export class BrianApp implements EventHandler {
       title: "Export Current Dataset",
       description: "Export the currently active dataset",
       category: "Dataset",
-      when: () => this.multiDatasetVisualizer.getActiveDatasetId() !== null,
+      when: () => this.multiDatasetVisualizer.getActiveDatasetTab() !== null,
       execute: () => this.exportCurrentDataset(),
     });
 
@@ -376,11 +414,11 @@ export class BrianApp implements EventHandler {
     }
   }
 
-  private exportCurrentDataset(): void {
-    const activeId = this.multiDatasetVisualizer.getActiveDatasetId();
-    if (activeId) {
-      // TODO: Implement dataset export functionality
-      this.showMessage(`Export functionality for dataset ${activeId} not implemented yet`, "info");
+  private async exportCurrentDataset(): Promise<void> {
+    const activeDatasetTab = this.multiDatasetVisualizer.getActiveDatasetTab();
+    if (activeDatasetTab) {
+      const selection = await activeDatasetTab.spreadsheetVisualizer.getSelection();
+      console.log("selection", selection);
     } else {
       this.showMessage("No active dataset to export", "warning");
     }
@@ -400,14 +438,14 @@ export class BrianApp implements EventHandler {
     // Mark as loaded in panel
     this.leftPanel.markDatasetAsLoaded(datasetInfo.metadata.name);
 
-    // Update status bar
-    this.updateStatusBarDatasetInfo();
-
     // Destroy drag drop zone
     this.dragDropZone?.destroy();
     this.dragDropZone = null;
 
     await this.multiDatasetVisualizer.switchToDataset(datasetInfo.metadata.name);
+
+    // Update status bar
+    this.updateStatusBarDatasetInfo();
   }
 
   protected async openDataset(name: string): Promise<void> {
@@ -426,6 +464,37 @@ export class BrianApp implements EventHandler {
     this.showMessage("All datasets closed", "info");
   }
 
+  private async exportSelection(params?: Record<string, any>): Promise<void> {
+    const activeDataset = this.multiDatasetVisualizer.getActiveDatasetTab();
+
+    if (activeDataset) {
+      const selection = await activeDataset.spreadsheetVisualizer.getSelection();
+      if (!selection) {
+        this.showMessage("No selection to export", "warning");
+        return;
+      }
+
+      const { includeHeader, includeIndex, format } = params || {};
+
+      switch (format) {
+        case "csv":
+          await exportAsText(selection, includeHeader, includeIndex);
+          break;
+        case "tsv":
+          await exportAsText(selection, includeHeader, includeIndex, "\t");
+          break;
+        case "html":
+          await exportAsHTML(selection, includeHeader, includeIndex);
+          break;
+        case "markdown":
+          await exportAsMarkdown(selection, includeHeader, includeIndex);
+          break;
+      }
+    } else {
+      this.showMessage("No active dataset to export", "warning");
+    }
+  }
+
   private showApplicationInfo(): void {
     const datasetIds = this.multiDatasetVisualizer.getDatasetIds();
     const info = `
@@ -441,11 +510,18 @@ export class BrianApp implements EventHandler {
     this.showMessage("Application info logged to console", "info");
   }
 
-  private updateStatusBarDatasetInfo(): void {
-    const activeId = this.multiDatasetVisualizer.getActiveDatasetId();
-    if (activeId && this.statusBar) {
-      // TODO: Get actual dataset info from the visualizer
-      this.statusBar.updateDatasetInfo(activeId, 0, 0);
+  private async updateStatusBarDatasetInfo(dataset?: DataProvider): Promise<void> {
+    if (dataset) {
+      const metadata = await dataset.getMetadata();
+      this.statusBar.updateDatasetInfo(metadata.name, metadata.totalRows, metadata.totalColumns);
+    } else {
+      const activeDataset = this.multiDatasetVisualizer.getActiveDatasetTab();
+      if (activeDataset) {
+        const metadata = activeDataset.metadata;
+        this.statusBar.updateDatasetInfo(metadata.name, metadata.totalRows, metadata.totalColumns);
+      } else {
+        this.statusBar.updateDatasetInfo("No dataset selected", 0, 0);
+      }
     }
   }
 
@@ -476,10 +552,15 @@ export class BrianApp implements EventHandler {
    * Destroy the drag drop zone.
    */
   private setOnSelectDatasetCallback(): void {
-    this.leftPanel.setOnSelectCallback((_dataset: DataProvider) => {
+    const callback = async (dataset: DataProvider) => {
+      await this.updateStatusBarDatasetInfo(dataset);
+
       this.dragDropZone?.destroy();
       this.dragDropZone = null;
-    });
+    };
+
+    this.leftPanel.setOnSelectCallback(callback);
+    this.multiDatasetVisualizer.setOnSelectCallback(callback);
   }
 
   /**
@@ -488,17 +569,24 @@ export class BrianApp implements EventHandler {
    */
   private setOnCloseTabCallback(): void {
     this.multiDatasetVisualizer.setOnCloseTabCallback(() => {
-      this.updateStatusBarDatasetInfo();
       this.updateFocusAfterDatasetChange();
+      this.updateStatusBarDatasetInfo();
 
-      if (this.multiDatasetVisualizer.getDatasetIds().length === 0) {
-        this.showMessage("No datasets loaded", "info");
-
-        if (this.dragDropZone === null) {
-          this.dragDropZone = new DragDropZoneFocusable(this.container);
-          this.setOnFileDroppedCallback();
-        }
+      // If there are no datasets left, show the drag drop zone
+      if (this.multiDatasetVisualizer.getDatasetIds().length === 0 && this.dragDropZone === null) {
+        this.dragDropZone = new DragDropZoneFocusable(this.container);
+        this.setOnFileDroppedCallback();
       }
+    });
+  }
+
+  /**
+   * Set the callback for when a cell is selected.
+   * Update the status bar.
+   */
+  private setOnCellSelectionCallback(): void {
+    this.multiDatasetVisualizer.setOnCellSelectionCallback((cellSelection) => {
+      this.statusBar.updateSelection(cellSelection);
     });
   }
 }
