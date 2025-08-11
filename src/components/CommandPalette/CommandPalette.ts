@@ -171,7 +171,6 @@ export class CommandPalette implements FocusableComponent {
     this.isVisible = true;
     this.showingParameterForm = false;
     this.currentCommand = undefined;
-    this.parameterValues = {};
     this.container.style.display = "block";
     this.overlay.style.display = "block";
     this.input.value = "";
@@ -376,7 +375,6 @@ export class CommandPalette implements FocusableComponent {
       // Check if command has parameters
       if (command.parameters && command.parameters.length > 0) {
         this.currentCommand = command;
-        this.parameterValues = {};
         this.showParameterForm();
         return;
       }
@@ -393,14 +391,27 @@ export class CommandPalette implements FocusableComponent {
     if (!this.currentCommand) return;
 
     try {
-      // Validate required parameters
-      const missingRequired = this.currentCommand.parameters?.filter(
-        (param) => param.required && (parameters[param.name] === undefined || parameters[param.name] === "")
-      );
+      for (const param of this.currentCommand.parameters || []) {
+        if (parameters[param.name] === undefined) {
+          parameters[param.name] = param.default || "";
+        }
 
-      if (missingRequired && missingRequired.length > 0) {
-        alert(`Please fill in required parameters: ${missingRequired.map((p) => p.name).join(", ")}`);
-        return;
+        // Cast parameters to the correct type
+        switch (param.type) {
+          case "boolean":
+            parameters[param.name] = parameters[param.name] === "true";
+            break;
+          case "number":
+            parameters[param.name] = Number(parameters[param.name]);
+            break;
+        }
+
+        // Check if the parameter is required
+        if (param.required && (parameters[param.name] === undefined || parameters[param.name] === "")) {
+          alert(`Please fill in required parameter: ${param.name}`);
+          this.showParameterForm();
+          return;
+        }
       }
 
       await this.currentCommand.execute(parameters);

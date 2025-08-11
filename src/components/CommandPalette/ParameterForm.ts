@@ -43,26 +43,6 @@ export class ParameterForm implements FocusableComponent {
     this.container.remove();
   }
 
-  public async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
-    if (!this._isFocused || !this.currentOptionsDropdown) return false;
-
-    switch (e.key) {
-      case "ArrowDown":
-        e.preventDefault();
-        this.currentSelectedIndex = Math.min(this.currentSelectedIndex + 1, this.currentOptionsDropdown.children.length - 1);
-        this.updateDropdownSelection();
-        return true;
-
-      case "ArrowUp":
-        e.preventDefault();
-        this.currentSelectedIndex = Math.max(this.currentSelectedIndex - 1, 0);
-        this.updateDropdownSelection();
-        return true;
-    }
-
-    return false;
-  }
-
   public async handleKeyUp(e: KeyboardEvent): Promise<boolean> {
     if (e.key === "Enter") {
       // If there's a dropdown and an item is selected, use that value
@@ -94,11 +74,29 @@ export class ParameterForm implements FocusableComponent {
 
     this.container.innerHTML = "";
 
-    // Title section
+    // Header section with title and execute button
+    const headerSection = document.createElement("div");
+    headerSection.className = "command-palette__parameter-header";
+
     const titleSection = document.createElement("div");
     titleSection.className = "command-palette__parameter-title";
-    titleSection.innerHTML = `<span class="command-palette__parameter-prompt">&gt;</span> ${currentCommand.title}`;
-    this.container.appendChild(titleSection);
+    // titleSection.innerHTML = `<span class="command-palette__parameter-prompt">&gt;</span> ${currentCommand.title}`;
+    titleSection.textContent = currentCommand.title;
+
+    // Execute Button
+    const executeButton = document.createElement("button");
+    executeButton.className = "command-palette__parameter-execute-button";
+    executeButton.innerHTML = `
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M2 8L7 13L14 3" stroke="currentColor" stroke-width="2" fill="none"/>
+      </svg>
+    `;
+    executeButton.title = "Execute Command";
+    executeButton.addEventListener("click", () => this.executeWithParameters());
+
+    headerSection.appendChild(titleSection);
+    headerSection.appendChild(executeButton);
+    this.container.appendChild(headerSection);
 
     // Parameters section
     const parametersSection = document.createElement("div");
@@ -168,6 +166,39 @@ export class ParameterForm implements FocusableComponent {
         }, 150);
       });
 
+      input.addEventListener("keydown", (e) => {
+        const filteredOptions = this.getParameterOptions(param).filter((option) =>
+          option.toLowerCase().includes(input.value.toLowerCase())
+        );
+
+        switch (e.key) {
+          case "Enter":
+            if (this.currentSelectedIndex === -1) {
+              this.executeWithParameters();
+              return true;
+            }
+
+            e.preventDefault();
+            input.value = filteredOptions[this.currentSelectedIndex];
+            this.parameterValues[param.name] = input.value;
+            this.hideOptionsDropdown();
+            input.focus();
+            return true;
+
+          case "ArrowDown":
+            e.preventDefault();
+            this.currentSelectedIndex = Math.min(this.currentSelectedIndex + 1, filteredOptions.length - 1);
+            this.updateDropdownSelection();
+            return true;
+
+          case "ArrowUp":
+            e.preventDefault();
+            this.currentSelectedIndex = Math.max(this.currentSelectedIndex - 1, 0);
+            this.updateDropdownSelection();
+            return true;
+        }
+      });
+
       inputContainer.appendChild(input);
       parameterRow.appendChild(paramName);
       parameterRow.appendChild(inputContainer);
@@ -175,19 +206,6 @@ export class ParameterForm implements FocusableComponent {
     });
 
     this.container.appendChild(parametersSection);
-
-    // Floating Execute Button
-    const executeButton = document.createElement("button");
-    executeButton.className = "command-palette__parameter-execute-floating";
-    executeButton.innerHTML = `
-      <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">
-        <rect x="2" y="2" width="12" height="12" rx="2" />
-      </svg>
-    `;
-    executeButton.title = "Execute Command";
-    executeButton.addEventListener("click", () => this.executeWithParameters());
-
-    this.container.appendChild(executeButton);
 
     // Set focus to the first input
     const firstInput = this.container.querySelector("input");
