@@ -12,15 +12,11 @@ A simple and powerful spreadsheet data viewer, built with TypeScript.
 
 ![Live](https://caerbannogwhite.github.io/brian/)
 
-![Demo](./media/brian-demo-base.gif)
-![Demo](./media/brian-demo-export.gif)
-
-## Browser Support
-
-- Chrome 90+
-- Firefox 88+
-- Safari 14+
-- Edge 90+
+![Open Dataset](./media/open-dataset.gif)
+![Columns Showing](./media/columns-show.gif)
+![Export Selection](./media/export-selection.gif)
+![Toggle Theme](./media/toggle-theme.gif)
+![Toggle Panel](./media/toggle-panel.gif)
 
 ## License
 

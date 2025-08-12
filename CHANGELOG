@@ -1,26 +1,38 @@
+v0.5.0-who-goes-there:
+
+- [Feature] Implemented commands with parameters in Command Palette
+- [Feature] Export selection commands moved from Context Menu to Command Palette
+- [Enhanced] Cell and column selection behavior
+- [Enhanced] Added version information to Status Bar
+- [Bug-fix] Fixed dataset and selection items in Status Bar
+
 v0.4.0-halt:
- - [Feature] Added Command Palette for improved interactivity
- - [Feature] Added drag and drop support for file upload
- - [Feature] Addes Status Bar
- - [Feature] Added Cell Value Bar
- - [Feature] Added values distribution visualization in the stats panel
- - [Enhanced] Cell styling and formatting
- - [Enhanced] Zooming added
- - [Enhanced] New event handling system
- - [Bug-fix] Fixed scrolling and column selection issues
+
+- [Feature] Added Command Palette for improved interactivity
+- [Feature] Added drag and drop support for file upload
+- [Feature] Addes Status Bar
+- [Feature] Added Cell Value Bar
+- [Feature] Added values distribution visualization in the stats panel
+- [Enhanced] Cell styling and formatting
+- [Enhanced] Zooming added
+- [Enhanced] New event handling system
+- [Bug-fix] Fixed scrolling and column selection issues
 
 v0.3.0-guard:
- - [Feature] Multi-dataset support: visualize multiple datasets in different tabs
- - [Feature] Export selection menu: CSV, TSV, HTML and Markdown
- - [Feature] DataProvider interface updated to include metadata
- - [Enhanced] Column stats visualization
- - [Bug-fix] Fixed scrolling and boundaries issues
+
+- [Feature] Multi-dataset support: visualize multiple datasets in different tabs
+- [Feature] Export selection menu: CSV, TSV, HTML and Markdown
+- [Feature] DataProvider interface updated to include metadata
+- [Enhanced] Column stats visualization
+- [Bug-fix] Fixed scrolling and boundaries issues
 
 v0.2.0-whoa-there:
- - [Feature] Added a comprehensive Stats Panel for enhanced data insights
- - [Feature] Introduced cell selection functionality for improved interactivity
- - [Bug-fix] Enhanced scrolling performance and responsiveness
- - [Bug-fix] Fixed issues with column hovering and selection for a smoother user experience
+
+- [Feature] Added a comprehensive Stats Panel for enhanced data insights
+- [Feature] Introduced cell selection functionality for improved interactivity
+- [Bug-fix] Enhanced scrolling performance and responsiveness
+- [Bug-fix] Fixed issues with column hovering and selection for a smoother user experience
 
 v0.1.0-arthur:
- - Initial release
+
+- Initial release
