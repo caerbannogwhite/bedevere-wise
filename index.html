@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Brian - Clinical Data Viewer</title>
-    <meta name="description" content="A VS Code-like interface for viewing CDISC clinical trial data" />
+    <meta name="description" content="A simple spreadsheet-like data viewer" />
     <style>
       /* Reset and base styles */
       * {
@@ -13,11 +13,12 @@
         box-sizing: border-box;
       }
 
-      html, body {
+      html,
+      body {
         height: 100%;
         width: 100%;
         overflow: hidden;
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
         font-size: 13px;
         line-height: 1.4;
       }
@@ -45,7 +46,7 @@
       }
 
       .loading::after {
-        content: '';
+        content: "";
         width: 20px;
         height: 20px;
         margin-left: 10px;
@@ -56,8 +57,12 @@
       }
 
       @keyframes spin {
-        0% { transform: rotate(0deg); }
-        100% { transform: rotate(360deg); }
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
       }
 
       /* Ensure proper rendering */
