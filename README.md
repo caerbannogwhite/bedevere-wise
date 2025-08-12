@@ -2,23 +2,21 @@
 
 A simple and powerful spreadsheet data viewer, built with TypeScript.
 
+[Live Demo](https://caerbannogwhite.github.io/brian/)
+
 ## Features
 
 - 📈 **Column statistics** and data analysis
 - 🎨 **Responsive design** that works on all screen sizes
 - ⚡ **High performance** with virtual scrolling
 
-## Demo
-
-[Live Demo](https://caerbannogwhite.github.io/brian/)
-
 ### Open Dataset
 
 ![Open Dataset](./media/open-dataset.gif)
 
-### Columns Showing
+### Columns Statistics
 
-![Columns Showing](./media/columns-show.gif)
+![Columns Statistics](./media/columns-show.gif)
 
 ### Export Selection
 
