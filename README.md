@@ -10,12 +10,26 @@ A simple and powerful spreadsheet data viewer, built with TypeScript.
 
 ## Demo
 
-![Live](https://caerbannogwhite.github.io/brian/)
+[Live Demo](https://caerbannogwhite.github.io/brian/)
+
+### Open Dataset
 
 ![Open Dataset](./media/open-dataset.gif)
+
+### Columns Showing
+
 ![Columns Showing](./media/columns-show.gif)
+
+### Export Selection
+
 ![Export Selection](./media/export-selection.gif)
+
+### Toggle Theme
+
 ![Toggle Theme](./media/toggle-theme.gif)
+
+### Toggle Panel
+
 ![Toggle Panel](./media/toggle-panel.gif)
 
 ## License
