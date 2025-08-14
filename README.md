@@ -1,6 +1,6 @@
 # Brian
 
-A simple and powerful spreadsheet data viewer, built with TypeScript.
+A simple, local-first spreadsheet data viewer.
 
 [Live Demo](https://caerbannogwhite.github.io/brian/)
 

@@ -1,11 +1,19 @@
 {
   "name": "brian",
-  "version": "0.3.0",
-  "description": "A simple spreadsheet data viewer for CDISC clinical trial data in TypeScript",
+  "version": "0.6.0",
+  "author": "Massimo Meneghello",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/caerbannogwhite/brian"
+  },
   "main": "dist/index.js",
   "module": "dist/index.es.js",
-  "types": "dist/index.d.ts",
-  "type": "module",
+  "devDependencies": {
+    "@types/node": "^20.11.19",
+    "sass": "^1.89.2",
+    "typescript": "^5.3.3",
+    "vite": "^6.3.5"
+  },
   "exports": {
     ".": {
       "import": "./dist/index.es.js",
@@ -14,17 +22,13 @@
     },
     "./style.css": "./dist/style.css"
   },
+  "description": "A simple, local-first spreadsheet data viewer.",
   "files": [
     "dist",
     "README.md",
     "CHANGELOG"
   ],
-  "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "build:lib": "vite build --config vite.config.ts",
-    "preview": "vite preview"
-  },
+  "homepage": "https://github.com/caerbannogwhite/brian",
   "keywords": [
     "spreadsheet",
     "data-viewer",
@@ -33,17 +37,16 @@
     "typescript",
     "visualization"
   ],
-  "author": "Massimo Meneghello",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/caerbannogwhite/brian"
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "build:lib": "vite build --config vite.config.ts",
+    "preview": "vite preview"
   },
-  "homepage": "https://github.com/caerbannogwhite/brian",
-  "devDependencies": {
-    "@types/node": "^20.11.19",
-    "sass": "^1.89.2",
-    "typescript": "^5.3.3",
-    "vite": "^6.3.5"
+  "type": "module",
+  "types": "dist/index.d.ts",
+  "dependencies": {
+    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0"
   }
 }

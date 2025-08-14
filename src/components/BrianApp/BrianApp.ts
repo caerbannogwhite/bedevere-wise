@@ -10,8 +10,7 @@ import { EventHandler } from "./types";
 import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
 import { DatasetInfo } from "../DatasetPanel/DatasetPanel";
 import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
-
-export const BRIAN_APP_VERSION = "0.5.0-who-goes-there";
+import { DuckDBService } from "@/data/duckdb";
 
 export type BrianAppTheme = "light" | "dark" | "auto";
 
@@ -33,6 +32,7 @@ export class BrianApp implements EventHandler {
   private leftPanelContainer!: HTMLElement;
   private spreadsheetContainer!: HTMLElement;
 
+  private duckDBService!: DuckDBService;
   private commandPalette!: CommandPalette;
   private leftPanel!: DatasetPanel;
   private dragDropZone!: DragDropZoneFocusable | null;
@@ -41,12 +41,13 @@ export class BrianApp implements EventHandler {
 
   private options: BrianAppOptions;
   private theme: BrianAppTheme = "dark";
+  private version: string;
 
   // Event system
   private focusManager: FocusManager;
   private eventDispatcher: EventDispatcher;
 
-  constructor(parent: HTMLElement, options: BrianAppOptions = {}) {
+  constructor(parent: HTMLElement, options: BrianAppOptions = {}, duckDBService: DuckDBService, version: string) {
     this.options = {
       theme: "dark",
       showLeftPanel: true,
@@ -58,6 +59,9 @@ export class BrianApp implements EventHandler {
     this.container = document.createElement("div");
     this.container.className = "brian-app";
     this.setupTheme();
+
+    this.duckDBService = duckDBService;
+    this.version = version;
 
     // Initialize event system
     this.focusManager = new FocusManager({ debugMode: options.debugMode || false });
@@ -170,7 +174,7 @@ export class BrianApp implements EventHandler {
   private setupComponents(): void {
     // Status bar
     if (this.options.statusBarVisible) {
-      this.statusBar = new StatusBar(this.container);
+      this.statusBar = new StatusBar(this.container, this.version);
       this.statusBar.setOnCommandCallback((command) => this.executeCommand(command));
     }
 

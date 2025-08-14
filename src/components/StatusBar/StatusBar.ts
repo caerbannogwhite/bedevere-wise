@@ -1,4 +1,4 @@
-import { BRIAN_APP_VERSION, BrianAppMessageType } from "../BrianApp/BrianApp";
+import { BrianAppMessageType } from "../BrianApp/BrianApp";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 export interface StatusBarItem {
@@ -17,10 +17,11 @@ export class StatusBar {
   private container: HTMLElement;
   private leftSection: HTMLElement;
   private rightSection: HTMLElement;
+  private version: string;
   private items: Map<string, StatusBarItem> = new Map();
   private onCommandCallback?: (command: string) => void;
 
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, version: string) {
     this.container = document.createElement("div");
     this.container.className = "status-bar";
 
@@ -33,6 +34,8 @@ export class StatusBar {
     this.container.appendChild(this.leftSection);
     this.container.appendChild(this.rightSection);
     parent.appendChild(this.container);
+
+    this.version = version;
 
     this.initializeDefaultItems();
   }
@@ -181,8 +184,8 @@ export class StatusBar {
     // Add version and made by information
     const versionElement = document.createElement("div");
     versionElement.className = "status-bar__item status-bar__item--clickable";
-    versionElement.title = `Brian App Version ${BRIAN_APP_VERSION}\nClick to view changelog`;
-    versionElement.textContent = `v${BRIAN_APP_VERSION}`;
+    versionElement.title = `Brian App Version ${this.version}\nClick to view changelog`;
+    versionElement.textContent = `v${this.version}`;
     versionElement.addEventListener("click", () => {
       window.open("https://github.com/caerbannogwhite/brian/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
     });
