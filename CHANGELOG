@@ -1,3 +1,7 @@
+v0.6.0-it-is-i:
+
+- [Feature] Added DuckDB as a data backend
+
 v0.5.0-who-goes-there:
 
 - [Feature] Implemented commands with parameters in Command Palette
