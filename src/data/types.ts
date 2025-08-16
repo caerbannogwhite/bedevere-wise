@@ -1,11 +1,14 @@
-export type DataType = "null" | "boolean" | "integer" | "float" | "string" | "date" | "datetime";
+export type DataType = "BIGINT" | "BOOLEAN" | "DATE" | "TIMESTAMP" | "VARCHAR" | "DOUBLE" | "INTEGER" | "FLOAT";
 
 export interface Column {
   name: string;
-  key: string;
+  key: string | null;
+  extra: string | null;
+  default: string | null;
   label?: string;
   dataType: DataType;
   length?: number;
+  hasNulls?: boolean;
   format?: string | Intl.NumberFormatOptions;
 }
 

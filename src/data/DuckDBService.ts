@@ -3,6 +3,14 @@ import duckdb_wasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
 import mvp_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
 import duckdb_wasm_eh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
 import eh_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
+import { DuckDBDataProvider } from "./DuckDBDataProvider";
+
+export interface ImportOptions {
+  fileType: "csv" | "json" | "parquet";
+  hasHeader?: boolean;
+  delimiter?: string;
+  schema?: string;
+}
 
 export class DuckDBService {
   private db: duckdb.AsyncDuckDB | null = null;
@@ -61,21 +69,35 @@ export class DuckDBService {
     }
   }
 
-  public async loadCSVFromBlob(blob: Blob, tableName: string): Promise<void> {
-    const connection = await this.getConnection();
-    try {
-      const text = await blob.text();
-      await connection.query(`CREATE TABLE ${tableName} AS SELECT * FROM read_csv_auto('${text}')`);
-    } finally {
-      await connection.close();
+  public async importFile(file: File, tableName: string, importOptions: ImportOptions): Promise<DuckDBDataProvider> {
+    const text = await file.text();
+
+    switch (importOptions.fileType) {
+      case "csv":
+        await this.loadCSVFromText(text, file.name, tableName, importOptions.hasHeader, importOptions.delimiter);
+        break;
+      // case "json":
+      //   await this.loadJSONFromText(text, file.name, tableName, importOptions.schema);
+      //   break;
+
+      default:
+        throw new Error(`Unsupported file type: ${importOptions.fileType}`);
     }
+
+    return new DuckDBDataProvider(this, tableName, file.name);
   }
 
-  public async loadCSVFromText(csvContent: string, tableName: string, hasHeader: boolean = true, delimiter: string = ","): Promise<void> {
+  private async loadCSVFromText(
+    csvContent: string,
+    fileName: string,
+    tableName: string,
+    hasHeader: boolean = true,
+    delimiter: string = ","
+  ): Promise<void> {
     const connection = await this.getConnection();
     try {
-      await this.db!.registerFileText(`${tableName}.csv`, csvContent);
-      await connection.insertCSVFromPath(`${tableName}.csv`, {
+      await this.db!.registerFileText(`${fileName}`, csvContent);
+      await connection.insertCSVFromPath(`${fileName}`, {
         schema: "main",
         name: tableName,
         detect: true,
@@ -88,9 +110,7 @@ export class DuckDBService {
   }
 
   public async listTables(): Promise<string[]> {
-    const connection = await this.getConnection();
-    const result = await connection.query("SHOW TABLES");
-    return result.toArray().map((row: any) => row[0]);
+    return (await this.executeQuery("SHOW TABLES")).map((row: any) => row.name);
   }
 
   public async getTableInfo(tableName: string): Promise<any[]> {
