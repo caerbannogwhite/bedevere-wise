@@ -87,6 +87,18 @@ export class DuckDBService {
     return new DuckDBDataProvider(this, tableName, file.name);
   }
 
+  public getSupportedFileTypes(): string[] {
+    return ["text/csv", "text/tab-separated-values", "text/plain", "application/csv", ".csv", ".tsv", ".txt"];
+  }
+
+  public isSupportedFileType(file: File): boolean {
+    const supportedTypes = this.getSupportedFileTypes();
+    const fileType = file.type.toLowerCase();
+    const fileName = file.name.toLowerCase();
+
+    return supportedTypes.some((type) => fileType.includes(type.replace(".", "")) || fileName.endsWith(type));
+  }
+
   private async loadCSVFromText(
     csvContent: string,
     fileName: string,

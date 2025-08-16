@@ -1,2 +1,3 @@
-export * from './types';
-export * from './providers/CdiscDataProvider'; 
+export * from "./types";
+export * from "./DuckDBService";
+export * from "./DuckDBDataProvider";
