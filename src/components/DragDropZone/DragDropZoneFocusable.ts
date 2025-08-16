@@ -1,5 +1,6 @@
 import { FocusableComponent } from "../BrianApp/types";
 import { DragDropZone, DragDropZoneOptions } from "./DragDropZone";
+import { DuckDBService } from "@/data/DuckDBService";
 
 export class DragDropZoneFocusable extends DragDropZone implements FocusableComponent {
   private _isFocused: boolean = false;
@@ -8,8 +9,8 @@ export class DragDropZoneFocusable extends DragDropZone implements FocusableComp
   public readonly canReceiveFocus: boolean = true;
   public readonly focusableElement: HTMLElement;
 
-  constructor(parent: HTMLElement, options: DragDropZoneOptions = {}) {
-    super(parent, options);
+  constructor(parent: HTMLElement, duckDBService: DuckDBService, options: DragDropZoneOptions = {}) {
+    super(parent, duckDBService, options);
     this.focusableElement = this.getContainer();
     this._isFocused = false;
   }

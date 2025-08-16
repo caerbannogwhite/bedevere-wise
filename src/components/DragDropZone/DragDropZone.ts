@@ -1,5 +1,5 @@
-import { parseFile, isSupportedFileType, getSupportedFileTypes } from "../../data/fileParser";
 import { DataProvider } from "../../data/types";
+import { DuckDBService } from "@/data/DuckDBService";
 
 export interface DragDropZoneOptions {
   onFileDropped?: (dataset: DataProvider) => void;
@@ -9,10 +9,12 @@ export interface DragDropZoneOptions {
 export class DragDropZone {
   private container: HTMLElement;
   private dropZone!: HTMLElement;
+  private duckDBService: DuckDBService;
   private options: DragDropZoneOptions;
   private isDragOver: boolean = false;
 
-  constructor(parent: HTMLElement, options: DragDropZoneOptions = {}) {
+  constructor(parent: HTMLElement, duckDBService: DuckDBService, options: DragDropZoneOptions = {}) {
+    this.duckDBService = duckDBService;
     this.options = options;
     this.container = document.createElement("div");
     this.container.className = "drag-drop-zone";
@@ -77,7 +79,7 @@ export class DragDropZone {
     description.className = "drag-drop-zone__description";
     description.innerHTML = `
       Drop a CSV or TSV file here to automatically add it as a dataset<br>
-      <small>Supported formats: ${getSupportedFileTypes().join(", ")}</small>
+      <small>Supported formats: ${this.duckDBService.getSupportedFileTypes().join(", ")}</small>
     `;
 
     // Create alternative action
@@ -90,7 +92,7 @@ export class DragDropZone {
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = getSupportedFileTypes().join(",");
+    fileInput.accept = this.duckDBService.getSupportedFileTypes().join(",");
     fileInput.style.display = "none";
     fileInput.multiple = false;
 
@@ -166,28 +168,33 @@ export class DragDropZone {
   }
 
   private async _handleFiles(files: File[]): Promise<void> {
-    // Take only the first file for now
-    const file = files[0];
-
-    if (!isSupportedFileType(file)) {
-      this.showError(`Unsupported file type: ${file.type || "unknown"}. Please use CSV or TSV files.`);
-      return;
-    }
-
-    try {
-      this.showLoading();
-
-      const result = await parseFile(file);
-
-      this.hideLoading();
-
-      if (this.options.onFileDropped) {
-        this.options.onFileDropped(result);
+    for (const file of files) {
+      if (!this.duckDBService.isSupportedFileType(file)) {
+        this.showError(`Unsupported file type: ${file.type || "unknown"}. Please use CSV or TSV files.`);
+        return;
       }
-    } catch (error) {
-      this.hideLoading();
-      const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-      this.showError(`Failed to parse file: ${errorMessage}`);
+
+      try {
+        this.showLoading();
+
+        // const result = await parseFile(file);
+        const tableName = file.name.replace(/\.[^/.]+$/, "");
+        const result = await this.duckDBService.importFile(file, tableName, {
+          fileType: "csv",
+          hasHeader: true,
+          delimiter: ",",
+        });
+
+        this.hideLoading();
+
+        if (this.options.onFileDropped) {
+          this.options.onFileDropped(result);
+        }
+      } catch (error) {
+        this.hideLoading();
+        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
+        this.showError(`Failed to parse file: ${errorMessage}`);
+      }
     }
   }
 
