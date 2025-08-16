@@ -10,7 +10,7 @@ import { EventHandler } from "./types";
 import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
 import { DatasetInfo } from "../DatasetPanel/DatasetPanel";
 import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
-import { DuckDBService } from "@/data/duckdb";
+import { DuckDBService } from "@/data/DuckDBService";
 
 export type BrianAppTheme = "light" | "dark" | "auto";
 
@@ -47,7 +47,7 @@ export class BrianApp implements EventHandler {
   private focusManager: FocusManager;
   private eventDispatcher: EventDispatcher;
 
-  constructor(parent: HTMLElement, options: BrianAppOptions = {}, duckDBService: DuckDBService, version: string) {
+  constructor(parent: HTMLElement, duckDBService: DuckDBService, version: string, options: BrianAppOptions = {}) {
     this.options = {
       theme: "dark",
       showLeftPanel: true,
@@ -187,7 +187,7 @@ export class BrianApp implements EventHandler {
 
     // Drag drop zone
     if (this.options.showDragDropZone) {
-      this.dragDropZone = new DragDropZoneFocusable(this.container);
+      this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
       this.setOnFileDroppedCallback();
     }
 
@@ -578,7 +578,7 @@ export class BrianApp implements EventHandler {
 
       // If there are no datasets left, show the drag drop zone
       if (this.multiDatasetVisualizer.getDatasetIds().length === 0 && this.dragDropZone === null) {
-        this.dragDropZone = new DragDropZoneFocusable(this.container);
+        this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
         this.setOnFileDroppedCallback();
       }
     });
