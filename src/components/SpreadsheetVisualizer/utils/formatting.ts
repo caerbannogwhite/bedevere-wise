@@ -17,7 +17,7 @@ export function parseFormat(format: string | undefined, type: DataType): any {
   try {
     return JSON.parse(format);
   } catch (e) {
-    if (type === "date" || type === "datetime") {
+    if (type === "DATE" || type === "TIMESTAMP") {
       const formatMap: { [key: string]: Intl.DateTimeFormatOptions } = {
         "yyyy-MM-dd": { year: "numeric", month: "2-digit", day: "2-digit" },
         "dd/MM/yyyy": { day: "2-digit", month: "2-digit", year: "numeric" },
@@ -73,12 +73,14 @@ export function getFormatOptions(column: ColumnInternal, options: SpreadsheetOpt
   }
 
   switch (column.dataType) {
-    case "integer":
-    case "float":
+    case "INTEGER":
+    case "BIGINT":
+    case "FLOAT":
+    case "DOUBLE":
       return parseFormat(options.numberFormat?.toString(), column.dataType);
-    case "date":
+    case "DATE":
       return parseFormat(options.dateFormat?.toString(), column.dataType);
-    case "datetime":
+    case "TIMESTAMP":
       return parseFormat(options.datetimeFormat?.toString(), column.dataType);
     default:
       return undefined;
@@ -87,40 +89,42 @@ export function getFormatOptions(column: ColumnInternal, options: SpreadsheetOpt
 
 export const formatValue = (value: any, column: ColumnInternal, options: SpreadsheetOptions): { raw: any; formatted: string } => {
   // Convert to date or number if needed
-  if (column.dataType === "integer" || column.dataType === "float") {
+  if (column.dataType === "INTEGER" || column.dataType === "FLOAT" || column.dataType === "BIGINT" || column.dataType === "DOUBLE") {
     value = Number(value);
   }
 
-  if (column.dataType === "date" || column.dataType === "datetime") {
+  if (column.dataType === "DATE" || column.dataType === "TIMESTAMP") {
     value = new Date(value);
   }
 
   // Handle null/undefined values
-  if (value === null || value === undefined || (column.dataType !== "string" && isNaN(value))) {
+  if (value === null || value === undefined || (column.dataType !== "VARCHAR" && isNaN(value))) {
     return { raw: null, formatted: options.naText || DEFAULT_NA_TEXT };
   }
 
   // Handle different data types
   switch (column.dataType) {
-    case "boolean":
+    case "BOOLEAN":
       return { raw: value, formatted: value ? options.trueText || DEFAULT_TRUE_TEXT : options.falseText || DEFAULT_FALSE_TEXT };
-    case "integer":
-    case "float":
+    case "INTEGER":
+    case "FLOAT":
+    case "BIGINT":
+    case "DOUBLE":
       const numberFormatOptions = column.guessedFormat || getFormatOptions(column, options);
       return numberFormatOptions
         ? { raw: value, formatted: new Intl.NumberFormat(options.datetimeLocale, numberFormatOptions).format(value) }
         : { raw: value, formatted: value.toLocaleString() };
-    case "date":
+    case "DATE":
       const dateFormatOptions = column.guessedFormat || getFormatOptions(column, options);
       return dateFormatOptions
         ? { raw: value, formatted: new Intl.DateTimeFormat(options.datetimeLocale, dateFormatOptions).format(value) }
         : { raw: value, formatted: value.toLocaleDateString() };
-    case "datetime":
+    case "TIMESTAMP":
       const datetimeFormatOptions = column.guessedFormat || getFormatOptions(column, options);
       return datetimeFormatOptions
         ? { raw: value, formatted: new Intl.DateTimeFormat(options.datetimeLocale, datetimeFormatOptions).format(value) }
         : { raw: value, formatted: value.toLocaleString() };
-    case "string":
+    case "VARCHAR":
       return { raw: value, formatted: value };
     default:
       return { raw: value, formatted: String(value) };
@@ -133,16 +137,16 @@ export function getFormattedValueAndStyle(
   options: SpreadsheetOptions
 ): { raw: any; formatted: string; style: Partial<CellStyle> } {
   // Convert to date or number if needed
-  if (column.dataType === "date" || column.dataType === "datetime") {
+  if (column.dataType === "DATE" || column.dataType === "TIMESTAMP") {
     value = new Date(value);
   }
 
-  if (column.dataType === "integer" || column.dataType === "float") {
+  if (column.dataType === "INTEGER" || column.dataType === "FLOAT" || column.dataType === "BIGINT" || column.dataType === "DOUBLE") {
     value = Number(value);
   }
 
   // Handle null/undefined values
-  if (value === null || value === undefined || (column.dataType !== "string" && isNaN(value))) {
+  if (value === null || value === undefined || (column.dataType !== "VARCHAR" && isNaN(value))) {
     const nullStyle = getDefaultNullStyle();
     return {
       raw: null,
@@ -157,7 +161,7 @@ export function getFormattedValueAndStyle(
 
   // Handle different data types with theme-aware styling
   switch (column.dataType) {
-    case "boolean":
+    case "BOOLEAN":
       const booleanStyle = getDefaultBooleanStyle();
       return {
         raw: value,
@@ -169,8 +173,10 @@ export function getFormattedValueAndStyle(
         },
       };
 
-    case "integer":
-    case "float":
+    case "INTEGER":
+    case "FLOAT":
+    case "BIGINT":
+    case "DOUBLE":
       const numericStyle = getDefaultNumericStyle();
       return {
         raw: value,
@@ -182,7 +188,7 @@ export function getFormattedValueAndStyle(
         },
       };
 
-    case "date":
+    case "DATE":
       const dateStyle = getDefaultDateStyle();
       return {
         raw: value,
@@ -194,7 +200,7 @@ export function getFormattedValueAndStyle(
         },
       };
 
-    case "datetime":
+    case "TIMESTAMP":
       const datetimeStyle = getDefaultDatetimeStyle();
       return {
         raw: value,
@@ -206,7 +212,7 @@ export function getFormattedValueAndStyle(
         },
       };
 
-    case "string":
+    case "VARCHAR":
     default:
       const stringStyle = getDefaultStringStyle();
       return {
