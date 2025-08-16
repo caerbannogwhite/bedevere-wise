@@ -11,7 +11,6 @@ export { CellValueBar } from "./components/CellValueBar";
 
 // Data types and utilities
 export type { DataProvider } from "./data/types";
-export { getColumns } from "./data/types";
 
 // New component types
 export type { BrianAppOptions } from "./components/BrianApp";
@@ -19,10 +18,6 @@ export type { StatusBarItem } from "./components/StatusBar";
 export type { Command } from "./components/CommandPalette";
 export type { DragDropZoneOptions } from "./components/DragDropZone";
 export type { CellValueBarOptions, CellInfo } from "./components/CellValueBar";
-
-// File parsing utilities
-export { parseFile, isSupportedFileType, getSupportedFileTypes } from "./data/fileParser";
-export type { ParseOptions } from "./data/fileParser";
 
 // SpreadsheetVisualizer types
 export type { SpreadsheetOptions } from "./components/SpreadsheetVisualizer/types";

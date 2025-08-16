@@ -62,14 +62,19 @@ export class ColumnStatsVisualizer {
 
   private async calculateStats() {
     if (!this.currentColumn || !this.spreadsheetVisualizer) return;
-    const values = await this.spreadsheetVisualizer.getColumnValues(this.currentColumn!.key);
+    const values = await this.spreadsheetVisualizer.getColumnValues(this.currentColumn!.name);
     this.stats = {
       totalCount: values.length,
       nullCount: values.filter((v) => v.raw === null).length,
       valueCounts: new Map<string, number>(),
     };
 
-    if (this.currentColumn.dataType === "integer" || this.currentColumn.dataType === "float") {
+    if (
+      this.currentColumn.dataType === "INTEGER" ||
+      this.currentColumn.dataType === "FLOAT" ||
+      this.currentColumn.dataType === "BIGINT" ||
+      this.currentColumn.dataType === "DOUBLE"
+    ) {
       this.numbers = values.map((v) => Number(v.raw)).filter((v) => v !== null && !isNaN(v));
       if (this.numbers.length > 0) {
         this.stats.min = Math.min(...this.numbers);
@@ -165,7 +170,12 @@ export class ColumnStatsVisualizer {
     `);
 
     // Numeric stats
-    if (this.currentColumn?.dataType === "integer" || (this.currentColumn?.dataType === "float" && this.stats.min !== undefined)) {
+    if (
+      this.currentColumn?.dataType === "INTEGER" ||
+      this.currentColumn?.dataType === "FLOAT" ||
+      this.currentColumn?.dataType === "BIGINT" ||
+      this.currentColumn?.dataType === "DOUBLE"
+    ) {
       stats.push(`
         <div class="column-stats__item">
           <div class="column-stats__label">Min</div>
@@ -212,7 +222,12 @@ export class ColumnStatsVisualizer {
     if (!this.stats) return "";
 
     // For numerical data, show distribution histogram
-    if (this.currentColumn?.dataType === "integer" || this.currentColumn?.dataType === "float") {
+    if (
+      this.currentColumn?.dataType === "INTEGER" ||
+      this.currentColumn?.dataType === "FLOAT" ||
+      this.currentColumn?.dataType === "BIGINT" ||
+      this.currentColumn?.dataType === "DOUBLE"
+    ) {
       return await this.renderNumericalHistogram();
     }
 

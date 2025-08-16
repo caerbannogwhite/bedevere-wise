@@ -296,9 +296,9 @@ export class SpreadsheetVisualizer {
     }
   }
 
-  public async getColumnValues(key: string): Promise<{ raw: any; formatted: string }[]> {
+  public async getColumnValues(name: string): Promise<{ raw: any; formatted: string }[]> {
     const metadata = await this.dataProvider.getMetadata();
-    const columnIndex = metadata.columns.findIndex((col) => col.key === key);
+    const columnIndex = metadata.columns.findIndex((col) => col.name === name);
     if (columnIndex === -1) return [];
 
     const data = await this.dataProvider.fetchData(0, this.totalRows, columnIndex, columnIndex);

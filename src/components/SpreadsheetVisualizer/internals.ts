@@ -58,7 +58,9 @@ export interface CellStyle {
 
 export class ColumnInternal implements Column {
   name: string;
-  key: string;
+  key: string | null;
+  extra: string | null;
+  default: string | null;
   label?: string;
   dataType: DataType;
   length?: number;
@@ -69,6 +71,8 @@ export class ColumnInternal implements Column {
   constructor(column: Column, options: SpreadsheetOptions) {
     this.name = column.name;
     this.key = column.key;
+    this.extra = column.extra;
+    this.default = column.default;
     this.dataType = column.dataType;
     this.label = column.label;
     this.length = column.length;
