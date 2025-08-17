@@ -55,6 +55,11 @@ export interface SpreadsheetOptions {
 
   maxFormatGuessLength?: number;
   percentFormatGuessFit?: number;
+
+  // Cache options
+  initialCacheSize?: number;
+  cacheChunkSize?: number;
+  maxCacheSize?: number;
 }
 
 export interface ICellSelection {

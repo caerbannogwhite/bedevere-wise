@@ -41,8 +41,13 @@ export const DEFAULT_DATETIME_FORMAT = "yyyy-MM-dd HH:mm:ss";
 export const DEFAULT_NUMBER_FORMAT = { minimumFractionDigits: 2, maximumFractionDigits: 2 };
 export const DEFAULT_DATETIME_LOCALE = new Intl.Locale("en-UK");
 
-export const DEFAULT_MAX_FORMAT_GUESS_LENGTH = 30;
+export const DEFAULT_MAX_FORMAT_GUESS_LENGTH = 200; // same as cache chunk size
 export const DEFAULT_PERCENT_FORMAT_GUESS_FIT = 0.8;
+
+// Cache options
+export const DEFAULT_INITIAL_CACHE_SIZE = 200;
+export const DEFAULT_CACHE_CHUNK_SIZE = 50;
+export const DEFAULT_MAX_CACHE_SIZE = 1000;
 
 // Get theme-aware colors
 function getDefaultColors() {

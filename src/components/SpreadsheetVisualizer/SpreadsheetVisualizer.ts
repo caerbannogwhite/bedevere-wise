@@ -39,6 +39,9 @@ import {
   DEFAULT_IMAGE_SMOOTHING_QUALITY,
   DEFAULT_TEXT_RENDERING,
   DEFAULT_DATETIME_LOCALE,
+  DEFAULT_INITIAL_CACHE_SIZE,
+  DEFAULT_CACHE_CHUNK_SIZE,
+  DEFAULT_MAX_CACHE_SIZE,
 } from "./defaults";
 import { listenForThemeChanges } from "./utils/theme";
 import { ICellSelection, SpreadsheetOptions } from "./types";
@@ -47,6 +50,7 @@ import { ColumnInternal } from "./internals";
 import { minMax } from "./utils/drawing";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { getFormattedValueAndStyle } from "./utils/formatting";
+import { SpreadsheetCache } from "./SpreadsheetCache";
 
 type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | "width"> & {
   height: number;
@@ -102,6 +106,7 @@ export class SpreadsheetVisualizer {
   private singleColSelectionMode: boolean = true;
   private selectedRows: number[] = [];
   private selectedCols: number[] = [];
+  private cache: SpreadsheetCache;
 
   // Cache
   private colWidths: number[] = [];
@@ -110,7 +115,6 @@ export class SpreadsheetVisualizer {
   private totalHeight = 0;
   private totalScrollY = 0;
   private totalScrollX = 0;
-  // private dataCache: Map<string, any[][]> = new Map();
 
   // Stats panel
   private statsPanelWidth = 350; // Width of the stats panel
@@ -222,7 +226,15 @@ export class SpreadsheetVisualizer {
 
       maxFormatGuessLength: options.maxFormatGuessLength ?? DEFAULT_MAX_FORMAT_GUESS_LENGTH,
       percentFormatGuessFit: options.percentFormatGuessFit ?? DEFAULT_PERCENT_FORMAT_GUESS_FIT,
+
+      // Cache options
+      initialCacheSize: options.initialCacheSize ?? DEFAULT_INITIAL_CACHE_SIZE,
+      cacheChunkSize: options.cacheChunkSize ?? DEFAULT_CACHE_CHUNK_SIZE,
+      maxCacheSize: options.maxCacheSize ?? DEFAULT_MAX_CACHE_SIZE,
     };
+
+    // Initialize the data cache with initial data
+    this.cache = new SpreadsheetCache(this.dataProvider, this.options);
 
     // Apply constraints
     this.options.height = minMax(this.options.height, this.options.minHeight, this.options.maxHeight);
@@ -259,6 +271,7 @@ export class SpreadsheetVisualizer {
     this.totalRows = this.metadata.totalRows;
     this.totalCols = this.metadata.totalColumns;
 
+    await this.cache.initialize(this.totalRows);
     await this.updateLayout();
   }
 
@@ -294,27 +307,18 @@ export class SpreadsheetVisualizer {
     if (this.statsVisualizer && !this.hasStatsPanel) {
       this.statsVisualizer.hide();
     }
-  }
 
-  public async getColumnValues(name: string): Promise<{ raw: any; formatted: string }[]> {
-    const metadata = await this.dataProvider.getMetadata();
-    const columnIndex = metadata.columns.findIndex((col) => col.name === name);
-    if (columnIndex === -1) return [];
-
-    const data = await this.dataProvider.fetchData(0, this.totalRows, columnIndex, columnIndex);
-    return data.flat().map((value) => getFormattedValueAndStyle(value, this.columns[columnIndex], this.options));
+    // Clear the data cache
+    this.cache.clear();
   }
 
   public async getSelectedFormattedValues(): Promise<{ headers: string[]; indeces: number[]; data: string[][] }> {
     if (!this.selectedCells) return { headers: [], indeces: [], data: [] };
 
     const { startRow, endRow, startCol, endCol } = this.selectedCells;
-    const data = await this.dataProvider.fetchData(
-      Math.min(startRow - 1, endRow - 1),
-      Math.max(startRow - 1, endRow - 1),
-      Math.min(startCol, endCol),
-      Math.max(startCol, endCol)
-    );
+
+    // Try to get data from cache first
+    const data = await this.cache.getData(startRow - 1, endRow - 1);
 
     const formattedData = data.map((row) =>
       row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + startCol], this.options).formatted)
@@ -347,6 +351,10 @@ export class SpreadsheetVisualizer {
 
   public getOptions(): SpreadsheetOptions {
     return this.options;
+  }
+
+  public getDataProvider(): DataProvider {
+    return this.dataProvider;
   }
 
   private updateThemeColors(): void {
@@ -453,8 +461,9 @@ export class SpreadsheetVisualizer {
     this.ctx.imageSmoothingEnabled = this.options.imageSmoothingEnabled ?? DEFAULT_IMAGE_SMOOTHING_ENABLED;
     this.ctx.imageSmoothingQuality = this.options.imageSmoothingQuality ?? DEFAULT_IMAGE_SMOOTHING_QUALITY;
 
-    // Get all rows from the first to maxFormatGuessLength
-    const rows = await this.dataProvider.fetchData(0, this.options.maxFormatGuessLength, 0, this.totalCols);
+    // Try to get rows from cache first, fallback to data provider
+    const maxRows = Math.min(this.options.maxFormatGuessLength, this.totalRows);
+    const rows = await this.cache.getData(0, maxRows);
 
     const availableWidth = this.canvas.width - this.options.rowHeaderWidth;
 
@@ -739,6 +748,20 @@ export class SpreadsheetVisualizer {
     return true;
   }
 
+  private async preloadDataForScroll(scrollY: number): Promise<void> {
+    // Calculate which rows will be visible after scrolling
+    const visibleStartRow = Math.floor(scrollY / this.options.cellHeight);
+    const visibleEndRow = Math.min(visibleStartRow + Math.ceil(this.canvas.height / this.options.cellHeight), this.totalRows);
+
+    // Preload data for visible rows plus buffer
+    const bufferSize = this.options.cacheChunkSize;
+    const preloadStart = Math.max(0, visibleStartRow - bufferSize);
+    const preloadEnd = Math.min(this.totalRows, visibleEndRow + bufferSize);
+
+    // Load data asynchronously without blocking
+    this.cache.loadChunk(preloadStart, preloadEnd).catch(console.error);
+  }
+
   protected async _handleWheel(event: WheelEvent): Promise<boolean> {
     event.preventDefault();
 
@@ -761,6 +784,9 @@ export class SpreadsheetVisualizer {
       this.scrollY = minMax(this.scrollY + event.deltaY, 0, this.totalScrollY);
 
       if (prevScrollY !== this.scrollY) {
+        // Preload data for the new scroll position
+        this.preloadDataForScroll(this.scrollY);
+
         this.updateToDraw(ToDraw.Cells);
       }
     }
@@ -854,6 +880,7 @@ export class SpreadsheetVisualizer {
 
           this.scrollY = minMax((row + 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
           if (prevScrollY !== this.scrollY) {
+            this.preloadDataForScroll(this.scrollY);
             this.updateToDraw(ToDraw.Cells);
             this.notifySelectionChange();
           } else {
@@ -1070,8 +1097,8 @@ export class SpreadsheetVisualizer {
     const firstVisibleCol = this.getFirstVisibleCol();
     const lastVisibleCol = this.getLastVisibleCol();
 
-    // Get the data before clearing the canvas
-    const data = await this.dataProvider.fetchData(startRow, endRow, firstVisibleCol, lastVisibleCol);
+    // Try to get data from cache first
+    const data = await this.cache.getData(startRow, endRow);
 
     // Clear the canvas
     ctx.clearRect(0, 0, width, height);
@@ -1449,14 +1476,8 @@ export class SpreadsheetVisualizer {
       };
     } else if (this.selectedCells) {
       try {
-        // TODO: Don't fetch the cell data, use the current data
-        // Fetch the cell data
-        const data = (await this.dataProvider.fetchData(
-          this.selectedCells.startRow - 1,
-          this.selectedCells.endRow - 1,
-          this.selectedCells.startCol,
-          this.selectedCells.endCol
-        )) as any[][];
+        // Try to get data from cache first
+        const data = await this.cache.getData(this.selectedCells.startRow - 1, this.selectedCells.endRow - 1);
 
         const formatted = data.map((row) =>
           row.map((cell, index) => {
