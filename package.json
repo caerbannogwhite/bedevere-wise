@@ -22,7 +22,7 @@
     },
     "./style.css": "./dist/style.css"
   },
-  "description": "A simple, local-first spreadsheet data viewer.",
+  "description": "A simple, local-first spreadsheet data viewer tool powered by DuckDB.",
   "files": [
     "dist",
     "README.md",
@@ -31,7 +31,15 @@
   "homepage": "https://github.com/caerbannogwhite/brian",
   "keywords": [
     "spreadsheet",
+    "data-analysis",
+    "data-visualization",
+    "data-exploration",
+    "data-processing",
+    "data-transformation",
+    "data-engineering",
+    "data-science",
     "data-viewer",
+    "duckdb",
     "cdisc",
     "clinical-trial-data",
     "typescript",

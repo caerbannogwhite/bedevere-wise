@@ -1,6 +1,6 @@
 # Brian
 
-A simple, local-first spreadsheet data viewer.
+A simple, local-first spreadsheet data viewer tool powered by DuckDB.
 
 [Live Demo](https://caerbannogwhite.github.io/brian/)
 
