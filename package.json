@@ -10,9 +10,12 @@
   "module": "dist/index.es.js",
   "devDependencies": {
     "@types/node": "^20.11.19",
+    "@vitest/ui": "^3.2.4",
+    "jsdom": "^26.1.0",
     "sass": "^1.89.2",
     "typescript": "^5.3.3",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^3.2.4"
   },
   "exports": {
     ".": {
@@ -50,7 +53,11 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "build:lib": "vite build --config vite.config.ts",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test": "vitest",
+    "test:ui": "vitest --ui",
+    "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage"
   },
   "type": "module",
   "types": "dist/index.d.ts",
