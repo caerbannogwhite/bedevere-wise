@@ -129,8 +129,9 @@ export class DuckDBService {
     return await this.executeQuery(`DESCRIBE ${tableName}`);
   }
 
-  public async getTableData(tableName: string, limit: number = 100): Promise<any[]> {
-    return await this.executeQuery(`SELECT * FROM ${tableName} LIMIT ${limit}`);
+  public async getColumnInfo(tableName: string, columnName: string): Promise<any> {
+    const columns = await this.executeQuery(`DESCRIBE ${tableName}`);
+    return columns.find((column: any) => column.column_name === columnName);
   }
 
   public isReady(): boolean {
