@@ -48,6 +48,7 @@ export const DEFAULT_PERCENT_FORMAT_GUESS_FIT = 0.8;
 export const DEFAULT_INITIAL_CACHE_SIZE = 200;
 export const DEFAULT_CACHE_CHUNK_SIZE = 50;
 export const DEFAULT_MAX_CACHE_SIZE = 1000;
+export const DEFAULT_CACHE_TIME_TO_LIVE = 1000 * 60 * 1; // 5 minutes
 
 // Get theme-aware colors
 function getDefaultColors() {

@@ -60,6 +60,7 @@ export interface SpreadsheetOptions {
   initialCacheSize?: number;
   cacheChunkSize?: number;
   maxCacheSize?: number;
+  cacheTimeToLive?: number;
 }
 
 export interface ICellSelection {

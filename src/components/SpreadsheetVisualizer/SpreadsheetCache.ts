@@ -1,29 +1,66 @@
 import { DataProvider } from "@/data/types";
 import { SpreadsheetOptions } from "./types";
-import { DEFAULT_CACHE_CHUNK_SIZE, DEFAULT_INITIAL_CACHE_SIZE, DEFAULT_MAX_CACHE_SIZE } from "./defaults";
+import { DEFAULT_CACHE_CHUNK_SIZE, DEFAULT_CACHE_TIME_TO_LIVE, DEFAULT_INITIAL_CACHE_SIZE, DEFAULT_MAX_CACHE_SIZE } from "./defaults";
 
 type CacheRange = { start: number; end: number };
 
+class CacheEntry {
+  rows: any[][];
+  lastAccessed: number;
+  isExpired: boolean;
+  timeToLive: number;
+
+  constructor(rows: any[][], timeToLive: number) {
+    this.rows = rows;
+    this.lastAccessed = Date.now();
+    this.timeToLive = timeToLive;
+    this.isExpired = false;
+
+    this.resetTimer();
+  }
+
+  private resetTimer(): void {
+    setTimeout(() => {
+      if (this.lastAccessed + this.timeToLive < Date.now()) {
+        this.rows = [];
+        this.isExpired = true;
+      } else {
+        this.resetTimer();
+      }
+    }, this.timeToLive);
+  }
+}
+
 export class SpreadsheetCache {
-  private dataCache: Map<CacheRange, any[][]> = new Map();
-  private startRow = 0;
-  private endRow = 0;
+  private dataCache: Map<CacheRange, CacheEntry> = new Map();
   private isLoading = false;
   private loadQueue: { resolve: () => void }[] = [];
 
   private datasetTotalRows: number = 0;
+  private initialCacheSize: number;
+  private cacheChunkSize: number;
+  private maxCacheSize: number;
+  private cacheTimeToLive: number;
   private dataProvider: DataProvider;
-  private options: SpreadsheetOptions;
 
   constructor(dataProvider: DataProvider, options: SpreadsheetOptions) {
     this.dataProvider = dataProvider;
-    this.options = options;
+
+    this.initialCacheSize = options.initialCacheSize ?? DEFAULT_INITIAL_CACHE_SIZE;
+    this.cacheChunkSize = options.cacheChunkSize ?? DEFAULT_CACHE_CHUNK_SIZE;
+    this.maxCacheSize = options.maxCacheSize ?? DEFAULT_MAX_CACHE_SIZE;
+    this.cacheTimeToLive = options.cacheTimeToLive ?? DEFAULT_CACHE_TIME_TO_LIVE;
+
+    this.maxCacheSize = Math.max(this.maxCacheSize, this.initialCacheSize + this.cacheChunkSize);
   }
 
   // Cache management methods
   public async initialize(totalRows: number): Promise<void> {
     this.datasetTotalRows = totalRows;
-    const initialSize = Math.min(this.options.initialCacheSize ?? DEFAULT_INITIAL_CACHE_SIZE, this.datasetTotalRows);
+    if (totalRows === 0) {
+      return; // Don't load anything for empty datasets
+    }
+    const initialSize = Math.min(this.initialCacheSize, this.datasetTotalRows);
     await this.loadChunk(0, initialSize);
   }
 
@@ -38,128 +75,118 @@ export class SpreadsheetCache {
 
     this.isLoading = true;
 
-    try {
-      // Check if we already have this data in cache
-      const missingRanges = this.getMissingRanges(startRow, endRow);
-      console.log("loadChunk", startRow, endRow, missingRanges);
+    // Clean up old cache entries
+    await this.cleanup();
 
-      for (const range of missingRanges) {
-        const data = await this.dataProvider.fetchData(range.start, range.end);
-        this.dataCache.set(range, data);
-      }
+    // Check if we already have this data in cache
+    const missingRanges = this.getMissingRanges(startRow, endRow);
 
-      console.log("loadChunk", startRow, endRow, this.dataCache);
+    for (const range of missingRanges) {
+      const data = await this.dataProvider.fetchData(range.start, range.end);
+      this.dataCache.set(range, new CacheEntry(data, this.cacheTimeToLive));
+    }
 
-      // Update cache bounds
-      this.startRow = Math.min(this.startRow, startRow);
-      this.endRow = Math.max(this.endRow, endRow);
+    this.isLoading = false;
 
-      // Clean up old cache entries if we exceed max cache size
-      await this.cleanup();
-    } finally {
-      this.isLoading = false;
-
-      // Process queued requests
-      while (this.loadQueue.length > 0) {
-        const queuedItem = this.loadQueue.shift();
-        if (queuedItem) {
-          queuedItem.resolve();
-        }
+    // Process queued requests
+    while (this.loadQueue.length > 0) {
+      const queuedItem = this.loadQueue.shift();
+      if (queuedItem) {
+        queuedItem.resolve();
       }
     }
   }
 
-  // public async ensureCacheForVisibleRows(visibleStartRow: number, visibleEndRow: number): Promise<void> {
-  //   // Check if we need to load more data
-  //   const bufferSize = Math.floor((this.options.cacheChunkSize ?? DEFAULT_CACHE_CHUNK_SIZE) / 2);
-  //   const loadStart = Math.max(0, visibleStartRow - bufferSize);
-  //   const loadEnd = Math.min(this.datasetTotalRows, visibleEndRow + bufferSize);
-
-  //   // Check if we have all the data we need
-  //   let needsLoading = false;
-  //   for (let row = loadStart; row < loadEnd; row++) {
-  //     if (!this.dataCache.has({ start: row, end: row })) {
-  //       needsLoading = true;
-  //       break;
-  //     }
-  //   }
-
-  //   if (needsLoading) {
-  //     // Load data asynchronously without blocking the current operation
-  //     this.loadChunk(loadStart, loadEnd).catch(console.error);
-  //   }
-  // }
+  public async getValue(row: number, column: number): Promise<any> {
+    return (await this.getData(row, row + 1))[0][column];
+  }
 
   public async getData(startRow: number, endRow: number): Promise<any[][]> {
+    // Handle boundary conditions
+    if (startRow >= this.datasetTotalRows || endRow <= startRow) {
+      return [];
+    }
+
+    // Clamp endRow to dataset bounds
+    endRow = Math.min(endRow, this.datasetTotalRows);
+
     // Check if we have all the data in cache, if not, fetch it
-    const missingRanges = this.getMissingRanges(startRow, endRow);
-    for (const range of missingRanges) {
-      await this.loadChunk(range.start, range.end);
-    }
+    await this.loadChunk(startRow, endRow);
 
-    // Wait for all the data to be loaded
-    while (this.isLoading) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-
-    // Assume all the required data is in cache
+    // Collect data from cache
     const result: any[][] = [];
     const cachedRanges = this.getCachedRanges();
+
+    // Find the range that contains our start row
+    let currentStartRow = startRow;
+
     for (const range of cachedRanges) {
-      if (startRow >= range.start) {
-        if (endRow < range.end) {
-          result.push(...this.dataCache.get(range)!.slice(startRow - range.start, endRow - range.start + 1));
+      if (currentStartRow >= range.start && currentStartRow < range.end) {
+        // Start row is within this range
+        const rangeStart = currentStartRow - range.start;
+        const rangeEnd = Math.min(endRow - range.start, range.end - range.start);
+
+        if (rangeEnd > rangeStart) {
+          const rangeData = this.dataCache.get(range)!;
+          rangeData.lastAccessed = Date.now();
+          result.push(...rangeData.rows.slice(rangeStart, rangeEnd));
+        }
+
+        // Update currentStartRow for next iteration
+        currentStartRow = range.end;
+
+        // If we've covered all requested rows, break
+        if (currentStartRow > endRow) {
           break;
-        } else {
-          result.push(...this.dataCache.get(range)!.slice(startRow - range.start));
-          startRow = range.end;
         }
       }
     }
 
-    console.log("getData", startRow, endRow, this.dataCache);
     return result;
   }
 
   // Cache statistics for debugging and monitoring
   public getCacheStats(): {
     cacheSize: number;
-    cacheStartRow: number;
-    cacheEndRow: number;
+    ranges: CacheRange[];
     totalRows: number;
-    cacheHitRate: number;
+    initialCacheSize: number;
+    cacheChunkSize: number;
+    maxCacheSize: number;
+    cachedRows: number;
     isLoading: boolean;
   } {
-    const totalCachedRows = this.endRow - this.startRow + 1;
-    const cacheHitRate = totalCachedRows > 0 ? this.dataCache.size / totalCachedRows : 0;
-
     return {
       cacheSize: this.dataCache.size,
-      cacheStartRow: this.startRow,
-      cacheEndRow: this.endRow,
+      ranges: this.getCachedRanges(),
       totalRows: this.datasetTotalRows,
-      cacheHitRate,
+      initialCacheSize: this.initialCacheSize,
+      cacheChunkSize: this.cacheChunkSize,
+      maxCacheSize: this.maxCacheSize,
+      cachedRows: this.getCachedRows(),
       isLoading: this.isLoading,
     };
   }
 
   public clear(): void {
     this.dataCache.clear();
-    this.startRow = 0;
-    this.endRow = 0;
     this.isLoading = false;
     this.loadQueue = [];
+  }
+
+  public getCachedRows(): number {
+    return Array.from(this.dataCache.entries()).reduce((acc, [range, _]) => acc + (range.end - range.start), 0);
   }
 
   private getCachedRanges(): CacheRange[] {
     return Array.from(this.dataCache.keys()).sort((a, b) => a.start - b.start);
   }
 
-  private getMissingRanges(startRow: number, endRow: number): CacheRange[] {
+  public getMissingRanges(startRow: number, endRow: number): CacheRange[] {
     // Intervals are open ended: start is included, end is not [start, end)
 
     // If the interval is smaller than the cache chunk size, set it to the cache chunk size
-    const chunkSize = this.options.cacheChunkSize ?? DEFAULT_CACHE_CHUNK_SIZE;
+    const chunkSize = this.cacheChunkSize;
     if (endRow - startRow < chunkSize) {
       endRow = Math.min(this.datasetTotalRows, startRow + chunkSize);
     }
@@ -201,34 +228,28 @@ export class SpreadsheetCache {
         if (endRow <= range.end) break;
 
         startRow = range.end;
-        endRow = Math.min(this.datasetTotalRows, range.end + chunkSize);
+        endRow = Math.min(this.datasetTotalRows, Math.max(endRow, range.end + chunkSize));
       }
 
       // The start is equal to the end of the current range
       // will be handled by the next range
     }
 
+    if (startRow >= currentRanges[currentRanges.length - 1].end && startRow < this.datasetTotalRows) {
+      ranges.push({
+        start: startRow,
+        end: Math.min(this.datasetTotalRows, Math.max(endRow, startRow + chunkSize)),
+      });
+    }
+
     return ranges;
   }
 
   private async cleanup(): Promise<void> {
-    if (this.dataCache.size <= (this.options.maxCacheSize ?? DEFAULT_MAX_CACHE_SIZE)) {
-      return;
-    }
-
-    const entriesToRemove = this.dataCache.size - (this.options.maxCacheSize ?? DEFAULT_MAX_CACHE_SIZE);
-    const sortedEntries = Array.from(this.dataCache.entries()).sort(([a], [b]) => a.start - b.start);
-
-    // Remove oldest entries (keep the most recent)
-    for (let i = 0; i < entriesToRemove; i++) {
-      this.dataCache.delete(sortedEntries[i][0]);
-    }
-
-    // Update cache bounds
-    if (this.dataCache.size > 0) {
-      const remainingKeys = Array.from(this.dataCache.keys()).sort((a, b) => a.start - b.start);
-      this.startRow = remainingKeys[0].start;
-      this.endRow = remainingKeys[remainingKeys.length - 1].end;
+    // Remove expired entries
+    const expiredEntries = Array.from(this.dataCache.entries()).filter(([_, entry]) => entry.isExpired);
+    for (const [range, _] of expiredEntries) {
+      this.dataCache.delete(range);
     }
   }
 }
