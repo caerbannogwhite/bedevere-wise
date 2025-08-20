@@ -1,18 +1,25 @@
 import { DataProvider, SpreadsheetOptions } from "@/index";
 import { FocusableComponent } from "../BrianApp/types";
-import { MouseState, SpreadsheetVisualizer, ToDraw } from "./SpreadsheetVisualizer";
 import { minMax } from "./utils/drawing";
+import { MouseState, SpreadsheetVisualizerBase, ToDraw } from "./SpreadsheetVisualizerBase";
+import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 
-export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizer implements FocusableComponent {
+export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerBase implements FocusableComponent {
   private _isFocused: boolean = false;
 
   public readonly componentId: string;
   public readonly canReceiveFocus: boolean = true;
   public readonly focusableElement: HTMLElement;
 
-  constructor(parent: HTMLElement, dataProvider: DataProvider, options: SpreadsheetOptions = {}, componentId: string) {
-    super(parent, dataProvider, options);
-    this.componentId = componentId;
+  constructor(
+    parent: HTMLElement,
+    dataProvider: DataProvider,
+    options: SpreadsheetOptions = {},
+    columnStatsVisualizer?: ColumnStatsVisualizer,
+    componentId?: string
+  ) {
+    super(parent, dataProvider, options, columnStatsVisualizer);
+    this.componentId = componentId ?? "spreadsheet-visualizer";
     this.focusableElement = this.getContainer();
   }
 
