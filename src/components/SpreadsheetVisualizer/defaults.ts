@@ -1,4 +1,4 @@
-import { getThemeColors } from "./utils/theme";
+import { getThemeColors, ThemeColors } from "./utils/theme";
 
 export const DEFAULT_CONTAINER_WIDTH = 1200;
 export const DEFAULT_CONTAINER_HEIGHT = 800;
@@ -50,80 +50,11 @@ export const DEFAULT_CACHE_CHUNK_SIZE = 50;
 export const DEFAULT_MAX_CACHE_SIZE = 1000;
 export const DEFAULT_CACHE_TIME_TO_LIVE = 1000 * 60 * 1; // 5 minutes
 
-// Get theme-aware colors
-function getDefaultColors() {
+/**
+ * Returns the full theme-aware defaults object. This is cached inside
+ * {@link getThemeColors} and invalidated on theme change, so calling this
+ * per-cell is cheap.
+ */
+export function getThemeDefaults(): ThemeColors {
   return getThemeColors();
-}
-
-// Export functions that return theme-aware defaults
-export function getDefaultHeaderBackgroundColor(): string {
-  return getDefaultColors().headerBackgroundColor;
-}
-
-export function getDefaultHeaderTextColor(): string {
-  return getDefaultColors().headerTextColor;
-}
-
-export function getDefaultCellBackgroundColor(): string {
-  return getDefaultColors().cellBackgroundColor;
-}
-
-export function getDefaultCellTextColor(): string {
-  return getDefaultColors().cellTextColor;
-}
-
-export function getDefaultBorderColor(): string {
-  return getDefaultColors().borderColor;
-}
-
-export function getDefaultSelectionColor(): string {
-  return getDefaultColors().selectionColor;
-}
-
-export function getDefaultSelectionBorderColor(): string {
-  return getDefaultColors().selectionBorderColor;
-}
-
-export function getDefaultHoverColor(): string {
-  return getDefaultColors().hoverColor;
-}
-
-export function getDefaultHoverBorderColor(): string {
-  return getDefaultColors().hoverBorderColor;
-}
-
-export function getDefaultScrollbarColor(): string {
-  return getDefaultColors().scrollbarColor;
-}
-
-export function getDefaultScrollbarThumbColor(): string {
-  return getDefaultColors().scrollbarThumbColor;
-}
-
-export function getDefaultScrollbarHoverColor(): string {
-  return getDefaultColors().scrollbarHoverColor;
-}
-
-export function getDefaultBooleanStyle() {
-  return getDefaultColors().booleanStyle;
-}
-
-export function getDefaultNumericStyle() {
-  return getDefaultColors().numericStyle;
-}
-
-export function getDefaultStringStyle() {
-  return getDefaultColors().stringStyle;
-}
-
-export function getDefaultDateStyle() {
-  return getDefaultColors().dateStyle;
-}
-
-export function getDefaultDatetimeStyle() {
-  return getDefaultColors().datetimeStyle;
-}
-
-export function getDefaultNullStyle() {
-  return getDefaultColors().nullStyle;
 }

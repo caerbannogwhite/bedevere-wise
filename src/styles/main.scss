@@ -1,14 +1,14 @@
 // Main SASS file - imports all component styles
-@use 'components/multi-dataset-visualizer';
-@use 'components/spreadsheet-visualizer';
-@use 'components/column-stats-visualizer';
-@use 'components/context-menu';
-@use 'components/dataset-panel';
-@use 'components/status-bar';
-@use 'components/command-palette';
-@use 'components/brian-app';
-@use 'components/drag-drop-zone';
-@use 'components/cell-value-bar';
+@use "components/multi-dataset-visualizer";
+@use "components/spreadsheet-visualizer";
+@use "components/column-stats-visualizer";
+@use "components/dataset-panel";
+@use "components/status-bar";
+@use "components/command-palette";
+@use "components/brian-app";
+@use "components/drag-drop-zone";
+@use "components/cell-value-bar";
+@use "components/sql-editor";
 
 // Global styles
 * {
@@ -18,9 +18,9 @@
 body {
   margin: 0;
   padding: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
-    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
     sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-} 
+}

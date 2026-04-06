@@ -1,12 +1,5 @@
 import { DEFAULT_FALSE_TEXT, DEFAULT_NA_TEXT, DEFAULT_TRUE_TEXT } from "../defaults";
-import {
-  getDefaultBooleanStyle,
-  getDefaultNumericStyle,
-  getDefaultStringStyle,
-  getDefaultDateStyle,
-  getDefaultDatetimeStyle,
-  getDefaultNullStyle,
-} from "../defaults";
+import { getThemeColors } from "./theme";
 import { SpreadsheetOptions } from "../types";
 import { DataType } from "../../../data/types";
 import { ColumnInternal, CellStyle } from "../internals";
@@ -87,6 +80,34 @@ export function getFormatOptions(column: ColumnInternal, options: SpreadsheetOpt
   }
 }
 
+/**
+ * Lazily build and cache an {@link Intl.NumberFormat} or {@link Intl.DateTimeFormat}
+ * on the column itself. These constructors are measurably expensive — before
+ * memoization they were called on every cell render.
+ */
+function getColumnFormatter(column: ColumnInternal, options: SpreadsheetOptions): Intl.NumberFormat | Intl.DateTimeFormat | null {
+  if (column.cachedFormatter) return column.cachedFormatter;
+
+  const formatOptions = column.guessedFormat || getFormatOptions(column, options);
+  if (!formatOptions) return null;
+
+  const locale = options.datetimeLocale;
+  switch (column.dataType) {
+    case "INTEGER":
+    case "FLOAT":
+    case "BIGINT":
+    case "DOUBLE":
+      column.cachedFormatter = new Intl.NumberFormat(locale, formatOptions);
+      return column.cachedFormatter;
+    case "DATE":
+    case "TIMESTAMP":
+      column.cachedFormatter = new Intl.DateTimeFormat(locale, formatOptions);
+      return column.cachedFormatter;
+    default:
+      return null;
+  }
+}
+
 export const formatValue = (value: any, column: ColumnInternal, options: SpreadsheetOptions): { raw: any; formatted: string } => {
   // Convert to date or number if needed
   if (column.dataType === "INTEGER" || column.dataType === "FLOAT" || column.dataType === "BIGINT" || column.dataType === "DOUBLE") {
@@ -109,21 +130,18 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
     case "INTEGER":
     case "FLOAT":
     case "BIGINT":
-    case "DOUBLE":
-      const numberFormatOptions = column.guessedFormat || getFormatOptions(column, options);
-      return numberFormatOptions
-        ? { raw: value, formatted: new Intl.NumberFormat(options.datetimeLocale, numberFormatOptions).format(value) }
-        : { raw: value, formatted: value.toLocaleString() };
-    case "DATE":
-      const dateFormatOptions = column.guessedFormat || getFormatOptions(column, options);
-      return dateFormatOptions
-        ? { raw: value, formatted: new Intl.DateTimeFormat(options.datetimeLocale, dateFormatOptions).format(value) }
-        : { raw: value, formatted: value.toLocaleDateString() };
-    case "TIMESTAMP":
-      const datetimeFormatOptions = column.guessedFormat || getFormatOptions(column, options);
-      return datetimeFormatOptions
-        ? { raw: value, formatted: new Intl.DateTimeFormat(options.datetimeLocale, datetimeFormatOptions).format(value) }
-        : { raw: value, formatted: value.toLocaleString() };
+    case "DOUBLE": {
+      const formatter = getColumnFormatter(column, options) as Intl.NumberFormat | null;
+      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleString() };
+    }
+    case "DATE": {
+      const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
+      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleDateString() };
+    }
+    case "TIMESTAMP": {
+      const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
+      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleString() };
+    }
     case "VARCHAR":
       return { raw: value, formatted: value };
     default:
@@ -134,7 +152,7 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
 export function getFormattedValueAndStyle(
   value: any,
   column: ColumnInternal,
-  options: SpreadsheetOptions
+  options: SpreadsheetOptions,
 ): { raw: any; formatted: string; style: Partial<CellStyle> } {
   // Convert to date or number if needed
   if (column.dataType === "DATE" || column.dataType === "TIMESTAMP") {
@@ -145,16 +163,18 @@ export function getFormattedValueAndStyle(
     value = Number(value);
   }
 
+  // Single cached theme lookup for this call (instead of per-branch calls)
+  const theme = getThemeColors();
+
   // Handle null/undefined values
   if (value === null || value === undefined || (column.dataType !== "VARCHAR" && isNaN(value))) {
-    const nullStyle = getDefaultNullStyle();
     return {
       raw: null,
       formatted: formatValue(value, column, options).formatted,
       style: {
         textAlign: "left",
-        textColor: nullStyle.textColor,
-        backgroundColor: nullStyle.backgroundColor,
+        textColor: theme.nullStyle.textColor,
+        backgroundColor: theme.nullStyle.backgroundColor,
       },
     };
   }
@@ -162,14 +182,13 @@ export function getFormattedValueAndStyle(
   // Handle different data types with theme-aware styling
   switch (column.dataType) {
     case "BOOLEAN":
-      const booleanStyle = getDefaultBooleanStyle();
       return {
         raw: value,
         formatted: formatValue(value, column, options).formatted,
         style: {
           textAlign: "center",
-          textColor: booleanStyle.textColor,
-          backgroundColor: booleanStyle.backgroundColor,
+          textColor: theme.booleanStyle.textColor,
+          backgroundColor: theme.booleanStyle.backgroundColor,
         },
       };
 
@@ -177,51 +196,47 @@ export function getFormattedValueAndStyle(
     case "FLOAT":
     case "BIGINT":
     case "DOUBLE":
-      const numericStyle = getDefaultNumericStyle();
       return {
         raw: value,
         formatted: formatValue(value, column, options).formatted,
         style: {
           textAlign: "right",
-          textColor: numericStyle.textColor,
-          backgroundColor: numericStyle.backgroundColor,
+          textColor: theme.numericStyle.textColor,
+          backgroundColor: theme.numericStyle.backgroundColor,
         },
       };
 
     case "DATE":
-      const dateStyle = getDefaultDateStyle();
       return {
         raw: value,
         formatted: formatValue(new Date(value), column, options).formatted,
         style: {
           textAlign: "left",
-          textColor: dateStyle.textColor,
-          backgroundColor: dateStyle.backgroundColor,
+          textColor: theme.dateStyle.textColor,
+          backgroundColor: theme.dateStyle.backgroundColor,
         },
       };
 
     case "TIMESTAMP":
-      const datetimeStyle = getDefaultDatetimeStyle();
       return {
         raw: value,
         formatted: formatValue(new Date(value), column, options).formatted,
         style: {
           textAlign: "left",
-          textColor: datetimeStyle.textColor,
-          backgroundColor: datetimeStyle.backgroundColor,
+          textColor: theme.datetimeStyle.textColor,
+          backgroundColor: theme.datetimeStyle.backgroundColor,
         },
       };
 
     case "VARCHAR":
     default:
-      const stringStyle = getDefaultStringStyle();
       return {
         raw: value,
         formatted: formatValue(value, column, options).formatted,
         style: {
           textAlign: "left",
-          textColor: stringStyle.textColor,
-          backgroundColor: stringStyle.backgroundColor,
+          textColor: theme.stringStyle.textColor,
+          backgroundColor: theme.stringStyle.backgroundColor,
         },
       };
   }

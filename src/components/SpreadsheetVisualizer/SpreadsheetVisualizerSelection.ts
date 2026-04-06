@@ -1,91 +1,18 @@
-import {
-  DEFAULT_MAX_WIDTH,
-  DEFAULT_MIN_HEIGHT,
-  DEFAULT_MAX_HEIGHT,
-  DEFAULT_MIN_WIDTH,
-  DEFAULT_CELL_HEIGHT,
-  DEFAULT_CELL_PADDING,
-  DEFAULT_ROW_HEADER_WIDTH,
-  DEFAULT_MIN_CELL_WIDTH,
-  DEFAULT_FONT_FAMILY,
-  DEFAULT_HEADER_FONT_SIZE,
-  DEFAULT_FONT_SIZE,
-  DEFAULT_BORDER_WIDTH,
-  DEFAULT_SCROLLBAR_WIDTH,
-  DEFAULT_DATE_FORMAT,
-  DEFAULT_DATETIME_FORMAT,
-  DEFAULT_NUMBER_FORMAT,
-  getDefaultHeaderBackgroundColor,
-  getDefaultHeaderTextColor,
-  getDefaultCellBackgroundColor,
-  getDefaultCellTextColor,
-  getDefaultBorderColor,
-  getDefaultSelectionColor,
-  getDefaultSelectionBorderColor,
-  getDefaultHoverColor,
-  getDefaultHoverBorderColor,
-  getDefaultScrollbarColor,
-  getDefaultScrollbarThumbColor,
-  getDefaultScrollbarHoverColor,
-  DEFAULT_MAX_CELL_WIDTH,
-  DEFAULT_PERCENT_FORMAT_GUESS_FIT,
-  DEFAULT_MAX_FORMAT_GUESS_LENGTH,
-  DEFAULT_TEXT_ALIGN,
-  DEFAULT_NA_TEXT,
-  DEFAULT_TRUE_TEXT,
-  DEFAULT_FALSE_TEXT,
-  DEFAULT_IMAGE_SMOOTHING_ENABLED,
-  DEFAULT_LETTER_SPACING,
-  DEFAULT_IMAGE_SMOOTHING_QUALITY,
-  DEFAULT_TEXT_RENDERING,
-  DEFAULT_DATETIME_LOCALE,
-  DEFAULT_INITIAL_CACHE_SIZE,
-  DEFAULT_CACHE_CHUNK_SIZE,
-  DEFAULT_MAX_CACHE_SIZE,
-  DEFAULT_CACHE_TIME_TO_LIVE,
-} from "./defaults";
-import { listenForThemeChanges } from "./utils/theme";
 import { ICellSelection, SpreadsheetOptions } from "./types";
-import { DataProvider, DatasetMetadata, Column } from "../../data/types";
-import { ColumnInternal } from "./internals";
-import { minMax } from "./utils/drawing";
+import { DataProvider, Column } from "../../data/types";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { getFormattedValueAndStyle } from "./utils/formatting";
-import { SpreadsheetCache } from "./SpreadsheetCache";
-import { SpreadsheetVisualizerBase } from "./SpreadsheetVisualizerBase";
-
-type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | "width"> & {
-  height: number;
-  width: number;
-};
-
-export enum MouseState {
-  Idle,
-  Dragging,
-  Hovering,
-  HoveringVerticalScrollbar,
-  HoveringHorizontalScrollbar,
-  DraggingVerticalScrollbar,
-  DraggingHorizontalScrollbar,
-}
-
-export enum ToDraw {
-  None = 0,
-  CellHover = 1,
-  RowHover = 2,
-  ColHover = 3,
-  Selection = 4,
-  Cells = 5,
-}
+import { SpreadsheetVisualizerBase, ToDraw, MouseState } from "./SpreadsheetVisualizerBase";
+import {
+  DEFAULT_IMAGE_SMOOTHING_ENABLED,
+  DEFAULT_IMAGE_SMOOTHING_QUALITY,
+  DEFAULT_LETTER_SPACING,
+  DEFAULT_TEXT_RENDERING,
+} from "./defaults";
+import { minMax } from "./utils/drawing";
 
 export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
-  protected selectionCanvas: HTMLCanvasElement;
-  protected hoverCanvas: HTMLCanvasElement;
-  protected selectionCtx: CanvasRenderingContext2D;
-  protected hoverCtx: CanvasRenderingContext2D;
-
-  // State variables
-
+  // State variables for selection and hovering
   protected hoveredCell: { row: number; col: number } | null = null;
   protected selectedCells: { startRow: number; endRow: number; startCol: number; endCol: number } | null = null;
   protected mouseState = MouseState.Idle;
@@ -97,7 +24,11 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   protected singleColSelectionMode: boolean = true;
   protected selectedRows: number[] = [];
   protected selectedCols: number[] = [];
-  protected cache: SpreadsheetCache;
+
+  // Stats panel
+  protected statsPanelWidth = 350; // Width of the stats panel
+  protected hasStatsPanel = false;
+  protected statsVisualizer: ColumnStatsVisualizer;
 
   // Selection change callback
   private onSelectionChange: ((selection?: ICellSelection) => void)[] = [];
@@ -106,41 +37,62 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     container: HTMLElement,
     dataProvider: DataProvider,
     options: Partial<SpreadsheetOptions> = {},
-    statsVisualizer?: ColumnStatsVisualizer
+    statsVisualizer: ColumnStatsVisualizer,
   ) {
-    this.container = container;
-
-    this.canvas = document.createElement("canvas");
-    this.container.appendChild(this.canvas);
-    this.ctx = this.canvas.getContext("2d")!;
-
-    // Create and setup an overlay canvas for selection
-    this.selectionCanvas = document.createElement("canvas");
-    this.selectionCanvas.id = "selection-canvas";
-    this.selectionCanvas.style.position = "absolute";
-    this.selectionCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.selectionCanvas.style.left = `${this.canvas.offsetLeft}px`;
-    this.selectionCanvas.style.pointerEvents = "none"; // Allow mouse events to pass through to main canvas
-    this.selectionCtx = this.selectionCanvas.getContext("2d", { alpha: true })!;
-
-    // Insert selection canvas after the main canvas
-    this.container.insertBefore(this.selectionCanvas, this.canvas.nextSibling);
-
-    // Create and setup an overlay canvas for hover
-    this.hoverCanvas = document.createElement("canvas");
-    this.hoverCanvas.id = "hover-canvas";
-    this.hoverCanvas.style.position = "absolute";
-    this.hoverCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.hoverCanvas.style.left = `${this.canvas.offsetLeft}px`;
-    this.hoverCanvas.style.pointerEvents = "none"; // Allow mouse events to pass through to main canvas
-    this.hoverCtx = this.hoverCanvas.getContext("2d", { alpha: true })!;
-
-    // Insert hover canvas after the main canvas
-    this.container.insertBefore(this.hoverCanvas, this.canvas.nextSibling);
+    super(container, dataProvider, options);
+    this.statsVisualizer = statsVisualizer;
   }
 
-  public async getSelectedFormattedValues(): Promise<{ headers: string[]; indeces: number[]; data: string[][] }> {
-    if (!this.selectedCells) return { headers: [], indeces: [], data: [] };
+  protected async updateLayout() {
+    // Always use container dimensions for responsive behavior, but respect min/max constraints
+    let width = Math.floor(minMax(this.container.clientWidth, this.options.minWidth, this.options.maxWidth));
+    let height = Math.floor(minMax(this.container.clientHeight, this.options.minHeight, this.options.maxHeight));
+
+    // Fallback to options dimensions if container has no size (e.g., during initialization)
+    if (width <= 0 && this.options.width !== undefined) {
+      width = Math.floor(minMax(this.options.width, this.options.minWidth, this.options.maxWidth));
+    }
+    if (height <= 0 && this.options.height !== undefined) {
+      height = Math.floor(minMax(this.options.height, this.options.minHeight, this.options.maxHeight));
+    }
+
+    // Ensure we have valid dimensions
+    if (width <= 0) width = this.options.minWidth;
+    if (height <= 0) height = this.options.minHeight;
+
+    // Stats panel logic is handled by derived classes
+
+    this.canvas.width = width;
+    this.canvas.height = height;
+    this.canvas.style.width = `${width}px`;
+    this.canvas.style.height = `${height}px`;
+
+    this.selectionCanvas.width = width;
+    this.selectionCanvas.height = height;
+    this.selectionCanvas.style.width = `${width}px`;
+    this.selectionCanvas.style.height = `${height}px`;
+    this.selectionCanvas.style.top = `${this.canvas.offsetTop}px`;
+    this.selectionCanvas.style.left = `${this.canvas.offsetLeft}px`;
+
+    this.hoverCanvas.width = width;
+    this.hoverCanvas.height = height;
+    this.hoverCanvas.style.width = `${width}px`;
+    this.hoverCanvas.style.height = `${height}px`;
+    this.hoverCanvas.style.top = `${this.canvas.offsetTop}px`;
+    this.hoverCanvas.style.left = `${this.canvas.offsetLeft}px`;
+
+    // Recalculate column widths and redraw.
+    // Setting canvas.width/height above clears all pixel content, so we must
+    // force a full cell redraw regardless of the current toDraw state.
+    this.calculateColumnWidths();
+    this.calculateRowHeight();
+    this.updateToDraw(ToDraw.Cells);
+
+    await this.draw();
+  }
+
+  public async getSelectedFormattedValues(): Promise<{ headers: string[]; indices: number[]; data: string[][] }> {
+    if (!this.selectedCells) return { headers: [], indices: [], data: [] };
 
     const { startRow, endRow, startCol, endCol } = this.selectedCells;
 
@@ -148,7 +100,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     const data = await this.cache.getData(startRow - 1, endRow - 1);
 
     const formattedData = data.map((row) =>
-      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + startCol], this.options).formatted)
+      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + startCol], this.options).formatted),
     );
 
     // Get column headers for the selected range
@@ -157,88 +109,13 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       headers.push(this.columns[col].name);
     }
 
-    // Get row indeces for the selected range
-    const rowIndeces = [];
+    // Get row indices for the selected range
+    const rowIndices = [];
     for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
-      rowIndeces.push(row);
+      rowIndices.push(row);
     }
 
-    return { headers, indeces: rowIndeces, data: formattedData };
-  }
-
-  private guessColumnWidths(values: any[][], col: ColumnInternal, colIndex: number): number {
-    const widths = [this.ctx.measureText(col.name).width + this.options.cellPadding * 2];
-
-    for (const row of values) {
-      const { formatted, style } = getFormattedValueAndStyle(row[colIndex], this.columns[colIndex], this.options);
-      this.ctx.textAlign = style.textAlign || this.options.textAlign;
-      const width = this.ctx.measureText(formatted).width + this.options.cellPadding * 2;
-      widths.push(width);
-    }
-
-    // sort the widths and get the percentile given by percentFormatGuessFit
-    const sortedWidths = widths.sort((a, b) => a - b);
-    const percentile = Math.floor(sortedWidths.length * this.options.percentFormatGuessFit);
-    const width = sortedWidths[percentile];
-
-    return minMax(width, this.options.minCellWidth, this.options.maxCellWidth);
-  }
-
-  protected async calculateColumnWidths() {
-    this.ctx.font = `${this.options.fontSize}px ${this.options.fontFamily}`;
-    this.ctx.textAlign = "left";
-    this.ctx.textRendering = this.options.textRendering ?? DEFAULT_TEXT_RENDERING;
-    this.ctx.letterSpacing = this.options.letterSpacing ?? DEFAULT_LETTER_SPACING;
-    this.ctx.imageSmoothingEnabled = this.options.imageSmoothingEnabled ?? DEFAULT_IMAGE_SMOOTHING_ENABLED;
-    this.ctx.imageSmoothingQuality = this.options.imageSmoothingQuality ?? DEFAULT_IMAGE_SMOOTHING_QUALITY;
-
-    // Try to get rows from cache first, fallback to data provider
-    const maxRows = Math.min(this.options.maxFormatGuessLength, this.totalRows);
-    const rows = await this.cache.getData(0, maxRows);
-
-    const availableWidth = this.canvas.width - this.options.rowHeaderWidth;
-
-    // Calculate minimum widths based on content
-    this.colWidths = this.columns.map((col, colIndex) => {
-      col.widthPx = this.guessColumnWidths(rows, col, colIndex);
-      return col.widthPx;
-    });
-
-    // Calculate column offsets
-    this.colOffsets = [this.options.rowHeaderWidth];
-    for (let i = 1; i < this.columns.length; i++) {
-      this.colOffsets.push(this.colOffsets[i - 1] + this.colWidths[i - 1]);
-    }
-
-    // Calculate total width
-    this.totalWidth = this.colOffsets[this.colOffsets.length - 1] + this.colWidths[this.colWidths.length - 1];
-
-    const hasScrollbar = this.totalWidth > availableWidth;
-
-    // TODO: check if this is needed
-    // // If we have extra space, distribute it proportionally
-    // if (this.totalWidth < availableWidth) {
-    //   const extraWidth = availableWidth - this.totalWidth;
-    //   this.colWidths = this.colWidths.map((width) => width + (width / this.totalWidth) * extraWidth);
-    //   this.totalWidth = availableWidth;
-    // }
-
-    this.totalScrollX = this.totalWidth - this.canvas.width + (hasScrollbar ? this.options.scrollbarWidth : 0);
-  }
-
-  protected calculateRowHeight() {
-    const availableHeight = this.canvas.height - this.options.scrollbarWidth;
-    const minTotalHeight = this.columns.length * this.options.cellHeight;
-    const hasScrollbar = minTotalHeight > availableHeight;
-
-    this.totalHeight = this.totalRows * this.options.cellHeight;
-    this.totalScrollY = Math.max(
-      0,
-      this.totalHeight -
-        this.canvas.height +
-        this.options.cellHeight * 2 + // header
-        (hasScrollbar ? this.options.scrollbarWidth : 0)
-    );
+    return { headers, indices: rowIndices, data: formattedData };
   }
 
   protected updateToDraw(newToDraw: ToDraw) {
@@ -258,30 +135,21 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     this.ctx.imageSmoothingEnabled = this.options.imageSmoothingEnabled ?? DEFAULT_IMAGE_SMOOTHING_ENABLED;
     this.ctx.imageSmoothingQuality = this.options.imageSmoothingQuality ?? DEFAULT_IMAGE_SMOOTHING_QUALITY;
 
-    switch (this.toDraw) {
-      //@ts-ignore: if cells is selected, fall through to selection
-      case ToDraw.Cells:
+    // Cascading draw: higher-priority operations include all lower-priority ones.
+    // Cells (5) → Selection (4) → CellHover (1). ColHover is independent.
+    if (this.toDraw === ToDraw.ColHover) {
+      this.drawColHover();
+    } else {
+      if (this.toDraw >= ToDraw.Cells) {
         await this.drawCells(visibleStartRow, visibleEndRow);
         this.drawScrollbars();
-
-      //@ts-ignore: if cells is selected, fall through to hover
-      case ToDraw.Selection:
+      }
+      if (this.toDraw >= ToDraw.Selection) {
         this.drawSelection(visibleStartRow);
-
-      case ToDraw.CellHover:
+      }
+      if (this.toDraw >= ToDraw.CellHover) {
         this.drawCellHover(visibleStartRow);
-        break;
-
-      // case ToDraw.RowHover:
-      //   this.drawRowHover(visibleStartRow, visibleEndRow);
-      //   break;
-
-      case ToDraw.ColHover:
-        this.drawColHover();
-        break;
-
-      default:
-        break;
+      }
     }
 
     this.toDraw = ToDraw.None;
@@ -385,29 +253,6 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       this.hoverCtx.strokeRect(x + 1, 1, width - 2, height - 2);
     }
   }
-
-  // TODO: Keep or remove?
-  // private drawRowHover(startRow: number, endRow: number) {
-  //   // Clear the hover canvas
-  //   this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
-
-  //   this.hoverCtx.fillStyle = this.options.hoverColor;
-  //   this.hoverCtx.strokeStyle = this.options.borderColor;
-
-  //   if (this.hoveredCell) {
-  //     const { row } = this.hoveredCell;
-
-  //     if (row < startRow || row > endRow) return;
-
-  //     const x = 0;
-  //     const y = (row - startRow) * this.options.cellHeight;
-  //     const width = this.selectionCanvas.width - this.options.scrollbarWidth;
-  //     const height = this.options.cellHeight;
-
-  //     this.hoverCtx.fillRect(x, y, width, height);
-  //     this.hoverCtx.strokeRect(x, y, width, height);
-  //   }
-  // }
 
   private drawSelection(visibleStartRow: number) {
     // Clear the selection canvas
@@ -516,25 +361,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     });
   }
 
-  // TODO: Keep or remove?
-  // private drawRowSelection(startRow: number, endRow: number) {
-  //   this.selectionCtx.fillStyle = this.options.selectionColor;
-  //   this.selectionCtx.strokeStyle = this.options.borderColor;
-  //   this.selectedRows.forEach((row) => {
-  //     if (row < startRow || row > endRow) return;
-
-  //     const x = 0;
-  //     const y = (row - startRow) * this.options.cellHeight;
-  //     const width = this.selectionCanvas.width - this.options.scrollbarWidth;
-  //     const height = this.options.cellHeight;
-
-  //     this.selectionCtx.fillRect(x, y, width, height);
-  //     this.selectionCtx.strokeRect(x, y, width, height);
-  //   });
-  // }
-
   public async getSelection(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
-    if (!this.onSelectionChange) return null;
     if (this.selectedCols.length > 0) {
       return {
         rows: [],
@@ -544,30 +371,27 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       };
     } else if (this.selectedCells) {
       try {
-        const firstVisibleCol = this.getFirstVisibleCol();
-        const lastVisibleCol = this.getLastVisibleCol();
+        const firstVisibleColumnIndex = this.getFirstVisibleColumnIndex();
+        const lastVisibleColumnIndex = this.getLastVisibleColumnIndex();
 
         const data = (await this.cache.getData(this.selectedCells.startRow, this.selectedCells.endRow)).map((row) =>
-          row.slice(this.selectedCells?.startCol ?? firstVisibleCol, this.selectedCells?.endCol ?? lastVisibleCol + 1)
+          row.slice(this.selectedCells?.startCol ?? firstVisibleColumnIndex, this.selectedCells?.endCol ?? lastVisibleColumnIndex + 1),
         );
-
-        console.log("selectedCells", this.selectedCells);
-        console.log("data", data);
 
         const formatted = data.map((row) =>
           row.map((cell, index) => {
             const column = this.columns[index + this.selectedCells!.startCol];
             if (!column) return "";
             return getFormattedValueAndStyle(cell, column, this.options).formatted;
-          })
+          }),
         );
 
         const rows = Array.from(
           { length: this.selectedCells.endRow - this.selectedCells.startRow + 1 },
-          (_, i) => this.selectedCells!.startRow + i
+          (_, i) => this.selectedCells!.startRow + i,
         );
         const columns = this.columns.filter(
-          (_, index) => this.selectedCells!.startCol <= index && index <= this.selectedCells!.endCol
+          (_, index) => this.selectedCells!.startCol <= index && index <= this.selectedCells!.endCol,
         ) as Column[];
 
         return {
@@ -588,5 +412,58 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   protected async notifySelectionChange(): Promise<void> {
     const selection = await this.getSelection();
     this.onSelectionChange.forEach((callback) => callback(selection as ICellSelection | undefined));
+  }
+
+  // Public methods for external access to selection state
+  public getHoveredCell(): { row: number; col: number } | null {
+    return this.hoveredCell;
+  }
+
+  public getSelectedCells(): { startRow: number; endRow: number; startCol: number; endCol: number } | null {
+    return this.selectedCells;
+  }
+
+  public getMouseState(): MouseState {
+    return this.mouseState;
+  }
+
+  public getSelectedRows(): number[] {
+    return this.selectedRows;
+  }
+
+  public getSelectedCols(): number[] {
+    return this.selectedCols;
+  }
+
+  public setHoveredCell(cell: { row: number; col: number } | null): void {
+    this.hoveredCell = cell;
+  }
+
+  public setSelectedCells(cells: { startRow: number; endRow: number; startCol: number; endCol: number } | null): void {
+    this.selectedCells = cells;
+  }
+
+  public setMouseState(state: MouseState): void {
+    this.mouseState = state;
+  }
+
+  public setSelectedRows(rows: number[]): void {
+    this.selectedRows = rows;
+  }
+
+  public setSelectedCols(cols: number[]): void {
+    this.selectedCols = cols;
+  }
+
+  public addOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
+    this.onSelectionChange.push(callback);
+  }
+
+  public removeOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
+    this.onSelectionChange = this.onSelectionChange.filter((cb) => cb !== callback);
+  }
+
+  public getSelectedColumns(): Column[] {
+    return this.selectedCols.map((colIndex) => this.columns[colIndex] as Column).filter((col) => col !== undefined);
   }
 }

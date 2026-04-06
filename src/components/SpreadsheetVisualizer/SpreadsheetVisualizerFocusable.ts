@@ -1,10 +1,11 @@
 import { DataProvider, SpreadsheetOptions } from "@/index";
 import { FocusableComponent } from "../BrianApp/types";
 import { minMax } from "./utils/drawing";
-import { MouseState, SpreadsheetVisualizerBase, ToDraw } from "./SpreadsheetVisualizerBase";
+import { MouseState, ToDraw } from "./SpreadsheetVisualizerBase";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
+import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";
 
-export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerBase implements FocusableComponent {
+export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelection implements FocusableComponent {
   private _isFocused: boolean = false;
 
   public readonly componentId: string;
@@ -15,8 +16,8 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerBase im
     parent: HTMLElement,
     dataProvider: DataProvider,
     options: SpreadsheetOptions = {},
-    columnStatsVisualizer?: ColumnStatsVisualizer,
-    componentId?: string
+    columnStatsVisualizer: ColumnStatsVisualizer,
+    componentId?: string,
   ) {
     super(parent, dataProvider, options, columnStatsVisualizer);
     this.componentId = componentId ?? "spreadsheet-visualizer";
@@ -72,21 +73,6 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerBase im
 
       await this.selectColumn(col);
     }
-
-    // Row Index
-    // else if (this.isMouseOverRowIndex(x, y)) {
-    //   const cell = this.getCellAtPosition(x, y);
-    //   if (!cell) return false;
-    //   const { row } = cell;
-
-    //   if (this.selectedRows.includes(row)) {
-    //     this.selectedRows = this.selectedRows.filter((i) => i !== row);
-    //   } else {
-    //     this.selectedRows.push(row);
-    //   }
-
-    //   this.updateToDraw(ToDraw.Selection);
-    // }
 
     // Handle cell selection
     else {
@@ -443,7 +429,14 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerBase im
       case "c":
       case "C":
         if (event.ctrlKey || event.metaKey) {
-          // TODO: Implement copy
+          event.preventDefault();
+          const selected = await this.getSelectedFormattedValues();
+          if (selected.data.length > 0) {
+            const headerLine = selected.headers.join("\t");
+            const dataLines = selected.data.map((row) => row.join("\t")).join("\n");
+            const tsvText = headerLine + "\n" + dataLines;
+            navigator.clipboard.writeText(tsvText).catch(console.error);
+          }
         }
         break;
 

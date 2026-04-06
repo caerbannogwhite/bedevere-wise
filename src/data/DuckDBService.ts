@@ -39,7 +39,7 @@ export class DuckDBService {
 
       // Instantiate the asynchronous version of DuckDB-wasm
       this.worker = new Worker(bundle.mainWorker!);
-      const logger = new duckdb.ConsoleLogger();
+      const logger = new duckdb.VoidLogger();
       this.db = new duckdb.AsyncDuckDB(logger, this.worker);
 
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
@@ -62,8 +62,7 @@ export class DuckDBService {
   async executeQuery(query: string): Promise<any[]> {
     const connection = await this.getConnection();
     try {
-      const result = await connection.query(query);
-      return result.toArray();
+      return (await connection.query(query)).toArray();
     } finally {
       await connection.close();
     }
@@ -132,6 +131,17 @@ export class DuckDBService {
   public async getColumnInfo(tableName: string, columnName: string): Promise<any> {
     const columns = await this.executeQuery(`DESCRIBE ${tableName}`);
     return columns.find((column: any) => column.column_name === columnName);
+  }
+
+  public async executeQueryAsDataProvider(query: string, resultName?: string): Promise<DuckDBDataProvider> {
+    const tempName = resultName || `query_result_${Date.now()}`;
+    const connection = await this.getConnection();
+    try {
+      await connection.query(`CREATE OR REPLACE TABLE "${tempName}" AS (${query})`);
+    } finally {
+      await connection.close();
+    }
+    return new DuckDBDataProvider(this, tempName, "");
   }
 
   public isReady(): boolean {

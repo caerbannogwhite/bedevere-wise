@@ -190,7 +190,7 @@ export class EventDispatcher implements IEventDispatcher {
     document.addEventListener("mousemove", (e) => this.dispatchEvent(e).catch(console.error));
     document.addEventListener("mouseup", (e) => this.dispatchEvent(e).catch(console.error));
     document.addEventListener("mouseleave", (e) => this.dispatchEvent(e).catch(console.error));
-    document.addEventListener("wheel", (e) => this.dispatchEvent(e).catch(console.error));
+    document.addEventListener("wheel", (e) => this.dispatchEvent(e).catch(console.error), { passive: false });
     document.addEventListener("contextmenu", (e) => this.dispatchEvent(e).catch(console.error));
 
     // Keyboard events

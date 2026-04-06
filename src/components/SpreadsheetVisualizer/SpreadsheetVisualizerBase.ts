@@ -15,18 +15,6 @@ import {
   DEFAULT_DATE_FORMAT,
   DEFAULT_DATETIME_FORMAT,
   DEFAULT_NUMBER_FORMAT,
-  getDefaultHeaderBackgroundColor,
-  getDefaultHeaderTextColor,
-  getDefaultCellBackgroundColor,
-  getDefaultCellTextColor,
-  getDefaultBorderColor,
-  getDefaultSelectionColor,
-  getDefaultSelectionBorderColor,
-  getDefaultHoverColor,
-  getDefaultHoverBorderColor,
-  getDefaultScrollbarColor,
-  getDefaultScrollbarThumbColor,
-  getDefaultScrollbarHoverColor,
   DEFAULT_MAX_CELL_WIDTH,
   DEFAULT_PERCENT_FORMAT_GUESS_FIT,
   DEFAULT_MAX_FORMAT_GUESS_LENGTH,
@@ -44,19 +32,22 @@ import {
   DEFAULT_MAX_CACHE_SIZE,
   DEFAULT_CACHE_TIME_TO_LIVE,
 } from "./defaults";
-import { listenForThemeChanges } from "./utils/theme";
-import { ICellSelection, SpreadsheetOptions } from "./types";
-import { DataProvider, DatasetMetadata, Column } from "../../data/types";
+import { getThemeColors } from "./utils/theme";
+import { SpreadsheetOptions } from "./types";
+import { DataProvider, DatasetMetadata } from "../../data/types";
 import { ColumnInternal } from "./internals";
 import { minMax } from "./utils/drawing";
-import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { getFormattedValueAndStyle } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
 
-type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | "width"> & {
-  height: number;
-  width: number;
-};
+export enum ToDraw {
+  None = 0,
+  CellHover = 1,
+  RowHover = 2,
+  ColHover = 3,
+  Selection = 4,
+  Cells = 5,
+}
 
 export enum MouseState {
   Idle,
@@ -68,14 +59,10 @@ export enum MouseState {
   DraggingHorizontalScrollbar,
 }
 
-export enum ToDraw {
-  None = 0,
-  CellHover = 1,
-  RowHover = 2,
-  ColHover = 3,
-  Selection = 4,
-  Cells = 5,
-}
+type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | "width"> & {
+  height: number;
+  width: number;
+};
 
 export class SpreadsheetVisualizerBase {
   protected container: HTMLElement;
@@ -91,22 +78,10 @@ export class SpreadsheetVisualizerBase {
   protected totalRows: number;
   protected totalCols: number;
   protected options: RequiredSpreadsheetOptions;
-  // protected throttledMouseMove: (event: MouseEvent) => void;
 
   // State variables
   protected scrollX = 0;
   protected scrollY = 0;
-  protected hoveredCell: { row: number; col: number } | null = null;
-  protected selectedCells: { startRow: number; endRow: number; startCol: number; endCol: number } | null = null;
-  protected mouseState = MouseState.Idle;
-  protected toDraw = ToDraw.Cells;
-  protected dragStartX = 0;
-  protected dragStartY = 0;
-  protected lastScrollX = 0;
-  protected lastScrollY = 0;
-  protected singleColSelectionMode: boolean = true;
-  protected selectedRows: number[] = [];
-  protected selectedCols: number[] = [];
   protected cache: SpreadsheetCache;
 
   // Cache
@@ -117,23 +92,10 @@ export class SpreadsheetVisualizerBase {
   protected totalScrollY = 0;
   protected totalScrollX = 0;
 
-  // Stats panel
-  protected statsPanelWidth = 350; // Width of the stats panel
-  protected hasStatsPanel = false;
-  protected statsVisualizer: ColumnStatsVisualizer | null;
-
   // Theme management
-  private themeCleanup: (() => void) | null = null;
+  protected themeCleanup: (() => void) | null = null;
 
-  // Selection change callback
-  private onSelectionChange: ((selection?: ICellSelection) => void)[] = [];
-
-  constructor(
-    container: HTMLElement,
-    dataProvider: DataProvider,
-    options: Partial<SpreadsheetOptions> = {},
-    statsVisualizer?: ColumnStatsVisualizer
-  ) {
+  constructor(container: HTMLElement, dataProvider: DataProvider, options: Partial<SpreadsheetOptions> = {}) {
     this.container = container;
 
     this.canvas = document.createElement("canvas");
@@ -172,6 +134,7 @@ export class SpreadsheetVisualizerBase {
     this.totalCols = 0;
 
     // Set default options
+    const t = getThemeColors();
     this.options = {
       // Viewport options
       maxHeight: options.maxHeight ?? DEFAULT_MAX_HEIGHT,
@@ -199,21 +162,21 @@ export class SpreadsheetVisualizerBase {
       fontFamily: options.fontFamily ?? DEFAULT_FONT_FAMILY,
       fontSize: options.fontSize ?? DEFAULT_FONT_SIZE,
       headerFontSize: options.headerFontSize ?? DEFAULT_HEADER_FONT_SIZE,
-      headerBackgroundColor: options.headerBackgroundColor ?? getDefaultHeaderBackgroundColor(),
-      headerTextColor: options.headerTextColor ?? getDefaultHeaderTextColor(),
-      cellBackgroundColor: options.cellBackgroundColor ?? getDefaultCellBackgroundColor(),
-      cellTextColor: options.cellTextColor ?? getDefaultCellTextColor(),
-      borderColor: options.borderColor ?? getDefaultBorderColor(),
-      selectionColor: options.selectionColor ?? getDefaultSelectionColor(),
-      selectionBorderColor: options.selectionBorderColor ?? getDefaultSelectionBorderColor(),
-      hoverColor: options.hoverColor ?? getDefaultHoverColor(),
-      hoverBorderColor: options.hoverBorderColor ?? getDefaultHoverBorderColor(),
+      headerBackgroundColor: options.headerBackgroundColor ?? t.headerBackgroundColor,
+      headerTextColor: options.headerTextColor ?? t.headerTextColor,
+      cellBackgroundColor: options.cellBackgroundColor ?? t.cellBackgroundColor,
+      cellTextColor: options.cellTextColor ?? t.cellTextColor,
+      borderColor: options.borderColor ?? t.borderColor,
+      selectionColor: options.selectionColor ?? t.selectionColor,
+      selectionBorderColor: options.selectionBorderColor ?? t.selectionBorderColor,
+      hoverColor: options.hoverColor ?? t.hoverColor,
+      hoverBorderColor: options.hoverBorderColor ?? t.hoverBorderColor,
 
       // Scrollbar options
       scrollbarWidth: options.scrollbarWidth ?? DEFAULT_SCROLLBAR_WIDTH,
-      scrollbarColor: options.scrollbarColor ?? getDefaultScrollbarColor(),
-      scrollbarThumbColor: options.scrollbarThumbColor ?? getDefaultScrollbarThumbColor(),
-      scrollbarHoverColor: options.scrollbarHoverColor ?? getDefaultScrollbarHoverColor(),
+      scrollbarColor: options.scrollbarColor ?? t.scrollbarColor,
+      scrollbarThumbColor: options.scrollbarThumbColor ?? t.scrollbarThumbColor,
+      scrollbarHoverColor: options.scrollbarHoverColor ?? t.scrollbarHoverColor,
 
       dateFormat: options.dateFormat ?? DEFAULT_DATE_FORMAT,
       datetimeFormat: options.datetimeFormat ?? DEFAULT_DATETIME_FORMAT,
@@ -241,104 +204,6 @@ export class SpreadsheetVisualizerBase {
     // Apply constraints
     this.options.height = minMax(this.options.height, this.options.minHeight, this.options.maxHeight);
     this.options.width = minMax(this.options.width, this.options.minWidth, this.options.maxWidth);
-
-    // TODO: figure out if this is necessary
-    // Initialize throttled mouse move handler (16ms = ~60fps)
-    // this.throttledMouseMove = throttle(this._handleMouseMove.bind(this), 16);
-
-    // Use provided stats visualizer or create a new one
-    if (statsVisualizer) {
-      this.statsVisualizer = statsVisualizer;
-      // Update the data provider for the shared stats visualizer (no columns selected initially)
-      // Note: Not awaiting since we're in constructor and no columns are selected yet
-      this.statsVisualizer.setSpreadsheetVisualizer(this).catch(console.error);
-    } else {
-      this.statsVisualizer = new ColumnStatsVisualizer(this.container, this, this.statsPanelWidth);
-    }
-
-    // Setup theme change listener
-    this.themeCleanup = listenForThemeChanges(() => {
-      this.updateThemeColors();
-      // Redraw to apply new colors
-      this.updateToDraw(ToDraw.Cells);
-      this.draw().catch(console.error);
-    });
-  }
-
-  public async initialize() {
-    this.metadata = await this.dataProvider.getMetadata();
-    if (!this.metadata) return;
-
-    this.columns = this.metadata.columns.map((col) => new ColumnInternal(col, this.options));
-    this.totalRows = this.metadata.totalRows;
-    this.totalCols = this.metadata.totalColumns;
-
-    await this.cache.initialize(this.totalRows);
-    await this.updateLayout();
-  }
-
-  public show(): void {
-    this.container.style.display = "block";
-  }
-
-  public hide(): void {
-    this.container.style.display = "none";
-    this.statsVisualizer?.hide();
-  }
-
-  public getSelectedColumns(): Column[] {
-    return this.selectedCols.map((colIndex) => this.columns[colIndex] as Column).filter((col) => col !== undefined);
-  }
-
-  public addOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
-    this.onSelectionChange.push(callback);
-  }
-
-  public removeOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
-    this.onSelectionChange = this.onSelectionChange.filter((cb) => cb !== callback);
-  }
-
-  public destroy(): void {
-    // Clean up theme listener
-    if (this.themeCleanup) {
-      this.themeCleanup();
-      this.themeCleanup = null;
-    }
-
-    // Hide stats visualizer if we own it
-    if (this.statsVisualizer && !this.hasStatsPanel) {
-      this.statsVisualizer.hide();
-    }
-
-    // Clear the data cache
-    this.cache.clear();
-  }
-
-  public async getSelectedFormattedValues(): Promise<{ headers: string[]; indeces: number[]; data: string[][] }> {
-    if (!this.selectedCells) return { headers: [], indeces: [], data: [] };
-
-    const { startRow, endRow, startCol, endCol } = this.selectedCells;
-
-    // Try to get data from cache first
-    const data = await this.cache.getData(startRow - 1, endRow - 1);
-
-    const formattedData = data.map((row) =>
-      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + startCol], this.options).formatted)
-    );
-
-    // Get column headers for the selected range
-    const headers = [];
-    for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
-      headers.push(this.columns[col].name);
-    }
-
-    // Get row indeces for the selected range
-    const rowIndeces = [];
-    for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
-      rowIndeces.push(row);
-    }
-
-    return { headers, indeces: rowIndeces, data: formattedData };
   }
 
   // Accessor methods for wrapper
@@ -352,84 +217,6 @@ export class SpreadsheetVisualizerBase {
 
   public getDataProvider(): DataProvider {
     return this.dataProvider;
-  }
-
-  private updateThemeColors(): void {
-    // Update colors based on current theme
-    this.options.headerBackgroundColor = getDefaultHeaderBackgroundColor();
-    this.options.headerTextColor = getDefaultHeaderTextColor();
-    this.options.cellBackgroundColor = getDefaultCellBackgroundColor();
-    this.options.cellTextColor = getDefaultCellTextColor();
-    this.options.borderColor = getDefaultBorderColor();
-    this.options.selectionColor = getDefaultSelectionColor();
-    this.options.selectionBorderColor = getDefaultSelectionBorderColor();
-    this.options.hoverColor = getDefaultHoverColor();
-    this.options.hoverBorderColor = getDefaultHoverBorderColor();
-    this.options.scrollbarColor = getDefaultScrollbarColor();
-    this.options.scrollbarThumbColor = getDefaultScrollbarThumbColor();
-    this.options.scrollbarHoverColor = getDefaultScrollbarHoverColor();
-  }
-
-  protected async updateLayout() {
-    // Always use container dimensions for responsive behavior, but respect min/max constraints
-    let width = Math.floor(minMax(this.container.clientWidth, this.options.minWidth, this.options.maxWidth));
-    let height = Math.floor(minMax(this.container.clientHeight, this.options.minHeight, this.options.maxHeight));
-
-    // Fallback to options dimensions if container has no size (e.g., during initialization)
-    if (width <= 0 && this.options.width !== undefined) {
-      width = Math.floor(minMax(this.options.width, this.options.minWidth, this.options.maxWidth));
-    }
-    if (height <= 0 && this.options.height !== undefined) {
-      height = Math.floor(minMax(this.options.height, this.options.minHeight, this.options.maxHeight));
-    }
-
-    // Ensure we have valid dimensions
-    if (width <= 0) width = this.options.minWidth;
-    if (height <= 0) height = this.options.minHeight;
-
-    if (this.hasStatsPanel) {
-      // Adjust canvas width to make room for stats panel
-      width = Math.floor(Math.max(width - this.statsPanelWidth, this.options.minWidth));
-
-      // Show stats panel
-      const statsContainer = document.getElementById("column-stats-container");
-      if (statsContainer) {
-        statsContainer.style.transform = "translateX(0)";
-      }
-    } else {
-      // Hide stats panel
-      const statsContainer = document.getElementById("column-stats-container");
-      if (statsContainer) {
-        statsContainer.style.transform = "translateX(100%)";
-      }
-    }
-
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
-
-    this.selectionCanvas.width = width;
-    this.selectionCanvas.height = height;
-    this.selectionCanvas.style.width = `${width}px`;
-    this.selectionCanvas.style.height = `${height}px`;
-    this.selectionCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.selectionCanvas.style.left = `${this.canvas.offsetLeft}px`;
-
-    this.hoverCanvas.width = width;
-    this.hoverCanvas.height = height;
-    this.hoverCanvas.style.width = `${width}px`;
-    this.hoverCanvas.style.height = `${height}px`;
-    this.hoverCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.hoverCanvas.style.left = `${this.canvas.offsetLeft}px`;
-
-    // Recalculate column widths and redraw
-    this.calculateColumnWidths();
-    this.calculateRowHeight();
-
-    this.updateToDraw(ToDraw.Cells);
-
-    await this.draw();
   }
 
   private guessColumnWidths(values: any[][], col: ColumnInternal, colIndex: number): number {
@@ -481,14 +268,6 @@ export class SpreadsheetVisualizerBase {
 
     const hasScrollbar = this.totalWidth > availableWidth;
 
-    // TODO: check if this is needed
-    // // If we have extra space, distribute it proportionally
-    // if (this.totalWidth < availableWidth) {
-    //   const extraWidth = availableWidth - this.totalWidth;
-    //   this.colWidths = this.colWidths.map((width) => width + (width / this.totalWidth) * extraWidth);
-    //   this.totalWidth = availableWidth;
-    // }
-
     this.totalScrollX = this.totalWidth - this.canvas.width + (hasScrollbar ? this.options.scrollbarWidth : 0);
   }
 
@@ -503,85 +282,8 @@ export class SpreadsheetVisualizerBase {
       this.totalHeight -
         this.canvas.height +
         this.options.cellHeight * 2 + // header
-        (hasScrollbar ? this.options.scrollbarWidth : 0)
+        (hasScrollbar ? this.options.scrollbarWidth : 0),
     );
-  }
-
-  protected updateToDraw(newToDraw: ToDraw) {
-    this.toDraw = Math.max(this.toDraw, newToDraw);
-  }
-
-  protected async draw() {
-    const { canvas } = this;
-    const { height } = canvas;
-
-    // Calculate visible area
-    const visibleStartRow = Math.floor(this.scrollY / this.options.cellHeight);
-    const visibleEndRow = Math.min(visibleStartRow + Math.ceil(height / this.options.cellHeight), this.totalRows);
-
-    this.ctx.textRendering = this.options.textRendering ?? DEFAULT_TEXT_RENDERING;
-    this.ctx.letterSpacing = this.options.letterSpacing ?? DEFAULT_LETTER_SPACING;
-    this.ctx.imageSmoothingEnabled = this.options.imageSmoothingEnabled ?? DEFAULT_IMAGE_SMOOTHING_ENABLED;
-    this.ctx.imageSmoothingQuality = this.options.imageSmoothingQuality ?? DEFAULT_IMAGE_SMOOTHING_QUALITY;
-
-    switch (this.toDraw) {
-      //@ts-ignore: if cells is selected, fall through to selection
-      case ToDraw.Cells:
-        await this.drawCells(visibleStartRow, visibleEndRow);
-        this.drawScrollbars();
-
-      //@ts-ignore: if cells is selected, fall through to hover
-      case ToDraw.Selection:
-        this.drawSelection(visibleStartRow);
-
-      case ToDraw.CellHover:
-        this.drawCellHover(visibleStartRow);
-        break;
-
-      // case ToDraw.RowHover:
-      //   this.drawRowHover(visibleStartRow, visibleEndRow);
-      //   break;
-
-      case ToDraw.ColHover:
-        this.drawColHover();
-        break;
-
-      default:
-        break;
-    }
-
-    this.toDraw = ToDraw.None;
-  }
-
-  protected async selectColumn(col: number) {
-    let hasStatusPanelChanged = false;
-    if (this.selectedCols.includes(col)) {
-      this.selectedCols = this.selectedCols.filter((i) => i !== col);
-      this.statsVisualizer?.hide();
-      this.hasStatsPanel = false;
-      hasStatusPanelChanged = true;
-    } else {
-      hasStatusPanelChanged = !this.hasStatsPanel;
-      if (this.singleColSelectionMode) {
-        this.selectedCols = [col]; // Only allow one column selection at a time
-        this.selectedRows = [];
-        this.selectedCells = null;
-      } else {
-        this.selectedCols.push(col);
-      }
-
-      if (this.statsVisualizer) {
-        await this.statsVisualizer.showStats(this.columns[col]);
-        this.hasStatsPanel = true;
-      }
-    }
-
-    this.updateToDraw(ToDraw.Selection);
-    this.notifySelectionChange();
-
-    if (hasStatusPanelChanged) {
-      this.updateLayout();
-    }
   }
 
   protected async preloadDataForScroll(scrollY: number): Promise<void> {
@@ -614,26 +316,40 @@ export class SpreadsheetVisualizerBase {
     return x <= this.options.rowHeaderWidth;
   }
 
-  protected getFirstVisibleCol(): number {
-    for (let i = 0; i < this.columns.length; i++) {
-      if (this.colOffsets[i] >= this.scrollX) {
-        return i == 0 ? 0 : i - 1;
+  protected getFirstVisibleColumnIndex(): number {
+    if (this.colOffsets.length === 0) return 0;
+
+    // Binary search: find the rightmost column whose offset <= scrollX
+    let lo = 0;
+    let hi = this.colOffsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi + 1) >> 1;
+      if (this.colOffsets[mid] <= this.scrollX) {
+        lo = mid;
+      } else {
+        hi = mid - 1;
       }
     }
-
-    return 0;
+    return lo;
   }
 
-  protected getLastVisibleCol(): number {
-    const firstVisibleCol = this.getFirstVisibleCol();
+  protected getLastVisibleColumnIndex(): number {
+    if (this.colOffsets.length === 0) return 0;
 
-    for (let i = firstVisibleCol; i < this.columns.length; i++) {
-      if (this.colOffsets[i] + this.colWidths[i] > this.scrollX + this.canvas.width) {
-        return i;
+    const rightEdge = this.scrollX + this.canvas.width;
+
+    // Binary search: find the leftmost column whose offset > rightEdge
+    let lo = 0;
+    let hi = this.colOffsets.length - 1;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if (this.colOffsets[mid] + this.colWidths[mid] <= rightEdge) {
+        lo = mid + 1;
+      } else {
+        hi = mid;
       }
     }
-
-    return this.columns.length - 1;
+    return lo;
   }
 
   protected getCellAtPosition(x: number, y: number): { row: number; col: number } | null {
@@ -674,8 +390,8 @@ export class SpreadsheetVisualizerBase {
     const { ctx, canvas } = this;
     const { width, height } = canvas;
 
-    const firstVisibleCol = this.getFirstVisibleCol();
-    const lastVisibleCol = this.getLastVisibleCol();
+    const firstVisibleColumnIndex = this.getFirstVisibleColumnIndex();
+    const lastVisibleColumnIndex = this.getLastVisibleColumnIndex();
 
     // Clear the canvas
     ctx.clearRect(0, 0, width, height);
@@ -694,8 +410,8 @@ export class SpreadsheetVisualizerBase {
     ctx.textAlign = "left";
     ctx.strokeStyle = this.options.borderColor;
 
-    let x = this.colOffsets[firstVisibleCol] - this.scrollX;
-    for (let col = firstVisibleCol; col <= lastVisibleCol; col++) {
+    let x = this.colOffsets[firstVisibleColumnIndex] - this.scrollX;
+    for (let col = firstVisibleColumnIndex; col <= lastVisibleColumnIndex; col++) {
       ctx.strokeRect(x, 0, this.colWidths[col], this.options.cellHeight);
 
       const textWidth = ctx.measureText(this.columns[col].name).width;
@@ -712,14 +428,14 @@ export class SpreadsheetVisualizerBase {
       x += this.colWidths[col];
     }
 
-    // Draw cells
-    const data = (await dataPromise).map((row) => row.slice(firstVisibleCol, lastVisibleCol + 1));
+    // Draw cells — iterate raw data rows directly instead of slicing per row
+    const data = await dataPromise;
     let y = this.options.cellHeight; // Keep the header at the top
     for (let row = 0; row < data.length; row++) {
-      x = this.colOffsets[firstVisibleCol] - this.scrollX;
-      for (let col = 0; col < data[row].length; col++) {
-        const cellWidth = this.colWidths[col + firstVisibleCol];
-        const column = this.columns[col + firstVisibleCol];
+      x = this.colOffsets[firstVisibleColumnIndex] - this.scrollX;
+      for (let col = firstVisibleColumnIndex; col <= lastVisibleColumnIndex; col++) {
+        const cellWidth = this.colWidths[col];
+        const column = this.columns[col];
 
         // Draw cell background
         ctx.fillStyle = this.options.cellBackgroundColor;
@@ -779,324 +495,52 @@ export class SpreadsheetVisualizerBase {
     }
   }
 
-  private drawCellHover(visibleStartRow: number) {
-    // Clear the hover canvas
-    this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
-
-    this.hoverCtx.fillStyle = this.options.hoverColor;
-    this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-    this.hoverCtx.lineWidth = 2;
-
-    if (this.hoveredCell) {
-      const { row, col } = this.hoveredCell;
-
-      const y = (row - visibleStartRow) * this.options.cellHeight;
-      const height = this.options.cellHeight;
-
-      let x = this.colOffsets[col] - this.scrollX;
-      let width = this.colWidths[col];
-
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-      }
-
-      // Draw hover background
-      this.hoverCtx.fillRect(x, y, width, height);
-
-      // Draw enhanced border
-      this.hoverCtx.strokeRect(x, y, width, height);
-
-      // Add inner glow effect
-      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-      this.hoverCtx.lineWidth = 1;
-      this.hoverCtx.strokeRect(x + 1, y + 1, width - 2, height - 2);
-    }
-  }
-
-  private drawColHover() {
-    // Clear the hover canvas
-    this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
-
-    this.hoverCtx.fillStyle = this.options.hoverColor;
-    this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-    this.hoverCtx.lineWidth = 2;
-
-    if (this.hoveredCell) {
-      const { col } = this.hoveredCell;
-
-      const height = Math.min(this.options.cellHeight + this.totalHeight, this.hoverCanvas.height - this.options.scrollbarWidth);
-
-      let x = this.colOffsets[col] - this.scrollX;
-      let width = this.colWidths[col];
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-      }
-
-      // Draw hover background
-      this.hoverCtx.fillRect(x, 0, width, height);
-
-      // Draw enhanced border
-      this.hoverCtx.strokeRect(x, 0, width, height);
-
-      // Add inner glow effect
-      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-      this.hoverCtx.lineWidth = 1;
-      this.hoverCtx.strokeRect(x + 1, 1, width - 2, height - 2);
-    }
-  }
-
-  // TODO: Keep or remove?
-  // private drawRowHover(startRow: number, endRow: number) {
-  //   // Clear the hover canvas
-  //   this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
-
-  //   this.hoverCtx.fillStyle = this.options.hoverColor;
-  //   this.hoverCtx.strokeStyle = this.options.borderColor;
-
-  //   if (this.hoveredCell) {
-  //     const { row } = this.hoveredCell;
-
-  //     if (row < startRow || row > endRow) return;
-
-  //     const x = 0;
-  //     const y = (row - startRow) * this.options.cellHeight;
-  //     const width = this.selectionCanvas.width - this.options.scrollbarWidth;
-  //     const height = this.options.cellHeight;
-
-  //     this.hoverCtx.fillRect(x, y, width, height);
-  //     this.hoverCtx.strokeRect(x, y, width, height);
-  //   }
-  // }
-
-  private drawSelection(visibleStartRow: number) {
-    // Clear the selection canvas
-    this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
-
-    this.drawCellSelection(visibleStartRow);
-    this.drawColSelection();
-  }
-
-  private drawCellSelection(visibleStartRow: number) {
-    // Draw selection
-    if (this.selectedCells) {
-      const { startRow, endRow, startCol, endCol } = this.selectedCells;
-      this.selectionCtx.fillStyle = this.options.selectionColor;
-
-      const minRow = Math.min(startRow, endRow);
-      const maxRow = Math.max(startRow, endRow);
-      const minCol = Math.min(startCol, endCol);
-      const maxCol = Math.max(startCol, endCol);
-
-      const height = this.options.cellHeight;
-      let selectionBounds = { x: 0, y: 0, width: 0, height: 0 };
-
-      // Draw selection backgrounds
-      for (let row = minRow; row <= maxRow; row++) {
-        for (let col = minCol; col <= maxCol; col++) {
-          const y = (row - visibleStartRow) * this.options.cellHeight;
-
-          let x = this.colOffsets[col] - this.scrollX;
-          let width = this.colWidths[col];
-          if (x < this.options.rowHeaderWidth) {
-            x = this.options.rowHeaderWidth;
-            width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-          }
-
-          if (x + width > 0 && x < this.canvas.width && y + height > 0 && y < this.canvas.height) {
-            this.selectionCtx.fillRect(x, y, width, height);
-
-            // Track the bounds for the selection border and handle
-            if (row === minRow && col === minCol) {
-              selectionBounds = { x, y, width: 0, height: 0 };
-            }
-            if (row === maxRow && col === maxCol) {
-              selectionBounds.width = x + width - selectionBounds.x;
-              selectionBounds.height = y + height - selectionBounds.y;
-            }
-          }
-        }
-      }
-
-      // Draw enhanced selection border
-      if (selectionBounds.width > 0 && selectionBounds.height > 0) {
-        this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
-        this.selectionCtx.lineWidth = 2;
-        this.selectionCtx.strokeRect(selectionBounds.x, selectionBounds.y, selectionBounds.width, selectionBounds.height);
-
-        // Add inner border for extra emphasis
-        this.selectionCtx.lineWidth = 1;
-        this.selectionCtx.strokeRect(selectionBounds.x + 1, selectionBounds.y + 1, selectionBounds.width - 2, selectionBounds.height - 2);
-
-        // Draw selection handle (dot) in bottom-right corner
-        const handleSize = 8;
-        const handleX = selectionBounds.x + selectionBounds.width - handleSize / 8;
-        const handleY = selectionBounds.y + selectionBounds.height - handleSize / 8;
-
-        this.selectionCtx.fillStyle = this.options.selectionBorderColor || this.options.borderColor;
-        // this.selectionCtx.ellipse(handleX, handleY, handleSize / 2, handleSize / 2, 0, 0, 2 * Math.PI);
-        this.selectionCtx.beginPath();
-        this.selectionCtx.arc(handleX, handleY, handleSize / 2, 0, 2 * Math.PI);
-        this.selectionCtx.fill();
-
-        // Add white outline to the handle for better visibility
-        this.selectionCtx.strokeStyle = "#ffffff";
-        this.selectionCtx.lineWidth = 1;
-        this.selectionCtx.stroke();
-      }
-    }
-  }
-
-  private drawColSelection() {
-    this.selectionCtx.fillStyle = this.options.selectionColor;
-    this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
-    this.selectionCtx.lineWidth = 2;
-
-    const height = Math.min(this.options.cellHeight + this.totalHeight, this.selectionCanvas.height - this.options.scrollbarWidth);
-    this.selectedCols.forEach((col) => {
-      // Skip if the column is not visible
-      if (this.colOffsets[col + 1] - this.scrollX < this.options.rowHeaderWidth) return;
-
-      let x = this.colOffsets[col] - this.scrollX;
-      let width = this.colWidths[col];
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-      }
-
-      // Draw selection background
-      this.selectionCtx.fillRect(x, 0, width, height);
-
-      // Draw enhanced border
-      this.selectionCtx.strokeRect(x, 0, width, height);
-
-      // Add inner border for extra emphasis
-      this.selectionCtx.lineWidth = 1;
-      this.selectionCtx.strokeRect(x + 1, 1, width - 2, height - 2);
-    });
-  }
-
-  // TODO: Keep or remove?
-  // private drawRowSelection(startRow: number, endRow: number) {
-  //   this.selectionCtx.fillStyle = this.options.selectionColor;
-  //   this.selectionCtx.strokeStyle = this.options.borderColor;
-  //   this.selectedRows.forEach((row) => {
-  //     if (row < startRow || row > endRow) return;
-
-  //     const x = 0;
-  //     const y = (row - startRow) * this.options.cellHeight;
-  //     const width = this.selectionCanvas.width - this.options.scrollbarWidth;
-  //     const height = this.options.cellHeight;
-
-  //     this.selectionCtx.fillRect(x, y, width, height);
-  //     this.selectionCtx.strokeRect(x, y, width, height);
-  //   });
-  // }
-
-  private drawScrollbars() {
+  protected drawScrollbars() {
     const { ctx, canvas } = this;
     const { width, height } = canvas;
+    const sw = this.options.scrollbarWidth;
 
     const hasVerticalScrollbar = this.totalHeight > height;
     const hasHorizontalScrollbar = this.totalWidth > width;
 
+    // The vertical track stops short of the horizontal scrollbar (and vice
+    // versa) so the two never overlap — leaving a square gap in the bottom-
+    // right corner that is filled with a distinct background.
+    const vTrackHeight = height - (hasHorizontalScrollbar ? sw : 0);
+    const hTrackWidth = width - (hasVerticalScrollbar ? sw : 0);
+
     // Draw vertical scrollbar
     if (hasVerticalScrollbar) {
-      const scrollbarHeight = (height / this.totalHeight) * height;
-      const scrollbarY = (this.scrollY / this.totalHeight) * height;
-      const scrollbarX = width - this.options.scrollbarWidth;
+      const thumbHeight = Math.max(sw, (vTrackHeight / this.totalHeight) * vTrackHeight);
+      const thumbY = (this.scrollY / this.totalScrollY) * (vTrackHeight - thumbHeight);
 
-      // Draw track
+      // Track
       ctx.fillStyle = this.options.scrollbarColor;
-      ctx.fillRect(scrollbarX, 0, this.options.scrollbarWidth, height - (hasHorizontalScrollbar ? this.options.scrollbarWidth : 0));
+      ctx.fillRect(width - sw, 0, sw, vTrackHeight);
 
-      // Draw thumb
-      ctx.fillStyle =
-        this.mouseState === MouseState.HoveringVerticalScrollbar || this.mouseState === MouseState.DraggingVerticalScrollbar
-          ? this.options.scrollbarHoverColor
-          : this.options.scrollbarThumbColor;
-      ctx.fillRect(scrollbarX, scrollbarY, this.options.scrollbarWidth, scrollbarHeight);
+      // Thumb
+      ctx.fillStyle = this.options.scrollbarThumbColor;
+      ctx.fillRect(width - sw, thumbY, sw, thumbHeight);
     }
 
     // Draw horizontal scrollbar
     if (hasHorizontalScrollbar) {
-      const scrollbarWidth = (width / this.totalWidth) * width;
-      const scrollbarX = (this.scrollX / this.totalWidth) * width;
-      const scrollbarY = height - this.options.scrollbarWidth;
+      const thumbWidth = Math.max(sw, (hTrackWidth / this.totalWidth) * hTrackWidth);
+      const thumbX = (this.scrollX / this.totalScrollX) * (hTrackWidth - thumbWidth);
 
-      // Draw track
+      // Track
       ctx.fillStyle = this.options.scrollbarColor;
-      ctx.fillRect(0, scrollbarY, width, this.options.scrollbarWidth);
+      ctx.fillRect(0, height - sw, hTrackWidth, sw);
 
-      // Draw thumb
-      ctx.fillStyle =
-        this.mouseState === MouseState.HoveringHorizontalScrollbar || this.mouseState === MouseState.DraggingHorizontalScrollbar
-          ? this.options.scrollbarHoverColor
-          : this.options.scrollbarThumbColor;
-      ctx.fillRect(
-        scrollbarX,
-        scrollbarY,
-        scrollbarWidth - (hasVerticalScrollbar ? this.options.scrollbarWidth : 0),
-        this.options.scrollbarWidth
-      );
+      // Thumb
+      ctx.fillStyle = this.options.scrollbarThumbColor;
+      ctx.fillRect(thumbX, height - sw, thumbWidth, sw);
     }
-  }
 
-  public async getSelection(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
-    if (!this.onSelectionChange) return null;
-    if (this.selectedCols.length > 0) {
-      return {
-        rows: [],
-        columns: this.selectedCols.map((col) => this.columns[col] as Column),
-        values: [],
-        formatted: [],
-      };
-    } else if (this.selectedCells) {
-      try {
-        const firstVisibleCol = this.getFirstVisibleCol();
-        const lastVisibleCol = this.getLastVisibleCol();
-
-        const data = (await this.cache.getData(this.selectedCells.startRow, this.selectedCells.endRow)).map((row) =>
-          row.slice(this.selectedCells?.startCol ?? firstVisibleCol, this.selectedCells?.endCol ?? lastVisibleCol + 1)
-        );
-
-        console.log("selectedCells", this.selectedCells);
-        console.log("data", data);
-
-        const formatted = data.map((row) =>
-          row.map((cell, index) => {
-            const column = this.columns[index + this.selectedCells!.startCol];
-            if (!column) return "";
-            return getFormattedValueAndStyle(cell, column, this.options).formatted;
-          })
-        );
-
-        const rows = Array.from(
-          { length: this.selectedCells.endRow - this.selectedCells.startRow + 1 },
-          (_, i) => this.selectedCells!.startRow + i
-        );
-        const columns = this.columns.filter(
-          (_, index) => this.selectedCells!.startCol <= index && index <= this.selectedCells!.endCol
-        ) as Column[];
-
-        return {
-          rows,
-          columns,
-          values: data,
-          formatted,
-        };
-      } catch (error) {
-        console.error("Failed to fetch cell data for selection:", error);
-        return null;
-      }
-    } else {
-      return null;
+    // Corner square where both scrollbars meet
+    if (hasVerticalScrollbar && hasHorizontalScrollbar) {
+      ctx.fillStyle = this.options.headerBackgroundColor;
+      ctx.fillRect(width - sw, height - sw, sw, sw);
     }
-  }
-
-  protected async notifySelectionChange(): Promise<void> {
-    const selection = await this.getSelection();
-    this.onSelectionChange.forEach((callback) => callback(selection as ICellSelection | undefined));
   }
 }
