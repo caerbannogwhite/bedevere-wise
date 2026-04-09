@@ -17,14 +17,8 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     super(container, dataProvider, options, statsVisualizer, componentId ?? "spreadsheet-visualizer");
 
     // Use provided stats visualizer or create a new one
-    if (statsVisualizer) {
-      this.statsVisualizer = statsVisualizer;
-      // Update the data provider for the shared stats visualizer (no columns selected initially)
-      // Note: Not awaiting since we're in constructor and no columns are selected yet
-      this.statsVisualizer.setSpreadsheetVisualizer(this).catch(console.error);
-    } else {
-      this.statsVisualizer = new ColumnStatsVisualizer(this.container, this, this.statsPanelWidth);
-    }
+    this.statsVisualizer = statsVisualizer ?? new ColumnStatsVisualizer(this.container, this, 350);
+    this.statsVisualizer.setSpreadsheetVisualizer(this).catch(console.error);
 
     // Setup theme change listener
     this.themeCleanup = listenForThemeChanges(() => {
@@ -74,10 +68,7 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
       this.themeCleanup = null;
     }
 
-    // Hide stats visualizer if we own it
-    if (this.statsVisualizer && !this.hasStatsPanel) {
-      this.statsVisualizer.hide();
-    }
+    this.statsVisualizer?.hide();
 
     // Clear the data cache
     this.cache.clear();

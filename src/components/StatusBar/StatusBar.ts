@@ -4,6 +4,7 @@ import { ICellSelection } from "../SpreadsheetVisualizer/types";
 export interface StatusBarItem {
   id: string;
   text: string;
+  html?: string;
   tooltip?: string;
   priority: number;
   alignment: "left" | "right";
@@ -76,21 +77,94 @@ export class StatusBar {
         tooltip: "No selection",
       });
       return;
-    } else if (cellSelection.columns.length > 0) {
+    }
+
+    // Column selection: rows is empty, columns has the selected column(s)
+    if (cellSelection.rows.length === 0 && cellSelection.columns.length > 0) {
+      const count = cellSelection.columns.length;
+      const text = count === 1 ? "1 column selected" : `${count} columns selected`;
       this.updateItem("selection-info", {
-        text: `${cellSelection.columns.length} columns selected`,
-        tooltip: `Selection: ${cellSelection.columns.length} columns`,
+        text,
+        tooltip: `Selection: ${text}`,
       });
       return;
     }
 
-    const rowCount = cellSelection.rows.length;
-    const colCount = cellSelection.columns.length;
+    // Cell selection
+    if (cellSelection.rows.length > 0 && cellSelection.columns.length > 0) {
+      const cellCount = cellSelection.rows.length * cellSelection.columns.length;
+      const text = cellCount === 1 ? "1 cell selected" : `${cellCount} cells selected`;
+      this.updateItem("selection-info", {
+        text,
+        tooltip: cellCount === 1
+          ? "Selection: 1 cell selected"
+          : `Selection: ${cellSelection.rows.length} rows \u00d7 ${cellSelection.columns.length} columns`,
+      });
+      return;
+    }
 
     this.updateItem("selection-info", {
-      text: `${rowCount} × ${colCount} cells selected`,
-      tooltip: `Selection: ${rowCount} rows × ${colCount} columns`,
+      text: "No selection",
+      tooltip: "No selection",
     });
+  }
+
+  public updatePosition(cellSelection?: ICellSelection): void {
+    if (!cellSelection || cellSelection.rows.length === 0) {
+      this.updateItem("position-info", { text: "", visible: false });
+      return;
+    }
+
+    if (cellSelection.rows.length === 1 && cellSelection.columns.length === 1) {
+      const text = `${cellSelection.columns[0].name}:${cellSelection.rows[0]}`;
+      this.updateItem("position-info", { text, tooltip: `Position: ${text}`, visible: true });
+      return;
+    }
+
+    if (cellSelection.rows.length > 0 && cellSelection.columns.length > 0) {
+      const startCol = cellSelection.columns[0].name;
+      const startRow = cellSelection.rows[0];
+      const endCol = cellSelection.columns[cellSelection.columns.length - 1].name;
+      const endRow = cellSelection.rows[cellSelection.rows.length - 1];
+      const text = `${startCol}:${startRow} \u2192 ${endCol}:${endRow}`;
+      this.updateItem("position-info", { text, tooltip: `Range: ${text}`, visible: true });
+      return;
+    }
+
+    this.updateItem("position-info", { text: "", visible: false });
+  }
+
+  public updateCellValue(cellSelection?: ICellSelection): void {
+    if (!cellSelection || cellSelection.rows.length === 0) {
+      this.updateItem("cell-value", { text: "", html: undefined, visible: false });
+      return;
+    }
+
+    if (cellSelection.formatted.length > 0 && cellSelection.formatted[0].length > 0) {
+      const formatted = cellSelection.formatted[0][0];
+      const raw = cellSelection.values[0][0];
+      const dataType = cellSelection.columns[0]?.dataType?.toLowerCase() ?? "";
+      const hasRaw = raw != null && String(raw) !== formatted;
+      const plainText = hasRaw ? `${formatted} [${raw}]` : formatted;
+
+      const escapedFormatted = this.escapeHtml(formatted);
+      const formattedSpan = `<span class="cell-value__formatted cell-value__formatted--${dataType}">${escapedFormatted}</span>`;
+      const rawSpan = hasRaw ? ` <span class="cell-value__raw">[${this.escapeHtml(String(raw))}]</span>` : "";
+
+      this.updateItem("cell-value", {
+        text: plainText,
+        html: formattedSpan + rawSpan,
+        tooltip: `Cell value: ${plainText}`,
+        visible: true,
+      });
+      return;
+    }
+
+    this.updateItem("cell-value", { text: "", html: undefined, visible: false });
+  }
+
+  private escapeHtml(s: string): string {
+    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   public showMessage(message: string, type: BrianAppMessageType = "info", duration: number = 3000): void {
@@ -118,6 +192,15 @@ export class StatusBar {
       priority: 100,
       alignment: "left",
       tooltip: "Dataset information",
+    });
+
+    this.addItem({
+      id: "position-info",
+      text: "",
+      priority: 95,
+      alignment: "left",
+      tooltip: "Current position",
+      visible: false,
     });
 
     this.addItem({
@@ -208,7 +291,11 @@ export class StatusBar {
   private renderItem(item: StatusBarItem, container: HTMLElement): void {
     const element = document.createElement("div");
     element.className = "status-bar__item";
-    element.textContent = item.text;
+    if (item.html) {
+      element.innerHTML = item.html;
+    } else {
+      element.textContent = item.text;
+    }
 
     if (item.tooltip) {
       element.title = item.tooltip;

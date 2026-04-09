@@ -25,9 +25,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   protected selectedRows: number[] = [];
   protected selectedCols: number[] = [];
 
-  // Stats panel
-  protected statsPanelWidth = 350; // Width of the stats panel
-  protected hasStatsPanel = false;
+  // Stats visualizer (now lives in the ControlPanel, not as an overlay)
   protected statsVisualizer: ColumnStatsVisualizer;
 
   // Selection change callback
@@ -62,24 +60,17 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
     // Stats panel logic is handled by derived classes
 
-    this.canvas.width = width;
-    this.canvas.height = height;
-    this.canvas.style.width = `${width}px`;
-    this.canvas.style.height = `${height}px`;
+    // Size all three canvases to the viewport
+    for (const cvs of [this.canvas, this.selectionCanvas, this.hoverCanvas]) {
+      cvs.width = width;
+      cvs.height = height;
+      cvs.style.width = `${width}px`;
+      cvs.style.height = `${height}px`;
+    }
 
-    this.selectionCanvas.width = width;
-    this.selectionCanvas.height = height;
-    this.selectionCanvas.style.width = `${width}px`;
-    this.selectionCanvas.style.height = `${height}px`;
-    this.selectionCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.selectionCanvas.style.left = `${this.canvas.offsetLeft}px`;
-
-    this.hoverCanvas.width = width;
-    this.hoverCanvas.height = height;
-    this.hoverCanvas.style.width = `${width}px`;
-    this.hoverCanvas.style.height = `${height}px`;
-    this.hoverCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.hoverCanvas.style.left = `${this.canvas.offsetLeft}px`;
+    // The canvas group needs explicit size so sticky positioning works
+    this.canvasGroup.style.width = `${width}px`;
+    this.canvasGroup.style.height = `${height}px`;
 
     // Recalculate column widths and redraw.
     // Setting canvas.width/height above clears all pixel content, so we must
@@ -142,7 +133,6 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     } else {
       if (this.toDraw >= ToDraw.Cells) {
         await this.drawCells(visibleStartRow, visibleEndRow);
-        this.drawScrollbars();
       }
       if (this.toDraw >= ToDraw.Selection) {
         this.drawSelection(visibleStartRow);
@@ -156,16 +146,12 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   protected async selectColumn(col: number) {
-    let hasStatusPanelChanged = false;
     if (this.selectedCols.includes(col)) {
       this.selectedCols = this.selectedCols.filter((i) => i !== col);
       this.statsVisualizer?.hide();
-      this.hasStatsPanel = false;
-      hasStatusPanelChanged = true;
     } else {
-      hasStatusPanelChanged = !this.hasStatsPanel;
       if (this.singleColSelectionMode) {
-        this.selectedCols = [col]; // Only allow one column selection at a time
+        this.selectedCols = [col];
         this.selectedRows = [];
         this.selectedCells = null;
       } else {
@@ -174,16 +160,11 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
       if (this.statsVisualizer) {
         await this.statsVisualizer.showStats(this.columns[col]);
-        this.hasStatsPanel = true;
       }
     }
 
     this.updateToDraw(ToDraw.Selection);
     this.notifySelectionChange();
-
-    if (hasStatusPanelChanged) {
-      this.updateLayout();
-    }
   }
 
   private drawCellHover(visibleStartRow: number) {
@@ -232,7 +213,8 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     if (this.hoveredCell) {
       const { col } = this.hoveredCell;
 
-      const height = Math.min(this.options.cellHeight + this.totalHeight, this.hoverCanvas.height - this.options.scrollbarWidth);
+      const height = Math.min(this.totalHeight, this.hoverCanvas.height);
+      const overflows = this.totalHeight > this.hoverCanvas.height;
 
       let x = this.colOffsets[col] - this.scrollX;
       let width = this.colWidths[col];
@@ -244,13 +226,31 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       // Draw hover background
       this.hoverCtx.fillRect(x, 0, width, height);
 
-      // Draw enhanced border
-      this.hoverCtx.strokeRect(x, 0, width, height);
+      // Draw border — skip bottom edge when table overflows viewport
+      if (overflows) {
+        this.hoverCtx.beginPath();
+        this.hoverCtx.moveTo(x, height);
+        this.hoverCtx.lineTo(x, 0);
+        this.hoverCtx.lineTo(x + width, 0);
+        this.hoverCtx.lineTo(x + width, height);
+        this.hoverCtx.stroke();
+      } else {
+        this.hoverCtx.strokeRect(x, 0, width, height);
+      }
 
       // Add inner glow effect
       this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
       this.hoverCtx.lineWidth = 1;
-      this.hoverCtx.strokeRect(x + 1, 1, width - 2, height - 2);
+      if (overflows) {
+        this.hoverCtx.beginPath();
+        this.hoverCtx.moveTo(x + 1, height);
+        this.hoverCtx.lineTo(x + 1, 1);
+        this.hoverCtx.lineTo(x + width - 1, 1);
+        this.hoverCtx.lineTo(x + width - 1, height);
+        this.hoverCtx.stroke();
+      } else {
+        this.hoverCtx.strokeRect(x + 1, 1, width - 2, height - 2);
+      }
     }
   }
 
@@ -337,7 +337,8 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
     this.selectionCtx.lineWidth = 2;
 
-    const height = Math.min(this.options.cellHeight + this.totalHeight, this.selectionCanvas.height - this.options.scrollbarWidth);
+    const height = Math.min(this.totalHeight, this.selectionCanvas.height);
+    const overflows = this.totalHeight > this.selectionCanvas.height;
     this.selectedCols.forEach((col) => {
       // Skip if the column is not visible
       if (this.colOffsets[col + 1] - this.scrollX < this.options.rowHeaderWidth) return;
@@ -352,12 +353,30 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       // Draw selection background
       this.selectionCtx.fillRect(x, 0, width, height);
 
-      // Draw enhanced border
-      this.selectionCtx.strokeRect(x, 0, width, height);
+      // Draw border — skip bottom edge when table overflows viewport
+      if (overflows) {
+        this.selectionCtx.beginPath();
+        this.selectionCtx.moveTo(x, height);
+        this.selectionCtx.lineTo(x, 0);
+        this.selectionCtx.lineTo(x + width, 0);
+        this.selectionCtx.lineTo(x + width, height);
+        this.selectionCtx.stroke();
+      } else {
+        this.selectionCtx.strokeRect(x, 0, width, height);
+      }
 
       // Add inner border for extra emphasis
       this.selectionCtx.lineWidth = 1;
-      this.selectionCtx.strokeRect(x + 1, 1, width - 2, height - 2);
+      if (overflows) {
+        this.selectionCtx.beginPath();
+        this.selectionCtx.moveTo(x + 1, height);
+        this.selectionCtx.lineTo(x + 1, 1);
+        this.selectionCtx.lineTo(x + width - 1, 1);
+        this.selectionCtx.lineTo(x + width - 1, height);
+        this.selectionCtx.stroke();
+      } else {
+        this.selectionCtx.strokeRect(x + 1, 1, width - 2, height - 2);
+      }
     });
   }
 
@@ -374,8 +393,9 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
         const firstVisibleColumnIndex = this.getFirstVisibleColumnIndex();
         const lastVisibleColumnIndex = this.getLastVisibleColumnIndex();
 
-        const data = (await this.cache.getData(this.selectedCells.startRow, this.selectedCells.endRow)).map((row) =>
-          row.slice(this.selectedCells?.startCol ?? firstVisibleColumnIndex, this.selectedCells?.endCol ?? lastVisibleColumnIndex + 1),
+        // selectedCells rows are 1-indexed (row 0 = header), cache is 0-indexed
+        const data = (await this.cache.getData(this.selectedCells.startRow - 1, this.selectedCells.endRow)).map((row) =>
+          row.slice(this.selectedCells?.startCol ?? firstVisibleColumnIndex, (this.selectedCells?.endCol ?? lastVisibleColumnIndex) + 1),
         );
 
         const formatted = data.map((row) =>

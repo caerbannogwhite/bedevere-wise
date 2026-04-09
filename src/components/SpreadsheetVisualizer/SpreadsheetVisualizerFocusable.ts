@@ -1,9 +1,9 @@
 import { DataProvider, SpreadsheetOptions } from "@/index";
 import { FocusableComponent } from "../BrianApp/types";
-import { minMax } from "./utils/drawing";
 import { MouseState, ToDraw } from "./SpreadsheetVisualizerBase";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";
+import { keymapService } from "../../data/KeymapService";
 
 export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelection implements FocusableComponent {
   private _isFocused: boolean = false;
@@ -47,22 +47,9 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
 
-    // Vertical Scrolling
-    if (this.isMouseOverVerticalScrollbar(x, y)) {
-      this.mouseState = MouseState.DraggingVerticalScrollbar;
-      this.dragStartY = y;
-      this.lastScrollY = this.scrollY;
-
-      return true;
-    }
-
-    // Horizontal Scrolling
-    else if (this.isMouseOverHorizontalScrollbar(x, y)) {
-      this.mouseState = MouseState.DraggingHorizontalScrollbar;
-      this.dragStartX = x;
-      this.lastScrollX = this.scrollX;
-
-      return true;
+    // Ignore clicks outside the canvas area (e.g. control panel, stats buttons)
+    if (x < 0 || y < 0 || x > this.canvas.width || y > this.canvas.height) {
+      return false;
     }
 
     // Column Header
@@ -88,10 +75,7 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
           this.selectedRows = [];
           this.selectedCells = null;
 
-          if (this.statsVisualizer) {
-            this.statsVisualizer.hide();
-            this.hasStatsPanel = false;
-          }
+          this.statsVisualizer?.hide();
         }
 
         this.mouseState = MouseState.Dragging;
@@ -124,20 +108,6 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     let newHoverCell: { row: number; col: number } | null = null;
 
     switch (this.mouseState) {
-      case MouseState.DraggingVerticalScrollbar:
-        const deltaY = y - this.dragStartY;
-        const scrollRatioY = deltaY / (this.canvas.height - this.options.scrollbarWidth);
-        this.scrollY = minMax(this.lastScrollY + scrollRatioY * this.totalScrollY, 0, this.totalScrollY);
-        this.updateToDraw(ToDraw.Cells);
-        break;
-
-      case MouseState.DraggingHorizontalScrollbar:
-        const deltaX = x - this.dragStartX;
-        const scrollRatioX = deltaX / (this.canvas.width - this.options.scrollbarWidth);
-        this.scrollX = minMax(this.lastScrollX + scrollRatioX * this.totalScrollX, 0, this.totalScrollX);
-        this.updateToDraw(ToDraw.Cells);
-        break;
-
       case MouseState.Dragging:
         newHoverCell = this.getCellAtPosition(x, y);
 
@@ -196,34 +166,23 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
 
   public async handleWheel(event: WheelEvent): Promise<boolean> {
     if (!this._isFocused) return false;
+    if (!this.container.contains(event.target as Node)) return false;
+
+    // Only intercept Ctrl+Wheel for zoom. Regular scroll is handled natively
+    // by the scroll container (which fires a scroll event → redraws).
+    if (!event.ctrlKey) return false;
 
     event.preventDefault();
 
-    // Zoom
-    if (event.ctrlKey) {
-      const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+    const zoomFactor = event.deltaY > 0 ? 0.9 : 1.1;
+    this.options.fontSize = Math.max(14, Math.min(24, this.options.fontSize * zoomFactor));
+    this.options.cellHeight = Math.max(14, Math.min(24, this.options.cellHeight * zoomFactor));
+    this.options.headerFontSize = Math.max(14, Math.min(24, this.options.headerFontSize * zoomFactor));
+    this.options.cellPadding = Math.max(1, Math.min(10, this.options.cellPadding * zoomFactor));
 
-      this.options.fontSize = Math.max(14, Math.min(24, this.options.fontSize * zoomFactor));
-      this.options.cellHeight = Math.max(14, Math.min(24, this.options.cellHeight * zoomFactor));
-      this.options.headerFontSize = Math.max(14, Math.min(24, this.options.headerFontSize * zoomFactor));
-      this.options.cellPadding = Math.max(1, Math.min(10, this.options.cellPadding * zoomFactor));
-
-      this.calculateColumnWidths();
-      this.updateToDraw(ToDraw.Cells);
-    }
-
-    // Scroll
-    else {
-      const prevScrollY = this.scrollY;
-      this.scrollY = minMax(this.scrollY + event.deltaY, 0, this.totalScrollY);
-
-      if (prevScrollY !== this.scrollY) {
-        // Preload data for the new scroll position
-        this.preloadDataForScroll(this.scrollY);
-
-        this.updateToDraw(ToDraw.Cells);
-      }
-    }
+    this.calculateColumnWidths();
+    this.calculateRowHeight();
+    this.updateToDraw(ToDraw.Cells);
 
     await this.draw();
     return true;
@@ -231,229 +190,116 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
 
   public async handleKeyDown(event: KeyboardEvent): Promise<boolean> {
     if (!this._isFocused) return false;
+    if (!this.container.contains(event.target as Node)) return false;
 
-    let handled = true;
-    let col: number;
+    const action = keymapService.matchEvent(event, "spreadsheet");
+    if (!action) {
+      return false;
+    }
 
-    switch (event.key) {
-      case "ArrowUp":
-        if (this.selectedCells) {
-          const { startRow, endRow, startCol, endCol } = this.selectedCells;
-          const row = event.shiftKey ? endRow : startRow;
-          const col = event.shiftKey ? endCol : startCol;
+    const step = this.options.cellHeight * 3;
 
-          const prevScrollY = this.scrollY;
+    switch (action) {
+      // Scroll viewport
+      case "spreadsheet.scrollUp":    this.scrollTo(this.scrollX, this.scrollY - step); break;
+      case "spreadsheet.scrollDown":  this.scrollTo(this.scrollX, this.scrollY + step); break;
+      case "spreadsheet.scrollLeft":  this.scrollTo(this.scrollX - step, this.scrollY); break;
+      case "spreadsheet.scrollRight": this.scrollTo(this.scrollX + step, this.scrollY); break;
 
-          this.selectedCells = {
-            startRow: event.shiftKey ? startRow : row - 1,
-            endRow: event.shiftKey ? row - 1 : row - 1,
-            startCol: event.shiftKey ? startCol : col,
-            endCol: event.shiftKey ? endCol : col,
-          };
-
-          const firstRow = this.selectedCells.startRow == 0;
-          this.selectedCells.startRow = Math.max(1, this.selectedCells.startRow);
-          this.selectedCells.endRow = Math.max(1, this.selectedCells.endRow);
-
-          const selectionWidth = Math.abs(this.selectedCells.endCol - this.selectedCells.startCol) + 1;
-          const selectionHeight = Math.abs(this.selectedCells.endRow - this.selectedCells.startRow) + 1;
-
-          if (selectionWidth == 1 && selectionHeight == 1 && firstRow) {
-            this.selectColumn(this.selectedCells.startCol);
-          } else {
-            this.scrollY = minMax((row - 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
-            if (prevScrollY !== this.scrollY) {
-              this.updateToDraw(ToDraw.Cells);
-              this.notifySelectionChange();
-            } else {
-              this.updateToDraw(ToDraw.Selection);
-              this.notifySelectionChange();
-            }
-          }
-        }
+      // Extend selection (anchor stays, end moves)
+      case "spreadsheet.extendUp":
+        if (this.selectedCells) { this.selectedCells.endRow = Math.max(1, this.selectedCells.endRow - 1); this.scrollCellIntoView(this.selectedCells.endRow, this.selectedCells.endCol); }
+        break;
+      case "spreadsheet.extendDown":
+        if (this.selectedCells) { this.selectedCells.endRow = Math.min(this.totalRows, this.selectedCells.endRow + 1); this.scrollCellIntoView(this.selectedCells.endRow, this.selectedCells.endCol); }
+        break;
+      case "spreadsheet.extendLeft":
+        if (this.selectedCells) { this.selectedCells.endCol = Math.max(0, this.selectedCells.endCol - 1); this.scrollCellIntoView(this.selectedCells.endRow, this.selectedCells.endCol); }
+        break;
+      case "spreadsheet.extendRight":
+        if (this.selectedCells) { this.selectedCells.endCol = Math.min(this.totalCols - 1, this.selectedCells.endCol + 1); this.scrollCellIntoView(this.selectedCells.endRow, this.selectedCells.endCol); }
         break;
 
-      case "ArrowDown":
+      // Move selection
+      case "spreadsheet.moveUp":
+        if (this.selectedCells) {
+          const newRow = Math.max(1, this.selectedCells.startRow - 1);
+          this.selectedCells = { startRow: newRow, endRow: newRow, startCol: this.selectedCells.startCol, endCol: this.selectedCells.startCol };
+          this.scrollCellIntoView(newRow, this.selectedCells.startCol);
+        }
+        break;
+      case "spreadsheet.moveDown":
         if (this.selectedCols.length > 0) {
           const col = this.selectedCols[0];
-
           this.selectedCols = [];
           this.selectedRows = [];
-          this.selectedCells = {
-            startRow: 1,
-            endRow: 1,
-            startCol: col,
-            endCol: col,
-          };
-
-          if (this.statsVisualizer) {
-            this.statsVisualizer.hide();
-            this.hasStatsPanel = false;
-          }
-
-          this.updateToDraw(ToDraw.Selection);
-          this.notifySelectionChange();
-          this.updateLayout();
-          break;
-        }
-
-        if (this.selectedCells) {
-          const { startRow, endRow, startCol, endCol } = this.selectedCells;
-          const row = event.shiftKey ? endRow : startRow;
-          const col = event.shiftKey ? endCol : startCol;
-
-          const prevScrollY = this.scrollY;
-
-          this.selectedCells = {
-            startRow: event.shiftKey ? startRow : row + 1,
-            endRow: event.shiftKey ? row + 1 : row + 1,
-            startCol: event.shiftKey ? startCol : col,
-            endCol: event.shiftKey ? endCol : col,
-          };
-
-          this.selectedCells.startRow = Math.min(this.totalRows, this.selectedCells.startRow);
-          this.selectedCells.endRow = Math.min(this.totalRows, this.selectedCells.endRow);
-
-          this.scrollY = minMax((row + 1) * this.options.cellHeight - this.canvas.height / 2, 0, this.totalScrollY);
-          if (prevScrollY !== this.scrollY) {
-            this.preloadDataForScroll(this.scrollY);
-            this.updateToDraw(ToDraw.Cells);
-            this.notifySelectionChange();
-          } else {
-            this.updateToDraw(ToDraw.Selection);
-            this.notifySelectionChange();
-          }
+          this.selectedCells = { startRow: 1, endRow: 1, startCol: col, endCol: col };
+          this.statsVisualizer?.hide();
+        } else if (this.selectedCells) {
+          const newRow = Math.min(this.totalRows, this.selectedCells.startRow + 1);
+          this.selectedCells = { startRow: newRow, endRow: newRow, startCol: this.selectedCells.startCol, endCol: this.selectedCells.startCol };
+          this.scrollCellIntoView(newRow, this.selectedCells.startCol);
         }
         break;
-
-      case "ArrowLeft":
-        col = -1;
+      case "spreadsheet.moveLeft":
         if (this.selectedCols.length > 0) {
-          col = Math.max(0, this.selectedCols[0] - 1);
+          const col = Math.max(0, this.selectedCols[0] - 1);
           this.selectedCols = [col];
-          this.selectedRows = [];
           this.selectedCells = null;
-
-          if (this.statsVisualizer) {
-            await this.statsVisualizer.showStats(this.columns[col]);
-            this.hasStatsPanel = true;
-          }
-        }
-
-        if (this.selectedCells) {
-          const { startRow, endRow, startCol, endCol } = this.selectedCells;
-          const row = event.shiftKey ? endRow : startRow;
-          col = event.shiftKey ? endCol : startCol;
-
-          this.selectedCells = {
-            startRow: event.shiftKey ? startRow : row,
-            endRow: event.shiftKey ? endRow : row,
-            startCol: event.shiftKey ? startCol : col - 1,
-            endCol: event.shiftKey ? col - 1 : col - 1,
-          };
-
-          this.selectedCells.startCol = Math.max(0, this.selectedCells.startCol);
-          this.selectedCells.endCol = Math.max(0, this.selectedCells.endCol);
-        }
-
-        if (col !== -1) {
-          const prevScrollX = this.scrollX;
-          this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
-          if (prevScrollX !== this.scrollX) {
-            this.updateToDraw(ToDraw.Cells);
-            this.notifySelectionChange();
-          } else {
-            this.updateToDraw(ToDraw.Selection);
-            this.notifySelectionChange();
-          }
+          await this.statsVisualizer?.showStats(this.columns[col]);
+          this.scrollTo(this.colOffsets[col] - this.canvas.width / 2, this.scrollY);
+        } else if (this.selectedCells) {
+          const newCol = Math.max(0, this.selectedCells.startCol - 1);
+          this.selectedCells = { startRow: this.selectedCells.startRow, endRow: this.selectedCells.startRow, startCol: newCol, endCol: newCol };
+          this.scrollCellIntoView(this.selectedCells.startRow, newCol);
         }
         break;
-
-      case "ArrowRight":
-        col = -1;
+      case "spreadsheet.moveRight":
         if (this.selectedCols.length > 0) {
-          col = Math.min(this.totalCols - 1, this.selectedCols[0] + 1);
+          const col = Math.min(this.totalCols - 1, this.selectedCols[0] + 1);
           this.selectedCols = [col];
-          this.selectedRows = [];
           this.selectedCells = null;
-
-          if (this.statsVisualizer) {
-            await this.statsVisualizer.showStats(this.columns[col]);
-            this.hasStatsPanel = true;
-          }
-        }
-
-        if (this.selectedCells) {
-          const { startRow, endRow, startCol, endCol } = this.selectedCells;
-          const row = event.shiftKey ? endRow : startRow;
-          col = event.shiftKey ? endCol : startCol;
-
-          this.selectedCells = {
-            startRow: event.shiftKey ? startRow : row,
-            endRow: event.shiftKey ? endRow : row,
-            startCol: event.shiftKey ? startCol : col + 1,
-            endCol: event.shiftKey ? col + 1 : col + 1,
-          };
-
-          this.selectedCells.startCol = Math.min(this.totalCols - 1, this.selectedCells.startCol);
-          this.selectedCells.endCol = Math.min(this.totalCols - 1, this.selectedCells.endCol);
-        }
-
-        if (col !== -1) {
-          const prevScrollX = this.scrollX;
-          this.scrollX = minMax(this.colOffsets[col] - this.canvas.width / 2, 0, this.totalScrollX);
-          if (prevScrollX !== this.scrollX) {
-            this.updateToDraw(ToDraw.Cells);
-            this.notifySelectionChange();
-          } else {
-            this.updateToDraw(ToDraw.Selection);
-            this.notifySelectionChange();
-          }
+          await this.statsVisualizer?.showStats(this.columns[col]);
+          this.scrollTo(this.colOffsets[col] - this.canvas.width / 2, this.scrollY);
+        } else if (this.selectedCells) {
+          const newCol = Math.min(this.totalCols - 1, this.selectedCells.startCol + 1);
+          this.selectedCells = { startRow: this.selectedCells.startRow, endRow: this.selectedCells.startRow, startCol: newCol, endCol: newCol };
+          this.scrollCellIntoView(this.selectedCells.startRow, newCol);
         }
         break;
 
-      case "Enter":
-        if (this.selectedCells == null && this.selectedCols.length === 0 && this.selectedRows.length === 0) {
-          this.selectedCells = {
-            startRow: 1,
-            endRow: 1,
-            startCol: 0,
-            endCol: 0,
-          };
-          this.updateToDraw(ToDraw.Selection);
-          this.notifySelectionChange();
+      // Enter
+      case "spreadsheet.enter":
+        if (!this.selectedCells && this.selectedCols.length === 0 && this.selectedRows.length === 0) {
+          this.selectedCells = { startRow: 1, endRow: 1, startCol: 0, endCol: 0 };
         }
         break;
 
       // Copy
-      case "c":
-      case "C":
-        if (event.ctrlKey || event.metaKey) {
-          event.preventDefault();
-          const selected = await this.getSelectedFormattedValues();
-          if (selected.data.length > 0) {
-            const headerLine = selected.headers.join("\t");
-            const dataLines = selected.data.map((row) => row.join("\t")).join("\n");
-            const tsvText = headerLine + "\n" + dataLines;
-            navigator.clipboard.writeText(tsvText).catch(console.error);
-          }
+      case "spreadsheet.copy": {
+        event.preventDefault();
+        const selected = await this.getSelectedFormattedValues();
+        if (selected.data.length > 0) {
+          const headerLine = selected.headers.join("\t");
+          const dataLines = selected.data.map((row) => row.join("\t")).join("\n");
+          navigator.clipboard.writeText(headerLine + "\n" + dataLines).catch(console.error);
         }
         break;
+      }
 
-      // Cancel selection
-      case "Escape":
+      // Cancel
+      case "spreadsheet.cancelSelection":
         this.selectedCells = null;
-        this.updateToDraw(ToDraw.Selection);
-        this.notifySelectionChange();
         break;
 
       default:
-        handled = false;
-        break;
+        return false;
     }
 
+    this.updateToDraw(ToDraw.Selection);
+    this.notifySelectionChange();
     await this.draw();
-    return handled;
+    return true;
   }
 
   public async handleResize(): Promise<boolean> {

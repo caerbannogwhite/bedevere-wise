@@ -1,15 +1,19 @@
-import { SpreadsheetVisualizerFocusable } from "../SpreadsheetVisualizer/SpreadsheetVisualizerFocusable";
+import { SpreadsheetVisualizer } from "../SpreadsheetVisualizer/SpreadsheetVisualizer";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
 import { ColumnStatsVisualizerFocusable } from "../ColumnStatsVisualizer/ColumnStatsVisualizerFocusable";
-import { CellValueBar } from "../CellValueBar";
+import { CommandBar } from "../CommandBar";
+import { SqlEditor } from "../SqlEditor";
 import { DataProvider, DatasetMetadata } from "../../data/types";
+import { DuckDBService } from "../../data/DuckDBService";
+import { ColumnFilterManager } from "../../data/ColumnFilterManager";
+import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvider";
 import { EventDispatcher } from "../BrianApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 interface DatasetTab {
   metadata: DatasetMetadata;
   dataProvider: DataProvider;
-  spreadsheetVisualizer: SpreadsheetVisualizerFocusable;
+  spreadsheetVisualizer: SpreadsheetVisualizer;
   container: HTMLElement;
   isActive: boolean;
   onCloseTab?: () => void;
@@ -18,17 +22,22 @@ interface DatasetTab {
 export class MultiDatasetVisualizer {
   private container: HTMLElement;
   private tabsContainer: HTMLElement;
-  private cellValueBarContainer: HTMLElement;
+  private sqlEditorContainer: HTMLElement;
+  private commandBarContainer: HTMLElement;
   private contentContainer: HTMLElement;
   private tabs: DatasetTab[] = [];
   private activeTabId: string | null = null;
   private options: SpreadsheetOptions;
   private sharedStatsVisualizer: ColumnStatsVisualizerFocusable;
-  private cellValueBar: CellValueBar | null = null;
+  private commandBar: CommandBar | null = null;
+  private sqlEditor: SqlEditor | null = null;
+  private filterManager: ColumnFilterManager = new ColumnFilterManager();
+  private duckDBService: DuckDBService | null = null;
   private eventDispatcher?: EventDispatcher;
   private onCellSelectionCallback?: (cellSelection?: ICellSelection) => void;
   private onCloseTabCallback?: () => void;
   private onSelectCallback?: (dataset: DataProvider) => void;
+  private onQueryErrorCallback?: (error: Error) => void;
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
@@ -47,16 +56,21 @@ export class MultiDatasetVisualizer {
     this.tabsContainer = document.createElement("div");
     this.tabsContainer.className = "multi-dataset-visualizer__tabs-container";
 
-    // Create cell value bar container
-    this.cellValueBarContainer = document.createElement("div");
-    this.cellValueBarContainer.className = "multi-dataset-visualizer__cell-value-bar-container";
+    // Create command bar container (above tabs)
+    this.commandBarContainer = document.createElement("div");
+    this.commandBarContainer.className = "multi-dataset-visualizer__command-bar-container";
+
+    // Create SQL editor container (between tabs and content)
+    this.sqlEditorContainer = document.createElement("div");
+    this.sqlEditorContainer.className = "multi-dataset-visualizer__sql-editor-container";
 
     // Create content container
     this.contentContainer = document.createElement("div");
     this.contentContainer.className = "multi-dataset-visualizer__content-container";
 
+    this.container.appendChild(this.commandBarContainer);
+    this.container.appendChild(this.sqlEditorContainer);
     this.container.appendChild(this.tabsContainer);
-    this.container.appendChild(this.cellValueBarContainer);
     this.container.appendChild(this.contentContainer);
     parent.appendChild(this.container);
 
@@ -68,6 +82,9 @@ export class MultiDatasetVisualizer {
 
     // Setup resize handling
     this.setupResizeHandling();
+
+    // Wire up filter changes
+    this.filterManager.onChange((datasetName) => this.handleFilterChange(datasetName));
   }
 
   public async addDataset(metadata: DatasetMetadata, dataProvider: DataProvider): Promise<void> {
@@ -79,22 +96,24 @@ export class MultiDatasetVisualizer {
     // Force layout calculation to get accurate dimensions
     this.container.offsetHeight;
     this.tabsContainer.offsetHeight;
-    this.cellValueBarContainer.offsetHeight;
+    this.commandBarContainer.offsetHeight;
     this.contentContainer.offsetHeight;
 
     // Calculate actual available dimensions based on container size
     const containerWidth = this.container.clientWidth;
     const containerHeight = this.container.clientHeight;
     const tabsHeight = this.tabsContainer.offsetHeight || 40;
-    const cellValueBarHeight = this.cellValueBarContainer.offsetHeight || 32;
+    const sqlEditorHeight = this.sqlEditorContainer.offsetHeight || 0;
+    const commandBarHeight = this.commandBarContainer.offsetHeight || 32;
+    const chromeHeight = tabsHeight + sqlEditorHeight + commandBarHeight;
 
     // Calculate dimensions that will fill the available space
     const availableWidth = containerWidth > 0 ? containerWidth : this.options.width;
     const availableHeight =
       containerHeight > 0
-        ? containerHeight - tabsHeight - cellValueBarHeight
+        ? containerHeight - chromeHeight
         : this.options.height
-        ? this.options.height - tabsHeight - cellValueBarHeight
+        ? this.options.height - chromeHeight
         : undefined;
 
     // Create options for the spreadsheet with calculated dimensions
@@ -108,19 +127,23 @@ export class MultiDatasetVisualizer {
     };
 
     // Create wrapper for event handling
-    const spreadsheetVisualizer = new SpreadsheetVisualizerFocusable(
+    const spreadsheetVisualizer = new SpreadsheetVisualizer(
       datasetContainer,
       dataProvider,
       spreadsheetOptions,
+      this.sharedStatsVisualizer,
       `spreadsheet-${metadata.name}`
     );
 
+    // Wire filter manager for header indicators
+    spreadsheetVisualizer.setFilterManager(this.filterManager, metadata.name);
+
     // Connect selection change to cell value bar
     spreadsheetVisualizer.addOnSelectionChangeSubscription((selection) => {
-      if (this.cellValueBar && selection) {
-        this.cellValueBar.updateCell(selection);
-      } else if (this.cellValueBar) {
-        this.cellValueBar.updateCell(undefined);
+      if (this.commandBar && selection) {
+        this.commandBar.updateCell(selection);
+      } else if (this.commandBar) {
+        this.commandBar.updateCell(undefined);
       }
     });
 
@@ -145,7 +168,7 @@ export class MultiDatasetVisualizer {
 
     // If this is the first tab, activate it and hide empty state
     if (this.tabs.length === 1) {
-      this.showCellValueBar();
+      this.showCommandBar();
       await this.activateTab(metadata.name);
     }
   }
@@ -191,7 +214,7 @@ export class MultiDatasetVisualizer {
         // Hide stats visualizer when no datasets are active
         this.sharedStatsVisualizer.hide();
         // Hide cell value bar when no datasets remain
-        this.hideCellValueBar();
+        this.hideCommandBar();
       }
     }
 
@@ -227,6 +250,10 @@ export class MultiDatasetVisualizer {
 
   public setOnCloseTabCallback(callback: () => void): void {
     this.onCloseTabCallback = callback;
+  }
+
+  public setOnQueryErrorCallback(callback: (error: Error) => void): void {
+    this.onQueryErrorCallback = callback;
   }
 
   private createTabElement(tab: DatasetTab): void {
@@ -289,7 +316,8 @@ export class MultiDatasetVisualizer {
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await newTab.spreadsheetVisualizer.resize();
 
-      // Update the shared stats visualizer with the new spreadsheet visualizer
+      // Update the shared stats visualizer with the new spreadsheet visualizer and filter manager
+      this.sharedStatsVisualizer.setFilterManager(this.filterManager, newTab.metadata.name);
       await this.sharedStatsVisualizer.setSpreadsheetVisualizer(newTab.spreadsheetVisualizer);
 
       if (this.onCellSelectionCallback) {
@@ -344,6 +372,107 @@ export class MultiDatasetVisualizer {
     await this.handleResize();
   }
 
+  public getStatsVisualizer(): ColumnStatsVisualizerFocusable {
+    return this.sharedStatsVisualizer;
+  }
+
+  public setColumnStatsParent(container: HTMLElement): void {
+    const statsElement = this.sharedStatsVisualizer.getContainer();
+    if (statsElement.parentNode) {
+      statsElement.parentNode.removeChild(statsElement);
+    }
+    container.appendChild(statsElement);
+  }
+
+  public getFilterManager(): ColumnFilterManager {
+    return this.filterManager;
+  }
+
+  public initSqlEditor(duckDBService: DuckDBService): void {
+    if (this.sqlEditor) return;
+
+    this.duckDBService = duckDBService;
+    this.sqlEditor = new SqlEditor(this.sqlEditorContainer, duckDBService);
+
+    // Register with event dispatcher
+    if (this.eventDispatcher) {
+      this.eventDispatcher.registerComponent(this.sqlEditor);
+    }
+
+    // Wire up query execution
+    this.sqlEditor.setOnExecuteCallback(async (query: string) => {
+      try {
+        await this.addQueryResult(query, duckDBService);
+      } catch (error) {
+        if (this.onQueryErrorCallback) {
+          this.onQueryErrorCallback(error instanceof Error ? error : new Error(String(error)));
+        }
+      }
+    });
+
+    // Resize spreadsheet when editor toggles
+    this.sqlEditor.setOnToggleCallback(() => {
+      // Give the CSS transition time to apply, then resize
+      setTimeout(() => this.handleResize(), 260);
+    });
+  }
+
+  public toggleSqlEditor(): void {
+    this.sqlEditor?.toggle();
+  }
+
+  public getSqlEditor(): SqlEditor | null {
+    return this.sqlEditor;
+  }
+
+  private async handleFilterChange(datasetName: string): Promise<void> {
+    const tab = this.tabs.find((t) => t.metadata.name === datasetName);
+    if (!tab || !this.duckDBService) return;
+
+    // Determine the source table name
+    const currentProvider = tab.dataProvider;
+    let sourceTableName: string;
+    if (currentProvider instanceof FilteredDuckDBDataProvider) {
+      sourceTableName = currentProvider.getSourceTableName();
+    } else {
+      sourceTableName = tab.metadata.name;
+    }
+
+    if (this.filterManager.hasAnyFiltersOrSorts(datasetName)) {
+      // Create a filtered provider
+      const filteredProvider = new FilteredDuckDBDataProvider(
+        this.duckDBService,
+        sourceTableName,
+        this.filterManager,
+        datasetName,
+        tab.metadata.fileName ?? ""
+      );
+      tab.dataProvider = filteredProvider;
+      await tab.spreadsheetVisualizer.reinitialize(filteredProvider);
+    } else {
+      // No filters - use the original DuckDBDataProvider
+      const { DuckDBDataProvider } = await import("../../data/DuckDBDataProvider");
+      const originalProvider = new DuckDBDataProvider(this.duckDBService, sourceTableName, tab.metadata.fileName ?? "");
+      tab.dataProvider = originalProvider;
+      await tab.spreadsheetVisualizer.reinitialize(originalProvider);
+    }
+
+    // Update stats visualizer to reflect filter state
+    await this.sharedStatsVisualizer.setSpreadsheetVisualizer(tab.spreadsheetVisualizer);
+  }
+
+  public async addQueryResult(query: string, duckDBService: DuckDBService): Promise<void> {
+    try {
+      const dataProvider = await duckDBService.executeQueryAsDataProvider(query);
+      const metadata = await dataProvider.getMetadata();
+      await this.addDataset(metadata, dataProvider);
+      await this.switchToDataset(metadata.name);
+    } catch (error) {
+      console.error("Query execution failed:", error);
+      throw error;
+    }
+  }
+
   public destroy(): void {
     // Clean up all spreadsheet visualizers
     this.tabs.forEach((tab) => {
@@ -353,25 +482,47 @@ export class MultiDatasetVisualizer {
     // Hide shared stats visualizer
     this.sharedStatsVisualizer.hide();
 
+    // Clean up SQL editor
+    if (this.sqlEditor) {
+      if (this.eventDispatcher) {
+        this.eventDispatcher.unregisterComponent(this.sqlEditor.componentId);
+      }
+      this.sqlEditor.destroy();
+      this.sqlEditor = null;
+    }
+
     // Clean up cell value bar
-    if (this.cellValueBar) {
-      this.cellValueBar.destroy();
-      this.cellValueBar = null;
+    if (this.commandBar) {
+      this.commandBar.destroy();
+      this.commandBar = null;
     }
   }
 
-  private showCellValueBar(): void {
-    if (this.cellValueBar) return;
+  private showCommandBar(): void {
+    if (this.commandBar) return;
 
-    this.cellValueBar = new CellValueBar({
-      container: this.cellValueBarContainer,
+    this.commandBar = new CommandBar({
+      container: this.commandBarContainer,
     });
+
+    // Wire up SQL editor toggle from cell value bar
+    this.commandBar.setOnToggleSqlEditorCallback(() => {
+      this.toggleSqlEditor();
+    });
+
+    // Sync toggle button state when SQL editor toggles
+    if (this.sqlEditor) {
+      this.sqlEditor.setOnToggleCallback((isExpanded) => {
+        this.commandBar?.setSqlEditorExpanded(isExpanded);
+        setTimeout(() => this.handleResize(), 260);
+      });
+    }
   }
 
-  private hideCellValueBar(): void {
-    if (this.cellValueBar) {
-      this.cellValueBar.destroy();
-      this.cellValueBar = null;
+  private hideCommandBar(): void {
+    if (this.commandBar) {
+      this.commandBar.destroy();
+      this.commandBar = null;
     }
   }
 }

@@ -39,6 +39,7 @@ import { ColumnInternal } from "./internals";
 import { minMax } from "./utils/drawing";
 import { getFormattedValueAndStyle } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
+import { ColumnFilterManager } from "../../data/ColumnFilterManager";
 
 export enum ToDraw {
   None = 0,
@@ -66,6 +67,9 @@ type RequiredSpreadsheetOptions = Omit<Required<SpreadsheetOptions>, "height" | 
 
 export class SpreadsheetVisualizerBase {
   protected container: HTMLElement;
+  protected scrollContainer: HTMLElement;
+  protected scrollSpacer: HTMLElement;
+  protected canvasGroup: HTMLElement;
   protected canvas: HTMLCanvasElement;
   protected selectionCanvas: HTMLCanvasElement;
   protected hoverCanvas: HTMLCanvasElement;
@@ -84,7 +88,7 @@ export class SpreadsheetVisualizerBase {
   protected scrollY = 0;
   protected cache: SpreadsheetCache;
 
-  // Cache
+  // Layout cache
   protected colWidths: number[] = [];
   protected colOffsets: number[] = [];
   protected totalWidth = 0;
@@ -92,39 +96,69 @@ export class SpreadsheetVisualizerBase {
   protected totalScrollY = 0;
   protected totalScrollX = 0;
 
+  // Filter/sort state for header indicators
+  protected filterManager: ColumnFilterManager | null = null;
+  protected datasetName: string = "";
+
   // Theme management
   protected themeCleanup: (() => void) | null = null;
 
   constructor(container: HTMLElement, dataProvider: DataProvider, options: Partial<SpreadsheetOptions> = {}) {
     this.container = container;
 
+    // Scroll container: native scrollbars replace the old canvas-drawn ones.
+    // A spacer div inside creates the full content extent; the canvas group
+    // sticks to the viewport via position:sticky.
+    this.scrollContainer = document.createElement("div");
+    this.scrollContainer.style.cssText = "overflow:auto;position:relative;width:100%;height:100%;outline:none;";
+    this.scrollContainer.tabIndex = 0; // Make focusable for keyboard events
+
+    this.scrollSpacer = document.createElement("div");
+    this.scrollSpacer.style.cssText = "position:relative;";
+
+    this.canvasGroup = document.createElement("div");
+    this.canvasGroup.style.cssText = "position:sticky;top:0;left:0;width:0;height:0;";
+
+    // Main canvas
     this.canvas = document.createElement("canvas");
-    this.container.appendChild(this.canvas);
     this.ctx = this.canvas.getContext("2d")!;
 
-    // Create and setup an overlay canvas for selection
+    // Selection overlay canvas
     this.selectionCanvas = document.createElement("canvas");
-    this.selectionCanvas.id = "selection-canvas";
-    this.selectionCanvas.style.position = "absolute";
-    this.selectionCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.selectionCanvas.style.left = `${this.canvas.offsetLeft}px`;
-    this.selectionCanvas.style.pointerEvents = "none"; // Allow mouse events to pass through to main canvas
+    this.selectionCanvas.style.cssText = "position:absolute;top:0;left:0;pointer-events:none;";
     this.selectionCtx = this.selectionCanvas.getContext("2d", { alpha: true })!;
 
-    // Insert selection canvas after the main canvas
-    this.container.insertBefore(this.selectionCanvas, this.canvas.nextSibling);
-
-    // Create and setup an overlay canvas for hover
+    // Hover overlay canvas
     this.hoverCanvas = document.createElement("canvas");
-    this.hoverCanvas.id = "hover-canvas";
-    this.hoverCanvas.style.position = "absolute";
-    this.hoverCanvas.style.top = `${this.canvas.offsetTop}px`;
-    this.hoverCanvas.style.left = `${this.canvas.offsetLeft}px`;
-    this.hoverCanvas.style.pointerEvents = "none"; // Allow mouse events to pass through to main canvas
+    this.hoverCanvas.style.cssText = "position:absolute;top:0;left:0;pointer-events:none;";
     this.hoverCtx = this.hoverCanvas.getContext("2d", { alpha: true })!;
 
-    // Insert hover canvas after the main canvas
-    this.container.insertBefore(this.hoverCanvas, this.canvas.nextSibling);
+    this.canvasGroup.appendChild(this.canvas);
+    this.canvasGroup.appendChild(this.selectionCanvas);
+    this.canvasGroup.appendChild(this.hoverCanvas);
+    this.scrollSpacer.appendChild(this.canvasGroup);
+    this.scrollContainer.appendChild(this.scrollSpacer);
+    this.container.appendChild(this.scrollContainer);
+
+    // Sync scroll position from native scrollbar to internal state
+    this.scrollContainer.addEventListener("scroll", () => {
+      this.scrollX = this.scrollContainer.scrollLeft;
+      this.scrollY = this.scrollContainer.scrollTop;
+      this.preloadDataForScroll(this.scrollY);
+      this.updateToDraw(ToDraw.Cells);
+      this.draw().catch(console.error);
+    });
+
+    // Prevent the scroll container from handling navigation keys synchronously.
+    // The EventDispatcher processes keydown asynchronously, so its preventDefault()
+    // runs too late — the browser has already scrolled the container. This listener
+    // fires synchronously during the bubble phase before the default action.
+    this.scrollContainer.addEventListener("keydown", (e) => {
+      const navKeys = ["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight", "Home", "End", "PageUp", "PageDown"];
+      if (navKeys.includes(e.key)) {
+        e.preventDefault();
+      }
+    });
 
     // Initialize data provider
     this.dataProvider = dataProvider;
@@ -206,6 +240,47 @@ export class SpreadsheetVisualizerBase {
     this.options.width = minMax(this.options.width, this.options.minWidth, this.options.maxWidth);
   }
 
+  // Overridden by SpreadsheetVisualizerSelection — stubs needed for scroll listener
+  protected updateToDraw(_toDraw: ToDraw): void {}
+  protected async draw(): Promise<void> {}
+
+  /** Programmatically scroll to a position via the native scroll container. */
+  protected scrollTo(x: number, y: number): void {
+    this.scrollContainer.scrollLeft = Math.max(0, Math.min(x, this.totalScrollX));
+    this.scrollContainer.scrollTop = Math.max(0, Math.min(y, this.totalScrollY));
+  }
+
+  /** Scroll the minimum amount needed to bring a cell into the visible area. */
+  protected scrollCellIntoView(row: number, col: number): void {
+    const cellY = row * this.options.cellHeight;
+    const cellX = col < this.colOffsets.length ? this.colOffsets[col] : 0;
+    const cellW = col < this.colWidths.length ? this.colWidths[col] : 0;
+    const cellH = this.options.cellHeight;
+    const headerH = this.options.cellHeight; // header row height
+
+    let newScrollY = this.scrollY;
+    let newScrollX = this.scrollX;
+
+    // Vertical: keep cell within viewport (below header)
+    if (cellY < this.scrollY + headerH) {
+      newScrollY = cellY - headerH;
+    } else if (cellY + cellH > this.scrollY + this.canvas.height) {
+      newScrollY = cellY + cellH - this.canvas.height;
+    }
+
+    // Horizontal: keep cell within viewport (past row header)
+    const rowHeaderW = this.options.rowHeaderWidth;
+    if (cellX < this.scrollX + rowHeaderW) {
+      newScrollX = cellX - rowHeaderW;
+    } else if (cellX + cellW > this.scrollX + this.canvas.width) {
+      newScrollX = cellX + cellW - this.canvas.width;
+    }
+
+    if (newScrollX !== this.scrollX || newScrollY !== this.scrollY) {
+      this.scrollTo(newScrollX, newScrollY);
+    }
+  }
+
   // Accessor methods for wrapper
   public getContainer(): HTMLElement {
     return this.container;
@@ -217,6 +292,11 @@ export class SpreadsheetVisualizerBase {
 
   public getDataProvider(): DataProvider {
     return this.dataProvider;
+  }
+
+  public setFilterManager(filterManager: ColumnFilterManager, datasetName: string): void {
+    this.filterManager = filterManager;
+    this.datasetName = datasetName;
   }
 
   private guessColumnWidths(values: any[][], col: ColumnInternal, colIndex: number): number {
@@ -249,13 +329,30 @@ export class SpreadsheetVisualizerBase {
     const maxRows = Math.min(this.options.maxFormatGuessLength, this.totalRows);
     const rows = await this.cache.getData(0, maxRows);
 
-    const availableWidth = this.canvas.width - this.options.rowHeaderWidth;
-
     // Calculate minimum widths based on content
     this.colWidths = this.columns.map((col, colIndex) => {
       col.widthPx = this.guessColumnWidths(rows, col, colIndex);
+
+      // Widen columns that have active sort/filter to fit indicators
+      if (this.filterManager) {
+        let indicatorSpace = 0;
+        if (this.filterManager.isColumnSorted(this.datasetName, col.name)) indicatorSpace += 16;
+        if (this.filterManager.isColumnFiltered(this.datasetName, col.name)) indicatorSpace += 10;
+        if (indicatorSpace > 0) {
+          col.widthPx = Math.min(col.widthPx + indicatorSpace, this.options.maxCellWidth);
+        }
+      }
+
       return col.widthPx;
     });
+
+    // Distribute remaining viewport space equally among columns
+    const viewportWidth = this.canvas.width - this.options.rowHeaderWidth;
+    const contentTotal = this.colWidths.reduce((sum, w) => sum + w, 0);
+    if (contentTotal < viewportWidth && this.colWidths.length > 0) {
+      const extra = (viewportWidth - contentTotal) / this.colWidths.length;
+      this.colWidths = this.colWidths.map((w) => Math.min(w + extra, this.options.maxCellWidth));
+    }
 
     // Calculate column offsets
     this.colOffsets = [this.options.rowHeaderWidth];
@@ -265,25 +362,19 @@ export class SpreadsheetVisualizerBase {
 
     // Calculate total width
     this.totalWidth = this.colOffsets[this.colOffsets.length - 1] + this.colWidths[this.colWidths.length - 1];
+    this.totalScrollX = Math.max(0, this.totalWidth - this.canvas.width);
 
-    const hasScrollbar = this.totalWidth > availableWidth;
-
-    this.totalScrollX = this.totalWidth - this.canvas.width + (hasScrollbar ? this.options.scrollbarWidth : 0);
+    // Update spacer width for native scrollbar
+    this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.canvas.width)}px`;
   }
 
   protected calculateRowHeight() {
-    const availableHeight = this.canvas.height - this.options.scrollbarWidth;
-    const minTotalHeight = this.columns.length * this.options.cellHeight;
-    const hasScrollbar = minTotalHeight > availableHeight;
+    // +1 row for the header
+    this.totalHeight = (this.totalRows + 1) * this.options.cellHeight;
+    this.totalScrollY = Math.max(0, this.totalHeight - this.canvas.height);
 
-    this.totalHeight = this.totalRows * this.options.cellHeight;
-    this.totalScrollY = Math.max(
-      0,
-      this.totalHeight -
-        this.canvas.height +
-        this.options.cellHeight * 2 + // header
-        (hasScrollbar ? this.options.scrollbarWidth : 0),
-    );
+    // Update spacer height for native scrollbar
+    this.scrollSpacer.style.height = `${Math.max(this.totalHeight, this.canvas.height)}px`;
   }
 
   protected async preloadDataForScroll(scrollY: number): Promise<void> {
@@ -298,14 +389,6 @@ export class SpreadsheetVisualizerBase {
 
     // Load data asynchronously without blocking
     this.cache.loadChunk(preloadStart, preloadEnd).catch(console.error);
-  }
-
-  protected isMouseOverVerticalScrollbar(x: number, _: number): boolean {
-    return x >= this.canvas.width - this.options.scrollbarWidth;
-  }
-
-  protected isMouseOverHorizontalScrollbar(_: number, y: number): boolean {
-    return y >= this.canvas.height - this.options.scrollbarWidth;
   }
 
   protected isMouseOverColumnHeader(x: number, y: number): boolean {
@@ -414,16 +497,64 @@ export class SpreadsheetVisualizerBase {
     for (let col = firstVisibleColumnIndex; col <= lastVisibleColumnIndex; col++) {
       ctx.strokeRect(x, 0, this.colWidths[col], this.options.cellHeight);
 
+      // Determine sort/filter state for indicator space reservation
+      let indicatorSpace = 0;
+      let sortDir: "asc" | "desc" | null = null;
+      let isFiltered = false;
+      if (this.filterManager) {
+        sortDir = this.filterManager.isColumnSorted(this.datasetName, this.columns[col].name);
+        isFiltered = this.filterManager.isColumnFiltered(this.datasetName, this.columns[col].name);
+        if (sortDir) indicatorSpace += 16;
+        if (isFiltered) indicatorSpace += 10;
+      }
+
       const textWidth = ctx.measureText(this.columns[col].name).width;
-      const availableWidth = this.colWidths[col] - this.options.cellPadding * 2;
-      const availableTextLength = Math.floor((availableWidth / textWidth) * this.columns[col].name.length);
+      const availableWidth = Math.max(0, this.colWidths[col] - this.options.cellPadding * 2 - indicatorSpace);
+      const availableTextLength = textWidth > 0 ? Math.floor((availableWidth / textWidth) * this.columns[col].name.length) : 0;
       const text = this.columns[col].name.slice(0, availableTextLength);
 
       const textX = x + this.options.cellPadding;
-      const textY = this.options.cellHeight >> 1; // Divide by 2 to center the text
+      const textY = this.options.cellHeight >> 1;
 
-      ctx.strokeText(text, textX, textY, availableWidth);
-      ctx.fillText(text, textX, textY, availableWidth);
+      if (availableWidth > 0 && text.length > 0) {
+        ctx.strokeText(text, textX, textY, availableWidth);
+        ctx.fillText(text, textX, textY, availableWidth);
+      }
+
+      // Draw sort/filter indicators (right-aligned)
+      if (sortDir || isFiltered) {
+        const indicatorBaseX = x + this.colWidths[col] - this.options.cellPadding;
+        const arrowSize = 5;
+
+        if (sortDir) {
+          ctx.fillStyle = this.options.headerTextColor;
+          ctx.beginPath();
+          const arrowX = indicatorBaseX - arrowSize;
+          if (sortDir === "asc") {
+            ctx.moveTo(arrowX - arrowSize, textY + arrowSize / 2);
+            ctx.lineTo(arrowX, textY - arrowSize / 2);
+            ctx.lineTo(arrowX + arrowSize, textY + arrowSize / 2);
+          } else {
+            ctx.moveTo(arrowX - arrowSize, textY - arrowSize / 2);
+            ctx.lineTo(arrowX, textY + arrowSize / 2);
+            ctx.lineTo(arrowX + arrowSize, textY - arrowSize / 2);
+          }
+          ctx.closePath();
+          ctx.fill();
+        }
+
+        if (isFiltered) {
+          const dotX = sortDir ? indicatorBaseX - 22 : indicatorBaseX - 4;
+          ctx.fillStyle = this.options.selectionBorderColor;
+          ctx.beginPath();
+          ctx.arc(dotX, textY, 3, 0, 2 * Math.PI);
+          ctx.fill();
+        }
+
+        // Restore text styles
+        ctx.fillStyle = this.options.headerTextColor;
+        ctx.textAlign = "left";
+      }
 
       x += this.colWidths[col];
     }
@@ -456,7 +587,8 @@ export class SpreadsheetVisualizerBase {
 
         ctx.fillStyle = style.textColor || this.options.cellTextColor;
         ctx.textAlign = style.textAlign || this.options.textAlign;
-        ctx.fillText(formatted, textX, textY);
+        const maxTextWidth = cellWidth - this.options.cellPadding * 2;
+        ctx.fillText(formatted, textX, textY, maxTextWidth);
 
         // Draw cell border
         ctx.strokeStyle = this.options.borderColor;
@@ -495,52 +627,4 @@ export class SpreadsheetVisualizerBase {
     }
   }
 
-  protected drawScrollbars() {
-    const { ctx, canvas } = this;
-    const { width, height } = canvas;
-    const sw = this.options.scrollbarWidth;
-
-    const hasVerticalScrollbar = this.totalHeight > height;
-    const hasHorizontalScrollbar = this.totalWidth > width;
-
-    // The vertical track stops short of the horizontal scrollbar (and vice
-    // versa) so the two never overlap — leaving a square gap in the bottom-
-    // right corner that is filled with a distinct background.
-    const vTrackHeight = height - (hasHorizontalScrollbar ? sw : 0);
-    const hTrackWidth = width - (hasVerticalScrollbar ? sw : 0);
-
-    // Draw vertical scrollbar
-    if (hasVerticalScrollbar) {
-      const thumbHeight = Math.max(sw, (vTrackHeight / this.totalHeight) * vTrackHeight);
-      const thumbY = (this.scrollY / this.totalScrollY) * (vTrackHeight - thumbHeight);
-
-      // Track
-      ctx.fillStyle = this.options.scrollbarColor;
-      ctx.fillRect(width - sw, 0, sw, vTrackHeight);
-
-      // Thumb
-      ctx.fillStyle = this.options.scrollbarThumbColor;
-      ctx.fillRect(width - sw, thumbY, sw, thumbHeight);
-    }
-
-    // Draw horizontal scrollbar
-    if (hasHorizontalScrollbar) {
-      const thumbWidth = Math.max(sw, (hTrackWidth / this.totalWidth) * hTrackWidth);
-      const thumbX = (this.scrollX / this.totalScrollX) * (hTrackWidth - thumbWidth);
-
-      // Track
-      ctx.fillStyle = this.options.scrollbarColor;
-      ctx.fillRect(0, height - sw, hTrackWidth, sw);
-
-      // Thumb
-      ctx.fillStyle = this.options.scrollbarThumbColor;
-      ctx.fillRect(thumbX, height - sw, thumbWidth, sw);
-    }
-
-    // Corner square where both scrollbars meet
-    if (hasVerticalScrollbar && hasHorizontalScrollbar) {
-      ctx.fillStyle = this.options.headerBackgroundColor;
-      ctx.fillRect(width - sw, height - sw, sw, sw);
-    }
-  }
 }
