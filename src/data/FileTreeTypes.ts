@@ -1,0 +1,42 @@
+export type SupportedFileType = "csv" | "tsv" | "json" | "parquet" | "xlsx" | "xls" | "sas7bdat" | "xpt" | "sav" | "dta";
+
+export type FileNodeKind = "folder" | "file" | "sheet";
+
+export interface FileTreeNode {
+  id: string;
+  name: string;
+  alias?: string;
+  kind: FileNodeKind;
+  children?: FileTreeNode[];
+  fileHandle?: File | FileSystemFileHandle;
+  fileType?: SupportedFileType;
+  isImported: boolean;
+  isExpanded: boolean;
+  sheetName?: string;
+  /** True if the format handler reports this type as unavailable (extension not loaded) */
+  isUnavailable?: boolean;
+}
+
+/** Map file extensions to SupportedFileType */
+export function detectFileType(fileName: string): SupportedFileType | null {
+  const ext = fileName.split(".").pop()?.toLowerCase();
+  switch (ext) {
+    case "csv": return "csv";
+    case "tsv": return "tsv";
+    case "txt": return "csv"; // treat .txt as CSV
+    case "json": return "json";
+    case "parquet": return "parquet";
+    case "xlsx": return "xlsx";
+    case "xls": return "xls";
+    case "sas7bdat": return "sas7bdat";
+    case "xpt": return "xpt";
+    case "sav": return "sav";
+    case "dta": return "dta";
+    default: return null;
+  }
+}
+
+/** All extensions the app can potentially handle */
+export function getAllSupportedExtensions(): string[] {
+  return [".csv", ".tsv", ".txt", ".json", ".parquet", ".xlsx", ".xls", ".sas7bdat", ".xpt", ".sav", ".dta"];
+}

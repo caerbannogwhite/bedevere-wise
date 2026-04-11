@@ -43,6 +43,7 @@ export class DuckDBService {
       this.db = new duckdb.AsyncDuckDB(logger, this.worker);
 
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      await this.db.open({ allowUnsignedExtensions: true });
       this.isInitialized = true;
 
       console.log("DuckDB initialized successfully");
@@ -142,6 +143,16 @@ export class DuckDBService {
       await connection.close();
     }
     return new DuckDBDataProvider(this, tempName, "");
+  }
+
+  public async registerFileText(name: string, text: string): Promise<void> {
+    if (!this.db) throw new Error("DuckDB not initialized");
+    await this.db.registerFileText(name, text);
+  }
+
+  public async registerFileBuffer(name: string, buffer: Uint8Array): Promise<void> {
+    if (!this.db) throw new Error("DuckDB not initialized");
+    await this.db.registerFileBuffer(name, buffer);
   }
 
   public isReady(): boolean {

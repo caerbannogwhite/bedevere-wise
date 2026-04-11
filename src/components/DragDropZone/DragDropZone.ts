@@ -1,5 +1,6 @@
 import { DataProvider } from "../../data/types";
 import { DuckDBService } from "@/data/DuckDBService";
+import { FileImportService } from "@/data/FileImportService";
 
 export interface DragDropZoneOptions {
   onFileDropped?: (dataset: DataProvider) => void;
@@ -10,8 +11,10 @@ export class DragDropZone {
   private container: HTMLElement;
   private dropZone!: HTMLElement;
   private duckDBService: DuckDBService;
+  private fileImportService: FileImportService | null = null;
   private options: DragDropZoneOptions;
   private isDragOver: boolean = false;
+  private onBrowseFolderCallback?: () => void;
 
   constructor(parent: HTMLElement, duckDBService: DuckDBService, options: DragDropZoneOptions = {}) {
     this.duckDBService = duckDBService;
@@ -23,6 +26,14 @@ export class DragDropZone {
     this.setupEventListeners();
 
     parent.appendChild(this.container);
+  }
+
+  public setFileImportService(service: FileImportService): void {
+    this.fileImportService = service;
+  }
+
+  public setOnBrowseFolderCallback(callback: () => void): void {
+    this.onBrowseFolderCallback = callback;
   }
 
   public show(): void {
@@ -77,26 +88,67 @@ export class DragDropZone {
     // Create description
     const description = document.createElement("p");
     description.className = "drag-drop-zone__description";
+    const formats = this.fileImportService
+      ? this.fileImportService.getSupportedExtensions().join(", ")
+      : this.duckDBService.getSupportedFileTypes().join(", ");
     description.innerHTML = `
-      Drop a CSV or TSV file here to automatically add it as a dataset<br>
-      <small>Supported formats: ${this.duckDBService.getSupportedFileTypes().join(", ")}</small>
+      Drop a file here to automatically add it as a dataset<br>
+      <small>Supported formats: ${formats}</small>
     `;
 
-    // Create alternative action
+    // Create alternative action — split button: main "Browse" + dropdown arrow for folder
     const alternative = document.createElement("div");
     alternative.className = "drag-drop-zone__alternative";
 
-    const browseButton = document.createElement("button");
-    browseButton.className = "drag-drop-zone__browse-button";
-    browseButton.textContent = "Browse Files";
-
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = this.duckDBService.getSupportedFileTypes().join(",");
+    fileInput.accept = this.fileImportService
+      ? this.fileImportService.getSupportedExtensions().join(",")
+      : this.duckDBService.getSupportedFileTypes().join(",");
     fileInput.style.display = "none";
-    fileInput.multiple = false;
+    fileInput.multiple = true;
 
-    alternative.appendChild(browseButton);
+    const splitButton = document.createElement("div");
+    splitButton.className = "drag-drop-zone__split-button";
+
+    const mainButton = document.createElement("button");
+    mainButton.className = "drag-drop-zone__browse-button";
+    mainButton.textContent = "Browse Files";
+    mainButton.addEventListener("click", () => fileInput.click());
+
+    const dropdownButton = document.createElement("button");
+    dropdownButton.className = "drag-drop-zone__browse-dropdown";
+    dropdownButton.textContent = "▾";
+    dropdownButton.title = "Browse Folder";
+
+    const dropdownMenu = document.createElement("div");
+    dropdownMenu.className = "drag-drop-zone__dropdown-menu";
+    dropdownMenu.style.display = "none";
+
+    const folderOption = document.createElement("div");
+    folderOption.className = "drag-drop-zone__dropdown-item";
+    folderOption.textContent = "Browse Folder";
+    folderOption.addEventListener("click", () => {
+      dropdownMenu.style.display = "none";
+      this.onBrowseFolderCallback?.();
+    });
+    dropdownMenu.appendChild(folderOption);
+
+    dropdownButton.addEventListener("click", () => {
+      dropdownMenu.style.display = dropdownMenu.style.display === "none" ? "block" : "none";
+    });
+
+    // Close dropdown on outside click
+    document.addEventListener("click", (e) => {
+      if (!splitButton.contains(e.target as Node)) {
+        dropdownMenu.style.display = "none";
+      }
+    });
+
+    splitButton.appendChild(mainButton);
+    splitButton.appendChild(dropdownButton);
+    splitButton.appendChild(dropdownMenu);
+    alternative.appendChild(splitButton);
     alternative.appendChild(fileInput);
 
     // Assemble drop zone
@@ -111,14 +163,10 @@ export class DragDropZone {
     fileInput.addEventListener("change", (e) => {
       const files = (e.target as HTMLInputElement).files;
       if (files && files.length > 0) {
-        this._handleFiles([files[0]]);
+        this._handleFiles(Array.from(files));
       }
     });
 
-    // Setup browse button event
-    browseButton.addEventListener("click", () => {
-      fileInput.click();
-    });
   }
 
   private setupEventListeners(): void {
@@ -169,31 +217,43 @@ export class DragDropZone {
 
   private async _handleFiles(files: File[]): Promise<void> {
     for (const file of files) {
-      if (!this.duckDBService.isSupportedFileType(file)) {
-        this.showError(`Unsupported file type: ${file.type || "unknown"}. Please use CSV or TSV files.`);
-        return;
-      }
-
-      try {
-        this.showLoading();
-
-        // const result = await parseFile(file);
-        const tableName = file.name.replace(/\.[^/.]+$/, "");
-        const result = await this.duckDBService.importFile(file, tableName, {
-          fileType: "csv",
-          hasHeader: true,
-          delimiter: ",",
-        });
-
-        this.hideLoading();
-
-        if (this.options.onFileDropped) {
-          this.options.onFileDropped(result);
+      // Use FileImportService if available, fallback to old CSV-only path
+      if (this.fileImportService) {
+        if (!this.fileImportService.canImport(file.name)) {
+          this.showError(`Unsupported file type: ${file.name.split(".").pop() || "unknown"}`);
+          return;
         }
-      } catch (error) {
-        this.hideLoading();
-        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        this.showError(`Failed to parse file: ${errorMessage}`);
+
+        try {
+          this.showLoading();
+          const result = await this.fileImportService.importFile(file);
+          this.hideLoading();
+          this.options.onFileDropped?.(result);
+        } catch (error) {
+          this.hideLoading();
+          this.showError(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
+      } else {
+        // Legacy fallback
+        if (!this.duckDBService.isSupportedFileType(file)) {
+          this.showError(`Unsupported file type: ${file.type || "unknown"}. Please use CSV or TSV files.`);
+          return;
+        }
+
+        try {
+          this.showLoading();
+          const tableName = file.name.replace(/\.[^/.]+$/, "");
+          const result = await this.duckDBService.importFile(file, tableName, {
+            fileType: "csv",
+            hasHeader: true,
+            delimiter: ",",
+          });
+          this.hideLoading();
+          this.options.onFileDropped?.(result);
+        } catch (error) {
+          this.hideLoading();
+          this.showError(`Failed to parse file: ${error instanceof Error ? error.message : "Unknown error"}`);
+        }
       }
     }
   }

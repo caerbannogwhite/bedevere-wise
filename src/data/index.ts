@@ -3,3 +3,7 @@ export * from "./DuckDBService";
 export * from "./DuckDBDataProvider";
 export * from "./ColumnFilterManager";
 export * from "./FilteredDuckDBDataProvider";
+export * from "./FileTreeTypes";
+export * from "./FileImportService";
+export * from "./FolderScanService";
+export * from "./DuckDBExtensionLoader";
