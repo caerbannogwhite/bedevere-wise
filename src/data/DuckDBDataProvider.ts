@@ -1,5 +1,19 @@
 import { DuckDBService } from "./DuckDBService";
-import { Column, ColumnStats, DataProvider, DatasetMetadata } from "./types";
+import {
+  Column,
+  ColumnStats,
+  DataProvider,
+  DatasetMetadata,
+  DataType,
+  isIntegerType,
+  isNumericType,
+  isTemporalType,
+  isBooleanType,
+  isStringType,
+  isDateType,
+  isTimeType,
+  normalizeDuckDBType,
+} from "./types";
 
 export class DuckDBDataProvider implements DataProvider {
   private name: string = "";
@@ -42,7 +56,8 @@ export class DuckDBDataProvider implements DataProvider {
         key: column.key,
         extra: column.extra,
         default: column.default,
-        dataType: column.column_type,
+        dataType: normalizeDuckDBType(column.column_type),
+        rawType: column.column_type,
         hasNulls: column.nulls === "YES",
       })),
     };
@@ -62,156 +77,452 @@ export class DuckDBDataProvider implements DataProvider {
     return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
   }
 
-  private generateHistogram(values: number[], min: number, max: number, binCount: number = 20): Map<string, number> {
-    if (values.length === 0 || min === max) {
-      return new Map();
-    }
-
-    const binWidth = (max - min) / binCount;
-    const histogram = new Map<string, number>();
-
-    // Initialize bins
-    for (let i = 0; i < binCount; i++) {
-      const binStart = min + i * binWidth;
-      const binEnd = min + (i + 1) * binWidth;
-      const binLabel =
-        i === binCount - 1 ? `[${binStart.toFixed(2)}, ${binEnd.toFixed(2)}]` : `[${binStart.toFixed(2)}, ${binEnd.toFixed(2)})`;
-      histogram.set(binLabel, 0);
-    }
-
-    // Count values in each bin
-    for (const value of values) {
-      if (value < min || value > max) continue;
-
-      let binIndex = Math.floor((value - min) / binWidth);
-      if (binIndex >= binCount) binIndex = binCount - 1; // Handle edge case
-
-      const binStart = min + binIndex * binWidth;
-      const binEnd = min + (binIndex + 1) * binWidth;
-      const binLabel =
-        binIndex === binCount - 1 ? `[${binStart.toFixed(2)}, ${binEnd.toFixed(2)}]` : `[${binStart.toFixed(2)}, ${binEnd.toFixed(2)})`;
-
-      histogram.set(binLabel, (histogram.get(binLabel) || 0) + 1);
-    }
-
-    return histogram;
-  }
-
   public async getColumnStats(
     column: string | Column,
-    valueCountsLimit: number = 10,
-    histogramBinCount: number = 20
+    valueCountsLimit: number = 10
   ): Promise<ColumnStats | null> {
     const columnName = typeof column === "string" ? column : column.name;
 
-    // Get column data type
-    let dataType = typeof column === "string" ? null : column.dataType;
+    let dataType: DataType | undefined = typeof column === "string" ? undefined : column.dataType;
     if (!dataType) {
       const columnInfo = await this.duckDBService.getColumnInfo(this.name, columnName);
-      dataType = columnInfo?.data_type;
+      dataType = normalizeDuckDBType(columnInfo?.data_type);
     }
 
     try {
-      // Get basic column statistics
-      const basicStatsQuery = `
-        SELECT 
-          COUNT(*) as total_count,
-          COUNT(CASE WHEN ${columnName} IS NULL THEN 1 END) as null_count,
-          COUNT(DISTINCT ${columnName}) as distinct_count
-        FROM ${this.name}
-      `;
-
-      const basicStats = (await this.duckDBService.executeQuery(basicStatsQuery))[0];
-      const totalCount = Number(basicStats.total_count);
-      const nullCount = Number(basicStats.null_count);
-
-      // Check if column is numeric
-      const isNumeric = dataType && ["BIGINT", "DOUBLE", "INTEGER", "FLOAT"].includes(dataType);
-
-      if (!isNumeric) {
-        // Get value counts for categorical data (limit to top 100 to avoid memory issues)
-        const valueCountsQuery = `
-        SELECT ${columnName}, COUNT(*) as count
-        FROM ${this.name}
-        WHERE ${columnName} IS NOT NULL
-        GROUP BY ${columnName}
-        ORDER BY count DESC
-        LIMIT ${valueCountsLimit}
-        `;
-
-        const valueCountsResult = await this.duckDBService.executeQuery(valueCountsQuery);
-        const valueCounts = new Map<string, number>();
-
-        for (const row of valueCountsResult) {
-          const value = String(row[columnName]);
-          const count = Number(row.count);
-          valueCounts.set(value, count);
-        }
-
-        return {
-          totalCount,
-          nullCount,
-          valueCounts,
-          isCategorical: true,
-          numericStats: null,
-        };
-      } else {
-        // Get numeric statistics
-        const numericStatsQuery = `
-          SELECT 
-            MIN(${columnName}) as min_val,
-            MAX(${columnName}) as max_val,
-            AVG(${columnName}) as mean_val,
-            STDDEV(${columnName}) as stddev_val
-          FROM ${this.name}
-          WHERE ${columnName} IS NOT NULL
-        `;
-
-        const numericStats = (await this.duckDBService.executeQuery(numericStatsQuery))[0];
-
-        // Calculate median (DuckDB doesn't have built-in median, so we'll approximate)
-        const medianQuery = `
-          SELECT ${columnName}
-          FROM ${this.name}
-          WHERE ${columnName} IS NOT NULL
-          ORDER BY ${columnName}
-          LIMIT 1 OFFSET ${Math.floor((totalCount - nullCount) / 2)}
-        `;
-
-        const medianResult = await this.duckDBService.executeQuery(medianQuery);
-        const median = medianResult.length > 0 ? Number(medianResult[0][columnName]) : 0;
-
-        const valuesQuery = `
-          SELECT ${columnName}
-          FROM ${this.name}
-          WHERE ${columnName} IS NOT NULL
-        `;
-        const valuesResult = await this.duckDBService.executeQuery(valuesQuery);
-        const values = valuesResult.map((row: any) => Number(row[columnName]));
-
-        const min = Number(numericStats.min_val) || 0;
-        const max = Number(numericStats.max_val) || 0;
-
-        // Generate histogram with 20 bins (configurable)
-        const histogram = this.generateHistogram(values, min, max, histogramBinCount);
-
-        return {
-          totalCount,
-          nullCount,
-          isCategorical: false,
-          valueCounts: histogram,
-          numericStats: {
-            min,
-            max,
-            mean: Number(numericStats.mean_val) || 0,
-            median,
-            stdDev: Number(numericStats.stddev_val) || 0,
-          },
-        };
+      if (isNumericType(dataType)) {
+        return await this.getNumericStats(columnName, dataType);
       }
+      if (isTemporalType(dataType)) {
+        return await this.getTemporalStats(columnName, dataType);
+      }
+      if (isBooleanType(dataType)) {
+        return await this.getBooleanStats(columnName);
+      }
+      if (isStringType(dataType)) {
+        return await this.getCategoricalStats(columnName, valueCountsLimit);
+      }
+      // BLOB / complex / unknown — just basic count stats
+      return await this.getBasicStats(columnName);
     } catch (error) {
       console.error(`Error getting column stats for ${columnName}:`, error);
       return null;
     }
   }
+
+  /**
+   * Basic count stats only — no value counts, no histogram.
+   * Used for BLOB, complex types, etc.
+   */
+  private async getBasicStats(columnName: string): Promise<ColumnStats> {
+    const query = `
+      SELECT COUNT(*) as total_count,
+             COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
+             COUNT(DISTINCT "${columnName}") as distinct_count
+      FROM ${this.name}
+    `;
+    const row = (await this.duckDBService.executeQuery(query))[0];
+    return {
+      totalCount: Number(row.total_count),
+      nullCount: Number(row.null_count),
+      distinctCount: Number(row.distinct_count),
+      valueCounts: new Map(),
+      isCategorical: false,
+      numericStats: null,
+    };
+  }
+
+  /**
+   * Categorical stats: top-N most frequent values.
+   */
+  private async getCategoricalStats(columnName: string, limit: number): Promise<ColumnStats> {
+    const statsQuery = `
+      SELECT COUNT(*) as total_count,
+             COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
+             COUNT(DISTINCT "${columnName}") as distinct_count
+      FROM ${this.name}
+    `;
+    const basic = (await this.duckDBService.executeQuery(statsQuery))[0];
+
+    const valueCountsQuery = `
+      SELECT "${columnName}" as val, COUNT(*) as cnt
+      FROM ${this.name}
+      WHERE "${columnName}" IS NOT NULL
+      GROUP BY "${columnName}"
+      ORDER BY cnt DESC
+      LIMIT ${limit}
+    `;
+    const rows = await this.duckDBService.executeQuery(valueCountsQuery);
+    const valueCounts = new Map<string, number>();
+    const valueCountsRaw = new Map<string, any>();
+    for (const row of rows) {
+      const key = String(row.val);
+      valueCounts.set(key, Number(row.cnt));
+      valueCountsRaw.set(key, row.val);
+    }
+
+    return {
+      totalCount: Number(basic.total_count),
+      nullCount: Number(basic.null_count),
+      distinctCount: Number(basic.distinct_count),
+      valueCounts,
+      valueCountsRaw,
+      isCategorical: true,
+      numericStats: null,
+    };
+  }
+
+  /**
+   * Boolean stats: just TRUE/FALSE counts (and nulls).
+   */
+  private async getBooleanStats(columnName: string): Promise<ColumnStats> {
+    const query = `
+      SELECT COUNT(*) as total_count,
+             COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
+             COUNT(CASE WHEN "${columnName}" = TRUE THEN 1 END) as true_count,
+             COUNT(CASE WHEN "${columnName}" = FALSE THEN 1 END) as false_count
+      FROM ${this.name}
+    `;
+    const row = (await this.duckDBService.executeQuery(query))[0];
+    const trueCount = Number(row.true_count);
+    const falseCount = Number(row.false_count);
+
+    const valueCounts = new Map<string, number>();
+    const valueCountsRaw = new Map<string, any>();
+    if (trueCount > 0) {
+      valueCounts.set("TRUE", trueCount);
+      valueCountsRaw.set("TRUE", true);
+    }
+    if (falseCount > 0) {
+      valueCounts.set("FALSE", falseCount);
+      valueCountsRaw.set("FALSE", false);
+    }
+
+    return {
+      totalCount: Number(row.total_count),
+      nullCount: Number(row.null_count),
+      distinctCount: (trueCount > 0 ? 1 : 0) + (falseCount > 0 ? 1 : 0),
+      valueCounts,
+      valueCountsRaw,
+      isCategorical: true,
+      numericStats: null,
+    };
+  }
+
+  /**
+   * Numeric stats: min/max/mean/median/stddev + dynamic-bin histogram.
+   */
+  private async getNumericStats(columnName: string, dataType: DataType): Promise<ColumnStats> {
+    const statsQuery = `
+      SELECT COUNT(*) as total_count,
+             COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
+             COUNT(DISTINCT "${columnName}") as distinct_count,
+             CAST(MIN("${columnName}") AS DOUBLE) as min_val,
+             CAST(MAX("${columnName}") AS DOUBLE) as max_val,
+             CAST(AVG("${columnName}") AS DOUBLE) as mean_val,
+             CAST(MEDIAN("${columnName}") AS DOUBLE) as median_val,
+             CAST(STDDEV("${columnName}") AS DOUBLE) as stddev_val
+      FROM ${this.name}
+    `;
+    const row = (await this.duckDBService.executeQuery(statsQuery))[0];
+    const totalCount = Number(row.total_count);
+    const nullCount = Number(row.null_count);
+    const distinctCount = Number(row.distinct_count);
+
+    // If all values are NULL, skip numeric computations entirely
+    if (totalCount === nullCount || row.min_val == null || row.max_val == null) {
+      return {
+        totalCount,
+        nullCount,
+        distinctCount,
+        isCategorical: false,
+        valueCounts: new Map(),
+        histogramEdges: [],
+        numericStats: null,
+      };
+    }
+
+    const min = Number(row.min_val);
+    const max = Number(row.max_val);
+
+    // Pick histogram bin count dynamically
+    const nonNullCount = totalCount - nullCount;
+    const binCount = pickBinCount(dataType, distinctCount, min, max, nonNullCount);
+
+    const histogram = new Map<string, number>();
+    const histogramEdges: number[] = [];
+
+    if (min === max || nonNullCount === 0) {
+      // Degenerate case — single-value histogram
+      if (nonNullCount > 0) {
+        const label = formatNumericRange(min, max, dataType);
+        histogram.set(label, nonNullCount);
+        histogramEdges.push(min, max);
+      }
+    } else if (isIntegerType(dataType) && distinctCount > 0 && distinctCount <= 50) {
+      // Small-cardinality integer column: one bin per distinct value
+      const query = `
+        SELECT "${columnName}" as val, COUNT(*) as cnt
+        FROM ${this.name}
+        WHERE "${columnName}" IS NOT NULL
+        GROUP BY "${columnName}"
+        ORDER BY val
+      `;
+      const rows = await this.duckDBService.executeQuery(query);
+      for (const r of rows) {
+        const v = Number(r.val);
+        histogram.set(String(v), Number(r.cnt));
+        histogramEdges.push(v);
+      }
+    } else {
+      // Continuous histogram with `binCount` bins
+      let binWidth = (max - min) / binCount;
+      // For integer types, snap bin width to integer to avoid fractional edges
+      if (isIntegerType(dataType)) {
+        binWidth = Math.max(1, Math.ceil(binWidth));
+      }
+
+      const histQuery = `
+        SELECT CAST(FLOOR((CAST("${columnName}" AS DOUBLE) - ${min}) / ${binWidth}) AS INTEGER) AS bin, COUNT(*) AS cnt
+        FROM ${this.name}
+        WHERE "${columnName}" IS NOT NULL
+        GROUP BY bin
+        ORDER BY bin
+      `;
+      const histResult = await this.duckDBService.executeQuery(histQuery);
+
+      // Initialize bins with zero counts
+      const labels: string[] = [];
+      for (let i = 0; i < binCount; i++) {
+        const binStart = min + i * binWidth;
+        const binEnd = i === binCount - 1 ? max : min + (i + 1) * binWidth;
+        histogramEdges.push(binStart);
+        const label = formatNumericRange(binStart, binEnd, dataType);
+        labels.push(label);
+        histogram.set(label, 0);
+      }
+      histogramEdges.push(max);
+
+      for (const r of histResult) {
+        let idx = Number(r.bin);
+        if (idx < 0) idx = 0;
+        if (idx >= binCount) idx = binCount - 1;
+        histogram.set(labels[idx], (histogram.get(labels[idx]) || 0) + Number(r.cnt));
+      }
+    }
+
+    return {
+      totalCount,
+      nullCount,
+      distinctCount,
+      isCategorical: false,
+      valueCounts: histogram,
+      histogramEdges,
+      numericStats: {
+        min,
+        max,
+        mean: row.mean_val == null ? NaN : Number(row.mean_val),
+        median: row.median_val == null ? NaN : Number(row.median_val),
+        stdDev: row.stddev_val == null ? NaN : Number(row.stddev_val),
+      },
+    };
+  }
+
+  /**
+   * Temporal stats: min/max + time-bucketed histogram.
+   * For DATE/TIMESTAMP we ask DuckDB to give us epoch values so we can bin in JS.
+   */
+  private async getTemporalStats(columnName: string, dataType: DataType): Promise<ColumnStats> {
+    // Convert to microseconds since epoch for TIMESTAMP, days since epoch for DATE,
+    // and microseconds since midnight for TIME.
+    let epochExpr: string;
+    if (isDateType(dataType)) {
+      // Days since 1970-01-01
+      epochExpr = `CAST(date_diff('day', DATE '1970-01-01', "${columnName}") AS BIGINT)`;
+    } else if (isTimeType(dataType)) {
+      // Microseconds since midnight
+      epochExpr = `CAST(EXTRACT(epoch_us FROM "${columnName}") AS BIGINT)`;
+    } else {
+      // Microseconds since epoch for TIMESTAMP variants
+      epochExpr = `CAST(EXTRACT(epoch_us FROM "${columnName}") AS BIGINT)`;
+    }
+
+    const statsQuery = `
+      SELECT COUNT(*) as total_count,
+             COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
+             COUNT(DISTINCT "${columnName}") as distinct_count,
+             CAST(MIN(${epochExpr}) AS DOUBLE) as min_val,
+             CAST(MAX(${epochExpr}) AS DOUBLE) as max_val
+      FROM ${this.name}
+    `;
+    let basic: any;
+    try {
+      basic = (await this.duckDBService.executeQuery(statsQuery))[0];
+    } catch {
+      // If epoch extraction fails (unsupported type), fall back to categorical stats
+      return await this.getCategoricalStats(columnName, 10);
+    }
+
+    const totalCount = Number(basic.total_count);
+    const nullCount = Number(basic.null_count);
+    const distinctCount = Number(basic.distinct_count);
+    const nonNullCount = totalCount - nullCount;
+
+    // All-NULL column: skip temporal computations, leave temporalStats null
+    if (nonNullCount === 0 || basic.min_val == null || basic.max_val == null) {
+      return {
+        totalCount,
+        nullCount,
+        distinctCount,
+        isCategorical: false,
+        valueCounts: new Map(),
+        valueCountsRaw: new Map(),
+        histogramEdges: [],
+        numericStats: null,
+        temporalStats: null,
+      };
+    }
+
+    const min = Number(basic.min_val);
+    const max = Number(basic.max_val);
+
+    const histogram = new Map<string, number>();
+    const valueCountsRaw = new Map<string, any>();
+    const histogramEdges: number[] = [];
+
+    if (!isFinite(min) || !isFinite(max)) {
+      return {
+        totalCount,
+        nullCount,
+        distinctCount,
+        isCategorical: false,
+        valueCounts: histogram,
+        valueCountsRaw,
+        histogramEdges,
+        numericStats: null,
+        temporalStats: null,
+      };
+    }
+
+    if (min === max) {
+      const label = formatTemporalValue(min, dataType);
+      histogram.set(label, nonNullCount);
+      valueCountsRaw.set(label, min);
+      histogramEdges.push(min, max);
+    } else {
+      // Pick a bin count and granularity that fits the range.
+      const binCount = Math.min(20, Math.max(5, Math.ceil(Math.log2(nonNullCount) + 1)));
+      const binWidth = (max - min) / binCount;
+
+      const histQuery = `
+        SELECT CAST(FLOOR((CAST(${epochExpr} AS DOUBLE) - ${min}) / ${binWidth}) AS INTEGER) as bin, COUNT(*) as cnt
+        FROM ${this.name}
+        WHERE "${columnName}" IS NOT NULL
+        GROUP BY bin
+        ORDER BY bin
+      `;
+      const histResult = await this.duckDBService.executeQuery(histQuery);
+
+      const labels: string[] = [];
+      for (let i = 0; i < binCount; i++) {
+        const binStart = min + i * binWidth;
+        histogramEdges.push(binStart);
+        const label = formatTemporalValue(binStart, dataType);
+        labels.push(label);
+        histogram.set(label, 0);
+        valueCountsRaw.set(label, binStart);
+      }
+      histogramEdges.push(max);
+
+      for (const r of histResult) {
+        let idx = Number(r.bin);
+        if (idx < 0) idx = 0;
+        if (idx >= binCount) idx = binCount - 1;
+        histogram.set(labels[idx], (histogram.get(labels[idx]) || 0) + Number(r.cnt));
+      }
+    }
+
+    return {
+      totalCount,
+      nullCount,
+      distinctCount,
+      isCategorical: false,
+      valueCounts: histogram,
+      valueCountsRaw,
+      histogramEdges,
+      numericStats: null,
+      temporalStats: { min, max },
+    };
+  }
+}
+
+// ------------- helpers -------------
+
+/**
+ * Pick a histogram bin count using a blend of Sturges' rule and data shape.
+ */
+function pickBinCount(
+  dataType: DataType,
+  distinctCount: number,
+  min: number,
+  max: number,
+  nonNullCount: number
+): number {
+  if (nonNullCount <= 1) return 1;
+
+  // For integer columns with few distinct values, use one bin per value (caller
+  // handles that path separately — this is the fallback upper bound).
+  if (isIntegerType(dataType)) {
+    // Bin count cannot exceed the integer range: max - min + 1
+    const range = Math.max(1, Math.floor(max - min) + 1);
+    const sturges = Math.ceil(Math.log2(nonNullCount) + 1);
+    return Math.max(5, Math.min(30, Math.min(range, sturges * 2)));
+  }
+
+  // Float columns — Sturges scaled up, clamped to [10, 30]
+  const sturges = Math.ceil(Math.log2(nonNullCount) + 1);
+  let bins = Math.max(10, Math.min(30, sturges * 2));
+  // If distinct count is smaller, use that instead
+  if (distinctCount > 0 && distinctCount < bins) bins = distinctCount;
+  return bins;
+}
+
+function formatNumericRange(start: number, end: number, dataType: DataType): string {
+  if (isIntegerType(dataType)) {
+    const a = Math.round(start);
+    const b = Math.round(end);
+    if (a === b) return String(a);
+    return `${a}–${b}`;
+  }
+  // Fixed-precision for floats; strip trailing zeros
+  const fmt = (n: number) => {
+    if (!isFinite(n)) return String(n);
+    const abs = Math.abs(n);
+    if (abs !== 0 && (abs < 0.01 || abs >= 1e6)) return n.toExponential(2);
+    return Number(n.toFixed(2)).toString();
+  };
+  return `${fmt(start)}–${fmt(end)}`;
+}
+
+function formatTemporalValue(value: number, dataType: DataType): string {
+  if (!isFinite(value)) return "";
+  if (isDateType(dataType)) {
+    // days since 1970-01-01
+    const d = new Date(value * 86400 * 1000);
+    if (isNaN(d.getTime())) return "";
+    return d.toISOString().slice(0, 10);
+  }
+  if (isTimeType(dataType)) {
+    // microseconds since midnight
+    const totalSec = Math.floor(value / 1_000_000);
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (n: number) => n.toString().padStart(2, "0");
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+  // TIMESTAMP variants — microseconds since epoch
+  const d = new Date(value / 1000);
+  if (isNaN(d.getTime())) return "";
+  return d.toISOString().replace("T", " ").slice(0, 19);
 }
