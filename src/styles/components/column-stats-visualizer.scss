@@ -1,436 +1,492 @@
 // ColumnStatsVisualizer Component Styles
 
 .column-stats {
-  height: 100%;
   display: flex;
   flex-direction: column;
   background: #ffffff;
   overflow-y: auto;
 
-  // Dark theme
   body.theme-dark & {
     background: #1e1e1e;
   }
 
-  // Light theme
-  body.theme-light & {
-    background: #ffffff;
-  }
-
   &__header {
-    padding: 1rem;
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    padding: 0.75rem;
     border-bottom: 1px solid #e1e5e9;
     background: #f8f9fa;
+    gap: 8px;
 
-    // Dark theme
     body.theme-dark & {
       background: #2d2d30;
       border-bottom-color: #3c3c3c;
     }
 
-    // Light theme
-    body.theme-light & {
-      background: #f8f9fa;
-      border-bottom-color: #e1e5e9;
-    }
-
     h3 {
       margin: 0;
-      font-size: 1rem;
+      font-size: 0.95rem;
       color: #2c3e50;
       font-weight: 600;
-      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      word-break: break-word;
 
-      // Dark theme
       body.theme-dark & {
         color: #ffffff;
-      }
-
-      // Light theme
-      body.theme-light & {
-        color: #2c3e50;
       }
     }
   }
 
+  &__header-left {
+    flex: 1;
+    min-width: 0;
+  }
+
   &__label {
-    font-size: 0.85rem;
+    font-size: 0.8rem;
     color: #6c757d;
-    margin-top: 0.25rem;
+    margin-top: 0.2rem;
     font-style: italic;
 
-    // Dark theme
     body.theme-dark & {
       color: #999999;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d;
     }
   }
 
   &__type {
-    font-size: 0.8rem;
-    color: #495057;
+    font-size: 0.7rem;
+    color: #8b949e;
     text-transform: uppercase;
-    margin-top: 0.25rem;
-    font-weight: 500;
+    margin-top: 0.2rem;
+    font-weight: 600;
     letter-spacing: 0.5px;
 
-    // Dark theme
     body.theme-dark & {
-      color: #cccccc;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #495057;
+      color: #8b949e;
     }
   }
 
+  // Sort buttons — stacked vertically on the right
+  &__sort-stack {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex-shrink: 0;
+  }
+
+  &__sort-btn {
+    width: 26px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    background: transparent;
+    color: #9ca3af;
+    font-size: 9px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    padding: 0;
+    line-height: 1;
+
+    &:hover {
+      background: #e9ecef;
+      color: #374151;
+    }
+
+    &--active {
+      background: #0078d4;
+      color: #ffffff;
+      border-color: #0078d4;
+
+      &:hover {
+        background: #006abc;
+      }
+    }
+
+    &--clear {
+      color: #dc3545;
+      border-color: #dc3545;
+      font-size: 8px;
+
+      &:hover {
+        background: #dc3545;
+        color: #ffffff;
+      }
+    }
+
+    body.theme-dark & {
+      color: #6b7280;
+      border-color: #4b5563;
+
+      &:hover {
+        background: #37373d;
+        color: #d1d5db;
+      }
+    }
+
+    body.theme-dark &--active {
+      background: #0078d4;
+      color: #ffffff;
+      border-color: #0078d4;
+    }
+
+    body.theme-dark &--clear {
+      color: #f87171;
+      border-color: #f87171;
+
+      &:hover {
+        background: #dc3545;
+        color: #ffffff;
+      }
+    }
+  }
+
+  // Stats table
   &__container {
-    padding: 1rem;
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-    gap: 0.75rem;
+    padding: 0.5rem 0.75rem;
     border-bottom: 1px solid #e1e5e9;
 
-    // Dark theme
     body.theme-dark & {
       border-bottom-color: #3c3c3c;
     }
+  }
 
-    // Light theme
-    body.theme-light & {
-      border-bottom-color: #e1e5e9;
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8rem;
+  }
+
+  &__table-label {
+    color: #6c757d;
+    padding: 3px 8px 3px 0;
+    font-weight: 500;
+    white-space: nowrap;
+
+    body.theme-dark & {
+      color: #8b949e;
     }
   }
 
-  &__item {
-    padding: 0.75rem;
-    background: #f1f3f4;
-    border-radius: 6px;
-    border: 1px solid #e1e5e9;
+  &__table-value {
+    color: #2c3e50;
+    padding: 3px 0;
+    font-weight: 600;
+    text-align: right;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 0.78rem;
+
+    body.theme-dark & {
+      color: #e5e7eb;
+    }
+  }
+
+  // Filter section
+  &__filter {
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e1e5e9;
+
+    body.theme-dark & {
+      border-bottom-color: #3c3c3c;
+    }
+  }
+
+  &__filter-header {
     display: flex;
     justify-content: space-between;
     align-items: center;
-    transition: background-color 0.2s ease;
-
-    // Dark theme
-    body.theme-dark & {
-      background: #2a2a2a;
-      border-color: #3c3c3c;
-
-      &:hover {
-        background: #333333;
-      }
-    }
-
-    // Light theme
-    body.theme-light & {
-      background: #f1f3f4;
-      border-color: #e1e5e9;
-
-      &:hover {
-        background: #e9ecef;
-      }
-    }
+    margin-bottom: 0.4rem;
   }
 
-  &__label {
+  &__filter-title {
     font-size: 0.75rem;
-    color: #6c757d;
+    font-weight: 600;
+    color: #495057;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    font-weight: 500;
 
-    // Dark theme
     body.theme-dark & {
-      color: #999999;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d;
+      color: #cccccc;
     }
   }
 
-  &__value {
-    font-size: 1rem;
-    font-weight: 600;
-    color: #2c3e50;
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  &__filter-clear {
+    padding: 1px 5px;
+    border: 1px solid #dc3545;
+    border-radius: 3px;
+    background: transparent;
+    color: #dc3545;
+    font-size: 10px;
+    cursor: pointer;
 
-    // Dark theme
-    body.theme-dark & {
+    &:hover {
+      background: #dc3545;
       color: #ffffff;
     }
+  }
 
-    // Light theme
-    body.theme-light & {
-      color: #2c3e50;
+  &__filter-list {
+    max-height: 150px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+
+  &__filter-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 4px;
+    border-radius: 3px;
+    font-size: 11px;
+    color: #374151;
+    cursor: pointer;
+
+    &:hover {
+      background: #f1f3f4;
+    }
+
+    body.theme-dark & {
+      color: #d1d5db;
+
+      &:hover {
+        background: #2a2a2a;
+      }
+    }
+
+    input[type="checkbox"] {
+      margin: 0;
+      cursor: pointer;
+    }
+  }
+
+  &__filter-range {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 0.4rem;
+
+    label {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      font-size: 11px;
+      color: #6b7280;
+
+      body.theme-dark & {
+        color: #9ca3af;
+      }
+    }
+
+    &--stacked {
+      flex-direction: column;
+      gap: 4px;
+    }
+  }
+
+  &__filter-count {
+    color: #8b949e;
+    font-size: 10px;
+    margin-left: 4px;
+  }
+
+  &__filter-input {
+    width: 100%;
+    padding: 3px 6px;
+    border: 1px solid #cbd5e1;
+    border-radius: 3px;
+    font-size: 12px;
+    background: #ffffff;
+    color: #1f2937;
+
+    body.theme-dark & {
+      background: #2a2a2a;
+      border-color: #4b5563;
+      color: #e5e7eb;
+    }
+  }
+
+  &__filter-apply {
+    width: 100%;
+    padding: 4px 10px;
+    border: 1px solid #0078d4;
+    border-radius: 3px;
+    background: #0078d4;
+    color: #ffffff;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    margin-top: 0.4rem;
+
+    &:hover {
+      background: #006abc;
+    }
+
+    body.theme-dark & {
+      &:hover {
+        background: #1a8ae8;
+      }
     }
   }
 }
 
+// Histogram / Distribution
 .histogram {
   &__container {
-    padding: 1rem;
-    flex: 1;
-    overflow-y: auto;
+    padding: 0.5rem 0.75rem;
   }
 
   &__title {
-    font-size: 0.9rem;
+    font-size: 0.75rem;
+    font-weight: 600;
     color: #495057;
-    margin-bottom: 1rem;
-    font-weight: 500;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
 
-    // Dark theme
     body.theme-dark & {
-      color: #cccccc;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #495057;
+      color: #8b949e;
     }
   }
 
+  &__footer {
+    font-size: 0.7rem;
+    color: #8b949e;
+    margin-top: 0.4rem;
+    text-align: center;
+    font-style: italic;
+  }
+
+  // Categorical horizontal bars
   &__chart {
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
-
-    &--numerical {
-      flex-direction: row;
-      align-items: flex-end;
-      gap: 2px;
-      height: 120px;
-      padding: 0.5rem;
-      border: 1px solid #e1e5e9;
-      border-radius: 4px;
-      background: #f8f9fa;
-
-      // Dark theme
-      body.theme-dark & {
-        background: #2a2a2a;
-        border-color: #3c3c3c;
-      }
-
-      // Light theme
-      body.theme-light & {
-        background: #f8f9fa;
-        border-color: #e1e5e9;
-      }
-    }
+    gap: 3px;
   }
 
-  &__bar-container {
+  &__row {
     display: flex;
     align-items: center;
-    gap: 0.5rem;
-    min-height: 20px;
+    gap: 6px;
+    min-height: 18px;
   }
 
   &__label {
-    width: 100px;
-    font-size: 0.75rem;
+    width: 70px;
+    flex-shrink: 0;
+    font-size: 0.7rem;
     color: #6c757d;
     text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    padding-right: 0.5rem;
-    cursor: pointer;
-    transition: color 0.2s ease;
-    flex-shrink: 0;
 
-    // Dark theme
     body.theme-dark & {
-      color: #999999;
-
-      &:hover {
-        color: #87ceeb;
-        font-weight: 500;
-      }
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d;
-
-      &:hover {
-        color: #0078d4;
-        font-weight: 500;
-      }
+      color: #8b949e;
     }
   }
 
-  &__bar {
+  &__bar-track {
     flex: 1;
-    height: 16px;
-    background: #e9ecef;
-    position: relative;
+    height: 14px;
+    background: #eef0f2;
+    border-radius: 2px;
+    overflow: hidden;
     min-width: 0;
 
-    // Dark theme
     body.theme-dark & {
-      background: #3c3c3c;
-    }
-
-    // Light theme
-    body.theme-light & {
-      background: #e9ecef;
+      background: #2a2d30;
     }
   }
 
   &__bar-fill {
     height: 100%;
-    background: #0078d4;
-    // transition: width 0.3s ease-out;
+    background: linear-gradient(90deg, #0078d4, #00a4ef);
+    border-radius: 2px;
+    min-width: 2px;
 
-    // Dark theme
     body.theme-dark & {
-      background: #4fc3f7;
-    }
-
-    // Light theme
-    body.theme-light & {
-      background: #0078d4;
+      background: linear-gradient(90deg, #0078d4, #4fc3f7);
     }
   }
 
   &__count {
-    width: 60px;
-    font-size: 0.8rem;
-    color: #6c757d;
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     flex-shrink: 0;
+    min-width: 50px;
+    font-size: 0.7rem;
+    color: #495057;
     text-align: right;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
     font-weight: 500;
 
-    // Dark theme
     body.theme-dark & {
-      color: #cccccc;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d;
+      color: #d1d5db;
     }
   }
 
-  // Numerical histogram styles
+  &__pct {
+    color: #8b949e;
+    font-weight: 400;
+    font-size: 0.65rem;
+  }
+
+  // Numerical vertical histogram
+  &__chart--numerical {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 1px;
+    height: 100px;
+    padding: 6px 4px;
+    background: #f8f9fa;
+    border: 1px solid #e1e5e9;
+    border-radius: 4px;
+
+    body.theme-dark & {
+      background: #1e2024;
+      border-color: #3c3c3c;
+    }
+  }
+
   &__numerical-bar {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
     flex: 1;
     min-width: 0;
     height: 100%;
-    position: relative;
+    display: flex;
+    align-items: flex-end;
   }
 
   &__numerical-bar-fill {
     width: 100%;
-    background: #0078d4;
+    background: linear-gradient(180deg, #00a4ef, #0078d4);
     border-radius: 2px 2px 0 0;
-    transition: height 0.3s ease-out;
-    min-height: 2px;
-    margin-top: auto;
+    min-height: 1px;
 
-    // Dark theme
     body.theme-dark & {
-      background: #4fc3f7;
-    }
-
-    // Light theme
-    body.theme-light & {
-      background: #0078d4;
+      background: linear-gradient(180deg, #4fc3f7, #0078d4);
     }
   }
 
-  &__numerical-count {
-    font-size: 0.7rem;
-    color: #6c757d;
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-    font-weight: 500;
-    padding: 2px 0;
-    text-align: center;
-    line-height: 1;
-
-    // Dark theme
-    body.theme-dark & {
-      color: #cccccc;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d;
-    }
+  &__axis {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.65rem;
+    color: #8b949e;
+    margin-top: 2px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    padding: 0 4px;
   }
 }
 
+// Container toggle
 #column-stats-container {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 350px;
-  height: 100%;
-  background-color: #ffffff;
-  box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
-  transition: transform 0.2s ease-in-out;
-  transform: translateX(100%);
-  z-index: 1000;
+  width: 100%;
   display: none;
-  border-left: 1px solid #e1e5e9;
-
-  // Dark theme
-  body.theme-dark & {
-    background-color: #1e1e1e;
-    border-left-color: #3c3c3c;
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.3);
-  }
-
-  // Light theme
-  body.theme-light & {
-    background-color: #ffffff;
-    border-left-color: #e1e5e9;
-    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
-  }
+  background-color: transparent;
 
   &.visible {
-    transform: translateX(0);
-  }
-
-  // Custom scrollbar for the stats container
-  .column-stats {
-    &::-webkit-scrollbar {
-      width: 8px;
-    }
-
-    &::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    &::-webkit-scrollbar-thumb {
-      background-color: #d6dade;
-      border-radius: 4px;
-
-      &:hover {
-        background-color: #c1c8cd;
-      }
-
-      // Dark theme
-      body.theme-dark & {
-        background-color: #666666;
-
-        &:hover {
-          background-color: #777777;
-        }
-      }
-    }
+    display: block;
   }
 }
