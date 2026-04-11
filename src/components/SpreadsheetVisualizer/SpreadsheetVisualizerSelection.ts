@@ -86,23 +86,29 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     if (!this.selectedCells) return { headers: [], indices: [], data: [] };
 
     const { startRow, endRow, startCol, endCol } = this.selectedCells;
+    const minRow = Math.min(startRow, endRow);
+    const maxRow = Math.max(startRow, endRow);
+    const minCol = Math.min(startCol, endCol);
+    const maxCol = Math.max(startCol, endCol);
 
-    // Try to get data from cache first
-    const data = await this.cache.getData(startRow - 1, endRow - 1);
+    // selectedCells rows are 1-indexed (row 0 = header), cache is 0-indexed
+    const data = (await this.cache.getData(minRow - 1, maxRow)).map((row) =>
+      row.slice(minCol, maxCol + 1),
+    );
 
     const formattedData = data.map((row) =>
-      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + startCol], this.options).formatted),
+      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + minCol], this.options).formatted),
     );
 
     // Get column headers for the selected range
     const headers = [];
-    for (let col = Math.min(startCol, endCol); col <= Math.max(startCol, endCol); col++) {
+    for (let col = minCol; col <= maxCol; col++) {
       headers.push(this.columns[col].name);
     }
 
     // Get row indices for the selected range
     const rowIndices = [];
-    for (let row = Math.min(startRow, endRow); row <= Math.max(startRow, endRow); row++) {
+    for (let row = minRow; row <= maxRow; row++) {
       rowIndices.push(row);
     }
 
