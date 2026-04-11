@@ -32,7 +32,7 @@ export const DEFAULT_HEADER_FONT_SIZE = 14;
 
 export const DEFAULT_SCROLLBAR_WIDTH = 12;
 
-export const DEFAULT_NA_TEXT = "NA";
+export const DEFAULT_NA_TEXT = "NULL";
 export const DEFAULT_TRUE_TEXT = "TRUE";
 export const DEFAULT_FALSE_TEXT = "FALSE";
 export const DEFAULT_TEXT_ALIGN = "left" as const;

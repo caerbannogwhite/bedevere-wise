@@ -12,13 +12,12 @@ global.console = {
 };
 
 // Mock setTimeout and setInterval for better test control
-global.setTimeout = vi.fn((callback: any, delay: number) => {
+global.setTimeout = vi.fn((callback: any, _delay?: number) => {
   if (typeof callback === "function") {
-    // For tests, execute immediately
     callback();
   }
-  return 1; // Return a mock timer ID
-});
-global.setInterval = vi.fn();
+  return 1 as unknown as ReturnType<typeof setTimeout>;
+}) as unknown as typeof setTimeout;
+global.setInterval = vi.fn() as unknown as typeof setInterval;
 global.clearTimeout = vi.fn();
 global.clearInterval = vi.fn();

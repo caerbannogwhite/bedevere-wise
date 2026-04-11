@@ -1,7 +1,17 @@
 import { DEFAULT_FALSE_TEXT, DEFAULT_NA_TEXT, DEFAULT_TRUE_TEXT } from "../defaults";
 import { getThemeColors } from "./theme";
 import { SpreadsheetOptions } from "../types";
-import { DataType } from "../../../data/types";
+import {
+  DataType,
+  isBooleanType,
+  isComplexType,
+  isDateType,
+  isNumericType,
+  isStringType,
+  isTemporalType,
+  isTimeType,
+  isTimestampType,
+} from "../../../data/types";
 import { ColumnInternal, CellStyle } from "../internals";
 
 export function parseFormat(format: string | undefined, type: DataType): any {
@@ -10,7 +20,7 @@ export function parseFormat(format: string | undefined, type: DataType): any {
   try {
     return JSON.parse(format);
   } catch (e) {
-    if (type === "DATE" || type === "TIMESTAMP") {
+    if (isDateType(type) || isTimestampType(type)) {
       const formatMap: { [key: string]: Intl.DateTimeFormatOptions } = {
         "yyyy-MM-dd": { year: "numeric", month: "2-digit", day: "2-digit" },
         "dd/MM/yyyy": { day: "2-digit", month: "2-digit", year: "numeric" },
@@ -65,19 +75,16 @@ export function getFormatOptions(column: ColumnInternal, options: SpreadsheetOpt
     if (parsedFormat) return parsedFormat;
   }
 
-  switch (column.dataType) {
-    case "INTEGER":
-    case "BIGINT":
-    case "FLOAT":
-    case "DOUBLE":
-      return parseFormat(options.numberFormat?.toString(), column.dataType);
-    case "DATE":
-      return parseFormat(options.dateFormat?.toString(), column.dataType);
-    case "TIMESTAMP":
-      return parseFormat(options.datetimeFormat?.toString(), column.dataType);
-    default:
-      return undefined;
+  if (isNumericType(column.dataType)) {
+    return parseFormat(options.numberFormat?.toString(), column.dataType);
   }
+  if (isDateType(column.dataType)) {
+    return parseFormat(options.dateFormat?.toString(), column.dataType);
+  }
+  if (isTimestampType(column.dataType)) {
+    return parseFormat(options.datetimeFormat?.toString(), column.dataType);
+  }
+  return undefined;
 }
 
 /**
@@ -92,61 +99,143 @@ function getColumnFormatter(column: ColumnInternal, options: SpreadsheetOptions)
   if (!formatOptions) return null;
 
   const locale = options.datetimeLocale;
-  switch (column.dataType) {
-    case "INTEGER":
-    case "FLOAT":
-    case "BIGINT":
-    case "DOUBLE":
-      column.cachedFormatter = new Intl.NumberFormat(locale, formatOptions);
-      return column.cachedFormatter;
-    case "DATE":
-    case "TIMESTAMP":
-      column.cachedFormatter = new Intl.DateTimeFormat(locale, formatOptions);
-      return column.cachedFormatter;
-    default:
-      return null;
+  if (isNumericType(column.dataType)) {
+    column.cachedFormatter = new Intl.NumberFormat(locale, formatOptions);
+    return column.cachedFormatter;
+  }
+  if (isDateType(column.dataType) || isTimestampType(column.dataType)) {
+    column.cachedFormatter = new Intl.DateTimeFormat(locale, formatOptions);
+    return column.cachedFormatter;
+  }
+  return null;
+}
+
+/**
+ * Format DuckDB TIME values (microseconds since midnight) as HH:MM:SS.
+ */
+function formatTime(microsSinceMidnight: number): string {
+  const totalSeconds = Math.floor(microsSinceMidnight / 1_000_000);
+  const hours = Math.floor(totalSeconds / 3600);
+  const minutes = Math.floor((totalSeconds % 3600) / 60);
+  const seconds = totalSeconds % 60;
+  const pad = (n: number) => n.toString().padStart(2, "0");
+  return `${pad(hours)}:${pad(minutes)}:${pad(seconds)}`;
+}
+
+/**
+ * Convert a BLOB (Uint8Array) to a hex-encoded string with a length prefix.
+ * Limits long blobs to avoid runaway render costs.
+ */
+function formatBlob(value: any): string {
+  if (value == null) return "";
+  if (value instanceof Uint8Array) {
+    const limit = 32;
+    const slice = value.subarray(0, limit);
+    const hex = Array.from(slice, (b) => b.toString(16).padStart(2, "0")).join("");
+    const suffix = value.length > limit ? `... (${value.length}B)` : ` (${value.length}B)`;
+    return `0x${hex}${suffix}`;
+  }
+  return String(value);
+}
+
+/**
+ * Format a complex type (LIST, STRUCT, MAP, JSON) as a JSON string.
+ */
+function formatComplex(value: any): string {
+  if (value == null) return "";
+  try {
+    return JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+  } catch {
+    return String(value);
   }
 }
 
 export const formatValue = (value: any, column: ColumnInternal, options: SpreadsheetOptions): { raw: any; formatted: string } => {
-  // Convert to date or number if needed
-  if (column.dataType === "INTEGER" || column.dataType === "FLOAT" || column.dataType === "BIGINT" || column.dataType === "DOUBLE") {
+  const naText = options.naText || DEFAULT_NA_TEXT;
+
+  // Handle null/undefined BEFORE any type coercion. Number(null) = 0 and
+  // new Date(null) = 1970-01-01, so coercing first would mask real NULLs.
+  if (value === null || value === undefined) {
+    return { raw: null, formatted: naText };
+  }
+
+  // Preserve the original raw value (pre-normalization) for binary/complex types
+  const original = value;
+
+  // Normalize BigInt early so isNaN/Date/Number all work
+  if (typeof value === "bigint") {
     value = Number(value);
   }
 
-  if (column.dataType === "DATE" || column.dataType === "TIMESTAMP") {
-    value = new Date(value);
+  const dt = column.dataType;
+
+  // Convert to date or number if needed
+  if (isNumericType(dt)) {
+    value = Number(value);
   }
 
-  // Handle null/undefined values
-  if (value === null || value === undefined || (column.dataType !== "VARCHAR" && isNaN(value))) {
-    return { raw: null, formatted: options.naText || DEFAULT_NA_TEXT };
+  if (isDateType(dt) || isTimestampType(dt)) {
+    value = value instanceof Date ? value : new Date(value);
   }
 
-  // Handle different data types
-  switch (column.dataType) {
-    case "BOOLEAN":
-      return { raw: value, formatted: value ? options.trueText || DEFAULT_TRUE_TEXT : options.falseText || DEFAULT_FALSE_TEXT };
-    case "INTEGER":
-    case "FLOAT":
-    case "BIGINT":
-    case "DOUBLE": {
-      const formatter = getColumnFormatter(column, options) as Intl.NumberFormat | null;
-      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleString() };
-    }
-    case "DATE": {
-      const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
-      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleDateString() };
-    }
-    case "TIMESTAMP": {
-      const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
-      return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleString() };
-    }
-    case "VARCHAR":
-      return { raw: value, formatted: value };
-    default:
-      return { raw: value, formatted: String(value) };
+  // NaN check only makes sense for numeric coercions; skip for strings, binary, complex
+  if ((isNumericType(dt) || isTemporalType(dt)) && typeof value === "number" && isNaN(value)) {
+    return { raw: null, formatted: naText };
   }
+  if ((isDateType(dt) || isTimestampType(dt)) && value instanceof Date && isNaN(value.getTime())) {
+    return { raw: null, formatted: naText };
+  }
+
+  // BOOLEAN
+  if (isBooleanType(dt)) {
+    return { raw: value, formatted: value ? options.trueText || DEFAULT_TRUE_TEXT : options.falseText || DEFAULT_FALSE_TEXT };
+  }
+
+  // Numeric
+  if (isNumericType(dt)) {
+    const formatter = getColumnFormatter(column, options) as Intl.NumberFormat | null;
+    return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: value.toLocaleString() };
+  }
+
+  // DATE
+  if (isDateType(dt)) {
+    const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
+    return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: (value as Date).toLocaleDateString() };
+  }
+
+  // TIME / TIME_TZ
+  if (isTimeType(dt)) {
+    return { raw: value, formatted: formatTime(value) };
+  }
+
+  // TIMESTAMP variants
+  if (isTimestampType(dt)) {
+    const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
+    return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: (value as Date).toLocaleString() };
+  }
+
+  // INTERVAL - DuckDB returns interval objects; stringify
+  if (dt === "INTERVAL") {
+    return { raw: value, formatted: String(value) };
+  }
+
+  // String-like (VARCHAR, UUID, ENUM)
+  if (isStringType(dt)) {
+    return { raw: value, formatted: String(value) };
+  }
+
+  // Binary
+  if (dt === "BLOB" || dt === "BIT") {
+    return { raw: original, formatted: formatBlob(original) };
+  }
+
+  // Complex / JSON
+  if (isComplexType(dt)) {
+    return { raw: original, formatted: formatComplex(original) };
+  }
+
+  // Unknown — fall back to string
+  return { raw: value, formatted: String(value) };
 };
 
 export function getFormattedValueAndStyle(
@@ -154,20 +243,11 @@ export function getFormattedValueAndStyle(
   column: ColumnInternal,
   options: SpreadsheetOptions,
 ): { raw: any; formatted: string; style: Partial<CellStyle> } {
-  // Convert to date or number if needed
-  if (column.dataType === "DATE" || column.dataType === "TIMESTAMP") {
-    value = new Date(value);
-  }
-
-  if (column.dataType === "INTEGER" || column.dataType === "FLOAT" || column.dataType === "BIGINT" || column.dataType === "DOUBLE") {
-    value = Number(value);
-  }
-
-  // Single cached theme lookup for this call (instead of per-branch calls)
+  const dt = column.dataType;
   const theme = getThemeColors();
 
-  // Handle null/undefined values
-  if (value === null || value === undefined || (column.dataType !== "VARCHAR" && isNaN(value))) {
+  // Null early
+  if (value === null || value === undefined) {
     return {
       raw: null,
       formatted: formatValue(value, column, options).formatted,
@@ -179,65 +259,76 @@ export function getFormattedValueAndStyle(
     };
   }
 
-  // Handle different data types with theme-aware styling
-  switch (column.dataType) {
-    case "BOOLEAN":
-      return {
-        raw: value,
-        formatted: formatValue(value, column, options).formatted,
-        style: {
-          textAlign: "center",
-          textColor: theme.booleanStyle.textColor,
-          backgroundColor: theme.booleanStyle.backgroundColor,
-        },
-      };
+  const { raw, formatted } = formatValue(value, column, options);
 
-    case "INTEGER":
-    case "FLOAT":
-    case "BIGINT":
-    case "DOUBLE":
-      return {
-        raw: value,
-        formatted: formatValue(value, column, options).formatted,
-        style: {
-          textAlign: "right",
-          textColor: theme.numericStyle.textColor,
-          backgroundColor: theme.numericStyle.backgroundColor,
-        },
-      };
-
-    case "DATE":
-      return {
-        raw: value,
-        formatted: formatValue(new Date(value), column, options).formatted,
-        style: {
-          textAlign: "left",
-          textColor: theme.dateStyle.textColor,
-          backgroundColor: theme.dateStyle.backgroundColor,
-        },
-      };
-
-    case "TIMESTAMP":
-      return {
-        raw: value,
-        formatted: formatValue(new Date(value), column, options).formatted,
-        style: {
-          textAlign: "left",
-          textColor: theme.datetimeStyle.textColor,
-          backgroundColor: theme.datetimeStyle.backgroundColor,
-        },
-      };
-
-    case "VARCHAR":
-    default:
-      return {
-        raw: value,
-        formatted: formatValue(value, column, options).formatted,
-        style: {
-          textAlign: "left",
-          textColor: theme.stringStyle.textColor,
-          backgroundColor: theme.stringStyle.backgroundColor,
-        },
-      };
+  if (isBooleanType(dt)) {
+    return {
+      raw,
+      formatted,
+      style: {
+        textAlign: "center",
+        textColor: theme.booleanStyle.textColor,
+        backgroundColor: theme.booleanStyle.backgroundColor,
+      },
+    };
   }
+
+  if (isNumericType(dt)) {
+    return {
+      raw,
+      formatted,
+      style: {
+        textAlign: "right",
+        textColor: theme.numericStyle.textColor,
+        backgroundColor: theme.numericStyle.backgroundColor,
+      },
+    };
+  }
+
+  if (isDateType(dt)) {
+    return {
+      raw,
+      formatted,
+      style: {
+        textAlign: "left",
+        textColor: theme.dateStyle.textColor,
+        backgroundColor: theme.dateStyle.backgroundColor,
+      },
+    };
+  }
+
+  if (isTimeType(dt)) {
+    return {
+      raw,
+      formatted,
+      style: {
+        textAlign: "left",
+        textColor: theme.dateStyle.textColor,
+        backgroundColor: theme.dateStyle.backgroundColor,
+      },
+    };
+  }
+
+  if (isTimestampType(dt)) {
+    return {
+      raw,
+      formatted,
+      style: {
+        textAlign: "left",
+        textColor: theme.datetimeStyle.textColor,
+        backgroundColor: theme.datetimeStyle.backgroundColor,
+      },
+    };
+  }
+
+  // VARCHAR, UUID, ENUM, BLOB, INTERVAL, complex, unknown — left-aligned string style
+  return {
+    raw,
+    formatted,
+    style: {
+      textAlign: "left",
+      textColor: theme.stringStyle.textColor,
+      backgroundColor: theme.stringStyle.backgroundColor,
+    },
+  };
 }

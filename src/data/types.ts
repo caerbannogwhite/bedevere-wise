@@ -1,4 +1,242 @@
-export type DataType = "BIGINT" | "BOOLEAN" | "DATE" | "TIMESTAMP" | "VARCHAR" | "DOUBLE" | "INTEGER" | "FLOAT";
+export type DataType =
+  // Boolean
+  | "BOOLEAN"
+  // Signed integers
+  | "TINYINT"
+  | "SMALLINT"
+  | "INTEGER"
+  | "BIGINT"
+  | "HUGEINT"
+  // Unsigned integers
+  | "UTINYINT"
+  | "USMALLINT"
+  | "UINTEGER"
+  | "UBIGINT"
+  | "UHUGEINT"
+  // Floating-point / decimal
+  | "FLOAT"
+  | "DOUBLE"
+  | "DECIMAL"
+  // Temporal
+  | "DATE"
+  | "TIME"
+  | "TIME_TZ"
+  | "TIMESTAMP"
+  | "TIMESTAMP_TZ"
+  | "TIMESTAMP_NS"
+  | "TIMESTAMP_MS"
+  | "TIMESTAMP_S"
+  | "INTERVAL"
+  // Textual
+  | "VARCHAR"
+  // Binary / special
+  | "BLOB"
+  | "BIT"
+  | "UUID"
+  | "JSON"
+  | "ENUM"
+  // Complex
+  | "LIST"
+  | "STRUCT"
+  | "MAP"
+  | "UNION"
+  // Fallback
+  | "UNKNOWN";
+
+/**
+ * Broad category of a data type used to drive filter/stats/rendering decisions.
+ */
+export type DataTypeCategory = "numeric" | "temporal" | "boolean" | "string" | "binary" | "complex" | "other";
+
+// ----- type predicates -----
+
+export function isIntegerType(dt: DataType): boolean {
+  return (
+    dt === "TINYINT" ||
+    dt === "SMALLINT" ||
+    dt === "INTEGER" ||
+    dt === "BIGINT" ||
+    dt === "HUGEINT" ||
+    dt === "UTINYINT" ||
+    dt === "USMALLINT" ||
+    dt === "UINTEGER" ||
+    dt === "UBIGINT" ||
+    dt === "UHUGEINT"
+  );
+}
+
+export function isFloatType(dt: DataType): boolean {
+  return dt === "FLOAT" || dt === "DOUBLE" || dt === "DECIMAL";
+}
+
+export function isNumericType(dt: DataType): boolean {
+  return isIntegerType(dt) || isFloatType(dt);
+}
+
+export function isDateType(dt: DataType): boolean {
+  return dt === "DATE";
+}
+
+export function isTimeType(dt: DataType): boolean {
+  return dt === "TIME" || dt === "TIME_TZ";
+}
+
+export function isTimestampType(dt: DataType): boolean {
+  return (
+    dt === "TIMESTAMP" ||
+    dt === "TIMESTAMP_TZ" ||
+    dt === "TIMESTAMP_NS" ||
+    dt === "TIMESTAMP_MS" ||
+    dt === "TIMESTAMP_S"
+  );
+}
+
+export function isTemporalType(dt: DataType): boolean {
+  return isDateType(dt) || isTimeType(dt) || isTimestampType(dt);
+}
+
+export function isBooleanType(dt: DataType): boolean {
+  return dt === "BOOLEAN";
+}
+
+export function isStringType(dt: DataType): boolean {
+  return dt === "VARCHAR" || dt === "UUID" || dt === "ENUM";
+}
+
+export function isBinaryType(dt: DataType): boolean {
+  return dt === "BLOB" || dt === "BIT";
+}
+
+export function isComplexType(dt: DataType): boolean {
+  return dt === "LIST" || dt === "STRUCT" || dt === "MAP" || dt === "UNION" || dt === "JSON";
+}
+
+export function dataTypeCategory(dt: DataType): DataTypeCategory {
+  if (isBooleanType(dt)) return "boolean";
+  if (isNumericType(dt)) return "numeric";
+  if (isTemporalType(dt)) return "temporal";
+  if (isStringType(dt)) return "string";
+  if (isBinaryType(dt)) return "binary";
+  if (isComplexType(dt)) return "complex";
+  return "other";
+}
+
+/**
+ * Normalize DuckDB's raw column_type string (from `DESCRIBE`) into a canonical
+ * DataType value. Handles parameterized types (VARCHAR(255), DECIMAL(10,2))
+ * and compound names (TIMESTAMP WITH TIME ZONE, STRUCT(...), LIST(...)).
+ */
+export function normalizeDuckDBType(raw: string | undefined | null): DataType {
+  if (!raw) return "UNKNOWN";
+
+  // Strip leading/trailing whitespace, uppercase
+  let s = raw.trim().toUpperCase();
+
+  // Prefix-based complex types (STRUCT(a INTEGER, ...), LIST(INTEGER), MAP(...), etc.)
+  if (s.startsWith("STRUCT")) return "STRUCT";
+  if (s.startsWith("LIST") || s.endsWith("[]") || s.includes("[]")) return "LIST";
+  if (s.startsWith("MAP")) return "MAP";
+  if (s.startsWith("UNION")) return "UNION";
+  if (s.startsWith("ENUM")) return "ENUM";
+
+  // Compound temporal types
+  if (s === "TIMESTAMP WITH TIME ZONE" || s === "TIMESTAMPTZ") return "TIMESTAMP_TZ";
+  if (s === "TIMESTAMP WITHOUT TIME ZONE") return "TIMESTAMP";
+  if (s === "TIMESTAMP_NS") return "TIMESTAMP_NS";
+  if (s === "TIMESTAMP_MS") return "TIMESTAMP_MS";
+  if (s === "TIMESTAMP_S" || s === "TIMESTAMP(0)") return "TIMESTAMP_S";
+  if (s === "TIME WITH TIME ZONE" || s === "TIMETZ") return "TIME_TZ";
+
+  // Strip parameterization: VARCHAR(255) -> VARCHAR, DECIMAL(10,2) -> DECIMAL
+  const parenIdx = s.indexOf("(");
+  if (parenIdx >= 0) s = s.slice(0, parenIdx);
+  s = s.trim();
+
+  // Aliases
+  switch (s) {
+    case "BOOL":
+    case "LOGICAL":
+      return "BOOLEAN";
+
+    case "INT1":
+      return "TINYINT";
+    case "INT2":
+    case "SHORT":
+      return "SMALLINT";
+    case "INT":
+    case "INT4":
+    case "INT32":
+      return "INTEGER";
+    case "INT8":
+    case "LONG":
+    case "INT64":
+      return "BIGINT";
+    case "INT128":
+      return "HUGEINT";
+
+    case "REAL":
+    case "FLOAT4":
+    case "FLOAT32":
+      return "FLOAT";
+    case "FLOAT8":
+    case "FLOAT64":
+    case "DOUBLE PRECISION":
+      return "DOUBLE";
+    case "NUMERIC":
+    case "DEC":
+      return "DECIMAL";
+
+    case "TEXT":
+    case "STRING":
+    case "CHAR":
+    case "BPCHAR":
+      return "VARCHAR";
+
+    case "BYTEA":
+    case "BINARY":
+    case "VARBINARY":
+      return "BLOB";
+
+    case "BITSTRING":
+      return "BIT";
+  }
+
+  // Direct matches
+  const known: Record<string, DataType> = {
+    BOOLEAN: "BOOLEAN",
+    TINYINT: "TINYINT",
+    SMALLINT: "SMALLINT",
+    INTEGER: "INTEGER",
+    BIGINT: "BIGINT",
+    HUGEINT: "HUGEINT",
+    UTINYINT: "UTINYINT",
+    USMALLINT: "USMALLINT",
+    UINTEGER: "UINTEGER",
+    UBIGINT: "UBIGINT",
+    UHUGEINT: "UHUGEINT",
+    FLOAT: "FLOAT",
+    DOUBLE: "DOUBLE",
+    DECIMAL: "DECIMAL",
+    DATE: "DATE",
+    TIME: "TIME",
+    TIMESTAMP: "TIMESTAMP",
+    INTERVAL: "INTERVAL",
+    VARCHAR: "VARCHAR",
+    BLOB: "BLOB",
+    BIT: "BIT",
+    UUID: "UUID",
+    JSON: "JSON",
+    ENUM: "ENUM",
+    LIST: "LIST",
+    STRUCT: "STRUCT",
+    MAP: "MAP",
+    UNION: "UNION",
+  };
+  const hit = known[s];
+  if (hit) return hit;
+
+  return "UNKNOWN";
+}
 
 export interface Column {
   name: string;
@@ -7,6 +245,8 @@ export interface Column {
   default: string | null;
   label?: string;
   dataType: DataType;
+  /** Original raw column_type string from DuckDB (e.g. "DECIMAL(10,2)") — preserved for display. */
+  rawType?: string;
   length?: number;
   hasNulls?: boolean;
   format?: string | Intl.NumberFormatOptions;
@@ -16,8 +256,15 @@ export interface ColumnStats {
   isCategorical: boolean;
   totalCount: number;
   nullCount: number;
+  distinctCount: number;
   valueCounts: Map<string, number>;
+  /** Raw (unformatted) values corresponding to each key in valueCounts. Used for temporal/numeric columns where the key is a display string. */
+  valueCountsRaw?: Map<string, any>;
   numericStats: ColumnStatsNumeric | null;
+  /** For temporal columns: min/max as raw values (BigInt/number). */
+  temporalStats?: ColumnStatsTemporal | null;
+  /** Histogram bin edges (inclusive start, exclusive end except last bin). Length = binCount + 1. */
+  histogramEdges?: number[];
 }
 
 export interface ColumnStatsNumeric {
@@ -28,8 +275,15 @@ export interface ColumnStatsNumeric {
   stdDev: number;
 }
 
+export interface ColumnStatsTemporal {
+  /** Min as raw value (BigInt microseconds for TIMESTAMP, etc., or Number of days for DATE). */
+  min: number;
+  max: number;
+}
+
 export interface DatasetMetadata {
   name: string;
+  alias?: string;
   fileName?: string;
   description?: string;
   label?: string;
