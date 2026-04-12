@@ -1,5 +1,37 @@
 import { BrianAppMessageType } from "../BrianApp/BrianApp";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
+import { MessagePopover } from "./MessagePopover";
+
+export interface MessageOptions {
+  /** Duration in ms; 0 means persistent until dismissed. Defaults per type. */
+  duration?: number;
+  /** Full text shown in the expanded popover (e.g. stack trace). */
+  details?: string;
+  /** Optional title; defaults to severity label (ERROR / WARNING / …). */
+  title?: string;
+}
+
+const DEFAULT_DURATIONS: Record<BrianAppMessageType, number> = {
+  error: 10_000,
+  warning: 6_000,
+  success: 3_000,
+  info: 3_000,
+};
+
+const MESSAGE_ICONS: Record<BrianAppMessageType, string> = {
+  error: "\u2716", // ✖
+  warning: "\u26A0", // ⚠
+  success: "\u2713", // ✓
+  info: "\u2139", // ℹ
+};
+
+interface ActiveMessage {
+  type: BrianAppMessageType;
+  message: string;
+  details?: string;
+  title?: string;
+  timestamp: Date;
+}
 
 export interface StatusBarItem {
   id: string;
@@ -12,6 +44,10 @@ export interface StatusBarItem {
   color?: string;
   backgroundColor?: string;
   visible?: boolean;
+  /** Severity, used to apply modifier classes and enable click-to-expand. */
+  messageType?: BrianAppMessageType;
+  /** Whether clicking this item should open the popover. */
+  expandable?: boolean;
 }
 
 export class StatusBar {
@@ -21,6 +57,11 @@ export class StatusBar {
   private version: string;
   private items: Map<string, StatusBarItem> = new Map();
   private onCommandCallback?: (command: string) => void;
+
+  // Active transient message (for the popover)
+  private activeMessage: ActiveMessage | null = null;
+  private messageTimeoutId: number | null = null;
+  private popover: MessagePopover;
 
   constructor(parent: HTMLElement, version: string) {
     this.container = document.createElement("div");
@@ -37,6 +78,8 @@ export class StatusBar {
     parent.appendChild(this.container);
 
     this.version = version;
+
+    this.popover = new MessagePopover(document.body);
 
     this.initializeDefaultItems();
   }
@@ -167,21 +210,73 @@ export class StatusBar {
     return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
-  public showMessage(message: string, type: BrianAppMessageType = "info", duration: number = 3000): void {
+  public showMessage(
+    message: string,
+    type: BrianAppMessageType = "info",
+    options?: MessageOptions,
+  ): void {
+    // Clear any previously-scheduled dismissal
+    if (this.messageTimeoutId !== null) {
+      window.clearTimeout(this.messageTimeoutId);
+      this.messageTimeoutId = null;
+    }
+
+    const duration = options?.duration ?? DEFAULT_DURATIONS[type];
+    const icon = MESSAGE_ICONS[type];
+
+    this.activeMessage = {
+      type,
+      message,
+      details: options?.details,
+      title: options?.title,
+      timestamp: new Date(),
+    };
+
+    // If the popover was already open for a previous message, update it in place
+    if (this.popover.isOpen() && this.activeMessage) {
+      this.popover.show(this.activeMessage);
+    }
+
+    const itemHtml =
+      `<span class="status-bar__msg-icon">${icon}</span>` +
+      `<span class="status-bar__msg-text">${escapeHtml(message)}</span>` +
+      (options?.details ? `<span class="status-bar__msg-more" title="Click to expand">\u2026</span>` : "");
+
     const messageItem: StatusBarItem = {
       id: "temp-message",
       text: message,
+      html: itemHtml,
+      tooltip: options?.details ? `${message}\n\nClick to expand` : message,
       priority: 1000,
       alignment: "left",
-      color: type === "error" ? "#f14c4c" : type === "warning" ? "#ffcc02" : type === "success" ? "#89d185" : "#007acc",
       visible: true,
+      messageType: type,
+      expandable: true,
     };
 
     this.addItem(messageItem);
 
-    setTimeout(() => {
-      this.removeItem("temp-message");
-    }, duration);
+    if (duration > 0) {
+      this.messageTimeoutId = window.setTimeout(() => {
+        this.removeItem("temp-message");
+        this.messageTimeoutId = null;
+        this.activeMessage = null;
+        this.popover.hide();
+      }, duration);
+    }
+  }
+
+  /**
+   * Toggle the message popover open/closed for the currently-active message.
+   * Called when the user clicks the transient status bar message.
+   */
+  private toggleMessagePopover(): void {
+    if (!this.activeMessage) return;
+    if (this.popover.isOpen()) {
+      this.popover.hide();
+    } else {
+      this.popover.show(this.activeMessage);
+    }
   }
 
   private initializeDefaultItems(): void {
@@ -291,6 +386,12 @@ export class StatusBar {
   private renderItem(item: StatusBarItem, container: HTMLElement): void {
     const element = document.createElement("div");
     element.className = "status-bar__item";
+    element.setAttribute("data-id", item.id);
+
+    if (item.messageType) {
+      element.classList.add(`status-bar__item--${item.messageType}`);
+    }
+
     if (item.html) {
       element.innerHTML = item.html;
     } else {
@@ -309,7 +410,13 @@ export class StatusBar {
       element.style.backgroundColor = item.backgroundColor;
     }
 
-    if (item.command) {
+    if (item.expandable) {
+      element.classList.add("status-bar__item--clickable");
+      element.addEventListener("click", (e) => {
+        e.stopPropagation();
+        this.toggleMessagePopover();
+      });
+    } else if (item.command) {
       element.classList.add("status-bar__item--clickable");
       element.addEventListener("click", () => {
         if (this.onCommandCallback) {
@@ -322,6 +429,18 @@ export class StatusBar {
   }
 
   public destroy(): void {
+    if (this.messageTimeoutId !== null) {
+      window.clearTimeout(this.messageTimeoutId);
+      this.messageTimeoutId = null;
+    }
+    this.popover.destroy();
     this.container.remove();
   }
+}
+
+function escapeHtml(s: string): string {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }

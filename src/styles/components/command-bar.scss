@@ -1,0 +1,107 @@
+.command-bar {
+  display: flex;
+  align-items: center;
+  height: 36px;
+  padding: 6px 8px;
+  background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+  border-bottom: 1px solid #e8ecf0;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+  font-size: 13px;
+  color: #1f2937;
+  gap: 16px;
+  flex-shrink: 0;
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, #e8ecf0 50%, transparent);
+  }
+
+  // Dark theme
+  body.theme-dark & {
+    background: linear-gradient(180deg, #2d2d30 0%, #252526 100%);
+    border-bottom-color: #404040;
+    color: #e5e7eb;
+
+    &::after {
+      background: linear-gradient(90deg, transparent, #404040 50%, transparent);
+    }
+  }
+
+  &__sql-toggle {
+    flex-shrink: 0;
+    padding: 2px 8px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    background: transparent;
+    color: #6b7280;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    line-height: 1.4;
+
+    &:hover {
+      background: #e9ecef;
+      color: #374151;
+    }
+
+    &--active {
+      background: #0078d4;
+      color: #ffffff;
+      border-color: #0078d4;
+
+      &:hover {
+        background: #006abc;
+      }
+    }
+
+    body.theme-dark & {
+      color: #9ca3af;
+      border-color: #4b5563;
+
+      &:hover {
+        background: #37373d;
+        color: #d1d5db;
+      }
+    }
+
+    body.theme-dark &--active {
+      background: #0078d4;
+      color: #ffffff;
+      border-color: #0078d4;
+
+      &:hover {
+        background: #1a8ae8;
+      }
+    }
+  }
+
+}
+
+// Enhanced mobile responsive
+@media (max-width: 768px) {
+  .command-bar {
+    padding: 0 12px;
+    gap: 12px;
+    height: 32px;
+
+  }
+}
+
+// High contrast mode support
+@media (prefers-contrast: high) {
+  .command-bar {
+    border-bottom-width: 2px;
+
+  }
+}
+

@@ -70,7 +70,7 @@
       }
     }
 
-    // Color variants
+    // Color variants — general (used by hard-coded items like temp-message fallback)
     &--error {
       color: #f14c4c;
     }
@@ -87,6 +87,103 @@
       color: #89d185;
     }
 
+    // Transient message item (id="temp-message") — richer styling per severity.
+    // Only applies when the item also has a message-type modifier (set in
+    // StatusBar.renderItem).
+    &[data-id="temp-message"] {
+      gap: 6px;
+      font-weight: 600;
+      padding: 0 10px;
+      border-radius: 3px;
+      margin: 0 4px;
+      max-width: 480px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      .status-bar__msg-icon {
+        font-weight: 700;
+        font-size: 12px;
+        flex-shrink: 0;
+      }
+
+      .status-bar__msg-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .status-bar__msg-more {
+        opacity: 0.7;
+        font-weight: 400;
+        margin-left: 2px;
+      }
+
+      &.status-bar__item--error {
+        background-color: rgba(241, 76, 76, 0.22);
+        color: #ffffff;
+        .status-bar__msg-icon {
+          color: #ffd0d0;
+        }
+      }
+
+      &.status-bar__item--warning {
+        background-color: rgba(255, 204, 2, 0.22);
+        color: #fff3c4;
+        .status-bar__msg-icon {
+          color: #ffcc02;
+        }
+      }
+
+      &.status-bar__item--success {
+        background-color: rgba(137, 209, 133, 0.18);
+        color: #d7ffd4;
+        font-weight: 500;
+        .status-bar__msg-icon {
+          color: #89d185;
+        }
+      }
+
+      &.status-bar__item--info {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #ffffff;
+        font-weight: 500;
+        .status-bar__msg-icon {
+          color: #8cd3ff;
+        }
+      }
+
+      body.theme-light & {
+        &.status-bar__item--error {
+          background-color: rgba(241, 76, 76, 0.18);
+          color: #7a1f1f;
+          .status-bar__msg-icon {
+            color: #c42020;
+          }
+        }
+        &.status-bar__item--warning {
+          background-color: rgba(255, 204, 2, 0.22);
+          color: #7a5d00;
+          .status-bar__msg-icon {
+            color: #b08900;
+          }
+        }
+        &.status-bar__item--success {
+          background-color: rgba(0, 128, 0, 0.12);
+          color: #1d6b20;
+          .status-bar__msg-icon {
+            color: #1d6b20;
+          }
+        }
+        &.status-bar__item--info {
+          background-color: rgba(0, 120, 212, 0.1);
+          color: #0a5a9e;
+          .status-bar__msg-icon {
+            color: #0a5a9e;
+          }
+        }
+      }
+    }
+
     // Special styling for specific items
     &[data-id="dataset-info"] {
       font-weight: 500;
@@ -94,6 +191,74 @@
 
     &[data-id="selection-info"] {
       color: rgba(255, 255, 255, 0.8);
+    }
+
+    &[data-id="cell-value"] {
+      font-family: "Consolas", "Monaco", "Courier New", monospace;
+      font-size: 11px;
+      background-color: rgba(255, 255, 255, 0.1);
+      border-radius: 3px;
+      padding: 1px 8px;
+      max-width: 300px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+
+      .cell-value__formatted {
+        font-weight: 600;
+
+        &--double,
+        &--integer,
+        &--float,
+        &--bigint {
+          color: #73e0a2;
+        }
+
+        &--date,
+        &--timestamp {
+          color: #fca5a5;
+        }
+
+        &--boolean {
+          color: #93c5fd;
+          text-transform: uppercase;
+        }
+
+        &--varchar {
+          color: #ffffff;
+        }
+      }
+
+      .cell-value__raw {
+        opacity: 0.5;
+        font-weight: 400;
+        font-size: 10px;
+      }
+
+      body.theme-light & {
+        background-color: rgba(0, 0, 0, 0.08);
+
+        .cell-value__formatted {
+          &--double,
+          &--integer,
+          &--float,
+          &--bigint {
+            color: #047857;
+          }
+
+          &--date,
+          &--timestamp {
+            color: #dc2626;
+          }
+
+          &--boolean {
+            color: #2563eb;
+          }
+
+          &--varchar {
+            color: #333333;
+          }
+        }
+      }
     }
 
     &[data-id="command-palette"] {

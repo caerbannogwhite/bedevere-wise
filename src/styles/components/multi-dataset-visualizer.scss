@@ -15,13 +15,13 @@
     overflow-y: hidden;
     min-height: 40px;
     max-height: 40px;
-    
+
     // Dark theme
     body.theme-dark & {
       background-color: #2d2d30;
       border-bottom-color: #3c3c3c;
     }
-    
+
     // Light theme
     body.theme-light & {
       background-color: #f8f9fa;
@@ -29,7 +29,11 @@
     }
   }
 
-  &__cell-value-bar-container {
+  &__sql-editor-container {
+    flex-shrink: 0;
+  }
+
+  &__command-bar-container {
     min-height: 32px;
     flex-shrink: 0;
   }
@@ -53,24 +57,24 @@
     position: relative;
     transition: background-color 0.2s ease;
     color: #495057;
-    
+
     // Dark theme
     body.theme-dark & {
       background-color: #37373d;
       border-right-color: #3c3c3c;
       color: #cccccc;
-      
+
       &:hover {
         background-color: #4a4a4a;
       }
     }
-    
+
     // Light theme
     body.theme-light & {
       background-color: #e9ecef;
       border-right-color: #d6dade;
       color: #495057;
-      
+
       &:hover {
         background-color: #dee2e6;
       }
@@ -79,24 +83,24 @@
     &--active {
       background-color: #ffffff;
       border-bottom: 2px solid #0078d4;
-      
+
       // Dark theme
       body.theme-dark & {
         background-color: #1e1e1e;
         color: #ffffff;
         border-bottom-color: #0078d4;
       }
-      
-      // Light theme  
+
+      // Light theme
       body.theme-light & {
         background-color: #ffffff;
         color: #2c3e50;
         border-bottom-color: #0078d4;
       }
-      
+
       &:hover {
         background-color: #ffffff;
-        
+
         // Dark theme
         body.theme-dark & {
           background-color: #1e1e1e;
@@ -111,7 +115,7 @@
       white-space: nowrap;
       font-size: 13px;
       font-weight: 500;
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
     }
 
     &-close {
@@ -130,21 +134,21 @@
       color: #6c757d;
       border-radius: 3px;
       transition: all 0.2s ease;
-      
+
       // Dark theme
       body.theme-dark & {
         color: #999999;
-        
+
         &:hover {
           background-color: #dc3545;
           color: #ffffff;
         }
       }
-      
+
       // Light theme
       body.theme-light & {
         color: #6c757d;
-        
+
         &:hover {
           background-color: #dc3545;
           color: #ffffff;
@@ -165,31 +169,3 @@
   }
 }
 
-// Scrollbar styling for tabs
-.multi-dataset-visualizer__tabs-container {
-  &::-webkit-scrollbar {
-    height: 6px;
-  }
-
-  &::-webkit-scrollbar-track {
-    background: transparent;
-  }
-
-  &::-webkit-scrollbar-thumb {
-    background-color: #d6dade;
-    border-radius: 3px;
-    
-    &:hover {
-      background-color: #c1c8cd;
-    }
-    
-    // Dark theme
-    body.theme-dark & {
-      background-color: #666666;
-      
-      &:hover {
-        background-color: #777777;
-      }
-    }
-  }
-} 
