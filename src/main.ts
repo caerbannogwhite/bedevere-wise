@@ -1,11 +1,11 @@
 import "./styles/main.scss";
-import { BrianApp } from "./components/BrianApp";
+import { BedevereApp } from "./components/BedevereApp";
 import { duckDBService } from "./data/DuckDBService.ts";
 
-// Initialize the Brian application
+// Initialize the Bedevere Wise application
 async function initApplication() {
   const debugMode = true;
-  const brianAppVersion = "0.6.0";
+  const appVersion = "0.6-it-is-i";
 
   // Initialize DuckDB first
   try {
@@ -21,8 +21,8 @@ async function initApplication() {
   // Clear existing content
   appContainer.innerHTML = "";
 
-  // Create the Brian application
-  const brianApp = new BrianApp(appContainer, duckDBService, brianAppVersion, {
+  // Create the Bedevere Wise application
+  const app = new BedevereApp(appContainer, duckDBService, appVersion, {
     theme: "auto", // Automatically detect user's preferred theme
     // theme: "light",
     showLeftPanel: true,
@@ -40,19 +40,19 @@ async function initApplication() {
   });
 
   // Restore persisted state (views, settings)
-  await brianApp.initAsync();
+  await app.initAsync();
 
-  brianApp.showMessage("Drop a file or open a folder to get started", "info");
+  app.showMessage("Drop a file or open a folder to get started", "info");
 
-  // Make brianApp and duckDBService globally available for debugging
+  // Make app and duckDBService globally available for debugging
   if (debugMode) {
-    (window as any).brianApp = brianApp;
+    (window as any).bedevereApp = app;
     (window as any).duckDBService = duckDBService;
 
-    console.log("Brian application initialized with VS Code-like interface");
+    console.log("Bedevere Wise initialized");
     console.log("- Press Ctrl+P to open the command palette");
     console.log("- Press F11 to toggle fullscreen");
-    console.log("- Access 'brianApp' from the console for debugging");
+    console.log("- Access 'bedevereApp' from the console for debugging");
     console.log("- Access 'duckDBService' from the console for database operations");
   }
 }

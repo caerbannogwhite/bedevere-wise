@@ -1,5 +1,5 @@
-// BrianApp - Main application layout with VS Code-like styling
-.brian-app {
+// BedevereApp - Main application layout with VS Code-like styling
+.bedevere-app {
   display: flex;
   flex-direction: column;
   height: 100vh;
@@ -45,7 +45,7 @@
     }
 
     // Minimized state
-    .brian-app--panel-minimized & {
+    .bedevere-app--panel-minimized & {
       width: 48px;
       min-width: 48px;
     }
@@ -79,7 +79,7 @@ body.theme-dark {
 
 // Responsive design
 @media (max-width: 768px) {
-  .brian-app {
+  .bedevere-app {
     &__control-panel {
       width: 100%;
       max-width: 280px;
@@ -91,12 +91,12 @@ body.theme-dark {
       transform: translateX(-100%);
       transition: transform 0.3s ease;
 
-      &.brian-app__control-panel--visible {
+      &.bedevere-app__control-panel--visible {
         transform: translateX(0);
       }
 
       // When minimized on mobile, hide completely
-      .brian-app--panel-minimized & {
+      .bedevere-app--panel-minimized & {
         transform: translateX(-100%);
       }
     }
@@ -108,7 +108,7 @@ body.theme-dark {
 }
 
 @media (max-width: 480px) {
-  .brian-app {
+  .bedevere-app {
     &__control-panel {
       width: 100%;
       max-width: none;
@@ -117,7 +117,7 @@ body.theme-dark {
 }
 
 // Focus management
-.brian-app {
+.bedevere-app {
   &:focus-within {
     .status-bar {
       border-top-color: #007acc;
@@ -127,7 +127,7 @@ body.theme-dark {
 
 // High contrast mode
 @media (prefers-contrast: high) {
-  .brian-app {
+  .bedevere-app {
     &__control-panel {
       border-right-width: 2px;
     }
@@ -137,7 +137,7 @@ body.theme-dark {
         border-top-color: #000000;
       }
 
-      .brian-app__control-panel {
+      .bedevere-app__control-panel {
         border-right-color: #000000;
       }
     }
@@ -147,7 +147,7 @@ body.theme-dark {
         border-top-color: #ffffff;
       }
 
-      .brian-app__control-panel {
+      .bedevere-app__control-panel {
         border-right-color: #ffffff;
       }
     }
@@ -156,7 +156,7 @@ body.theme-dark {
 
 // Reduced motion
 @media (prefers-reduced-motion: reduce) {
-  .brian-app {
+  .bedevere-app {
     &__control-panel {
       transition: none;
     }

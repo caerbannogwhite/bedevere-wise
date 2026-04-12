@@ -1,4 +1,4 @@
-import { FocusableComponent } from "../BrianApp/types";
+import { FocusableComponent } from "../BedevereApp/types";
 import { DragDropZone, DragDropZoneOptions } from "./DragDropZone";
 import { DuckDBService } from "@/data/DuckDBService";
 

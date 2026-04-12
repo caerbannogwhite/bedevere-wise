@@ -1,4 +1,4 @@
-# Brian App Technical Documentation
+# Bedevere Wise — Technical Documentation
 
 ## Events Dispatching System
 

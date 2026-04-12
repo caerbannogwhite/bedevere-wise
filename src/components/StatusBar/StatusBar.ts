@@ -1,4 +1,4 @@
-import { BrianAppMessageType } from "../BrianApp/BrianApp";
+import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 import { MessagePopover } from "./MessagePopover";
 
@@ -11,14 +11,14 @@ export interface MessageOptions {
   title?: string;
 }
 
-const DEFAULT_DURATIONS: Record<BrianAppMessageType, number> = {
+const DEFAULT_DURATIONS: Record<BedevereAppMessageType, number> = {
   error: 10_000,
   warning: 6_000,
   success: 3_000,
   info: 3_000,
 };
 
-const MESSAGE_ICONS: Record<BrianAppMessageType, string> = {
+const MESSAGE_ICONS: Record<BedevereAppMessageType, string> = {
   error: "\u2716", // ✖
   warning: "\u26A0", // ⚠
   success: "\u2713", // ✓
@@ -26,7 +26,7 @@ const MESSAGE_ICONS: Record<BrianAppMessageType, string> = {
 };
 
 interface ActiveMessage {
-  type: BrianAppMessageType;
+  type: BedevereAppMessageType;
   message: string;
   details?: string;
   title?: string;
@@ -45,7 +45,7 @@ export interface StatusBarItem {
   backgroundColor?: string;
   visible?: boolean;
   /** Severity, used to apply modifier classes and enable click-to-expand. */
-  messageType?: BrianAppMessageType;
+  messageType?: BedevereAppMessageType;
   /** Whether clicking this item should open the popover. */
   expandable?: boolean;
 }
@@ -62,6 +62,7 @@ export class StatusBar {
   private activeMessage: ActiveMessage | null = null;
   private messageTimeoutId: number | null = null;
   private popover: MessagePopover;
+  private aboutOverlay: HTMLElement | null = null;
 
   constructor(parent: HTMLElement, version: string) {
     this.container = document.createElement("div");
@@ -212,7 +213,7 @@ export class StatusBar {
 
   public showMessage(
     message: string,
-    type: BrianAppMessageType = "info",
+    type: BedevereAppMessageType = "info",
     options?: MessageOptions,
   ): void {
     // Clear any previously-scheduled dismissal
@@ -277,6 +278,65 @@ export class StatusBar {
     } else {
       this.popover.show(this.activeMessage);
     }
+  }
+
+  private showAbout(): void {
+    if (this.aboutOverlay) {
+      this.hideAbout();
+      return;
+    }
+
+    this.aboutOverlay = document.createElement("div");
+    this.aboutOverlay.className = "about-overlay";
+    this.aboutOverlay.addEventListener("click", (e) => {
+      if (e.target === this.aboutOverlay) this.hideAbout();
+    });
+
+    const panel = document.createElement("div");
+    panel.className = "about-panel";
+    panel.innerHTML = `
+      <div class="about-panel__header">
+        <h2 class="about-panel__title">\uD83E\uDD86 Bedevere Wise</h2>
+        <button class="about-panel__close" title="Close">\u00D7</button>
+      </div>
+      <div class="about-panel__body">
+        <p class="about-panel__version">v${this.version}</p>
+        <p class="about-panel__description">A local-first data viewer powered by DuckDB.</p>
+        <div class="about-panel__section">
+          <h3 class="about-panel__section-title">Dependencies</h3>
+          <ul class="about-panel__deps">
+            <li><a href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener noreferrer">DuckDB-WASM</a></li>
+            <li><a href="https://codemirror.net/" target="_blank" rel="noopener noreferrer">CodeMirror 6</a></li>
+          </ul>
+        </div>
+        <div class="about-panel__links">
+          <a href="https://github.com/caerbannogwhite/bedevere-wise" target="_blank" rel="noopener noreferrer">GitHub</a>
+          <span class="about-panel__separator">\u00B7</span>
+          <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG" target="_blank" rel="noopener noreferrer">Changelog</a>
+          <span class="about-panel__separator">\u00B7</span>
+          <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
+        </div>
+        <p class="about-panel__author">Made by <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer">caerbannogwhite</a></p>
+      </div>
+    `;
+
+    panel.querySelector(".about-panel__close")!.addEventListener("click", () => this.hideAbout());
+
+    this.aboutOverlay.appendChild(panel);
+    document.body.appendChild(this.aboutOverlay);
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        this.hideAbout();
+        document.removeEventListener("keydown", onKeyDown);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+  }
+
+  private hideAbout(): void {
+    this.aboutOverlay?.remove();
+    this.aboutOverlay = null;
   }
 
   private initializeDefaultItems(): void {
@@ -362,12 +422,20 @@ export class StatusBar {
     // Add version and made by information
     const versionElement = document.createElement("div");
     versionElement.className = "status-bar__item status-bar__item--clickable";
-    versionElement.title = `Brian App Version ${this.version}\nClick to view changelog`;
+    versionElement.title = `Bedevere Wise v${this.version}\nClick to view changelog`;
     versionElement.textContent = `v${this.version}`;
     versionElement.addEventListener("click", () => {
-      window.open("https://github.com/caerbannogwhite/brian/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
+      window.open("https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
     });
     this.rightSection.appendChild(versionElement);
+
+    // About button
+    const aboutElement = document.createElement("div");
+    aboutElement.className = "status-bar__item status-bar__item--clickable status-bar__item--about";
+    aboutElement.title = "About Bedevere Wise";
+    aboutElement.textContent = "About";
+    aboutElement.addEventListener("click", () => this.showAbout());
+    this.rightSection.appendChild(aboutElement);
 
     const createdByElement = document.createElement("div");
     createdByElement.className = "status-bar__item status-bar__item--created-by";
@@ -429,6 +497,7 @@ export class StatusBar {
   }
 
   public destroy(): void {
+    this.hideAbout();
     if (this.messageTimeoutId !== null) {
       window.clearTimeout(this.messageTimeoutId);
       this.messageTimeoutId = null;

@@ -1,6 +1,6 @@
 import { DuckDBService } from "./DuckDBService";
 
-const STORAGE_KEY = "brian_aliases";
+const STORAGE_KEY = "bedevere_aliases";
 
 export class AliasManager {
   private aliases: Map<string, string> = new Map(); // tableName → alias

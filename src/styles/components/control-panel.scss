@@ -51,7 +51,7 @@
   &__header {
     display: flex;
     align-items: center;
-    justify-content: flex-end;
+    justify-content: space-between;
     padding: 6px 8px;
     background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
     border-bottom: 1px solid #e8ecf0;
@@ -61,6 +61,25 @@
     body.theme-dark & {
       background: linear-gradient(180deg, #2d2d30 0%, #252526 100%);
       border-bottom-color: #404040;
+    }
+  }
+
+  &__app-title {
+    font-size: 13px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    color: #444;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+
+    body.theme-dark & {
+      color: #ccc;
+    }
+
+    .control-panel__panel--minimized & {
+      display: none;
     }
   }
 

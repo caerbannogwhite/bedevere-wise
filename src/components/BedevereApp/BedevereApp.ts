@@ -20,13 +20,13 @@ import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
 import { StatFormatHandler } from "@/data/formats/StatFormatHandler";
 import { AliasManager } from "@/data/AliasManager";
 
-export type BrianAppTheme = "light" | "dark" | "auto";
+export type BedevereAppTheme = "light" | "dark" | "auto";
 
-export type BrianAppMessageType = "info" | "warning" | "error" | "success";
+export type BedevereAppMessageType = "info" | "warning" | "error" | "success";
 
-export interface BrianAppOptions {
+export interface BedevereAppOptions {
   spreadsheetOptions?: SpreadsheetOptions;
-  theme?: BrianAppTheme;
+  theme?: BedevereAppTheme;
   showLeftPanel?: boolean;
   statusBarVisible?: boolean;
   commandPaletteEnabled?: boolean;
@@ -34,7 +34,7 @@ export interface BrianAppOptions {
   debugMode?: boolean;
 }
 
-export class BrianApp implements EventHandler {
+export class BedevereApp implements EventHandler {
   private container: HTMLElement;
   private mainContainer!: HTMLElement;
   private leftPanelContainer!: HTMLElement;
@@ -47,8 +47,8 @@ export class BrianApp implements EventHandler {
   private multiDatasetVisualizer!: MultiDatasetVisualizer;
   private statusBar!: StatusBar;
 
-  private options: BrianAppOptions;
-  private theme: BrianAppTheme = "dark";
+  private options: BedevereAppOptions;
+  private theme: BedevereAppTheme = "dark";
   private version: string;
 
   // Persistence, views, and import
@@ -62,7 +62,7 @@ export class BrianApp implements EventHandler {
   private focusManager: FocusManager;
   private eventDispatcher: EventDispatcher;
 
-  constructor(parent: HTMLElement, duckDBService: DuckDBService, version: string, options: BrianAppOptions = {}) {
+  constructor(parent: HTMLElement, duckDBService: DuckDBService, version: string, options: BedevereAppOptions = {}) {
     this.options = {
       theme: "dark",
       showLeftPanel: true,
@@ -72,7 +72,7 @@ export class BrianApp implements EventHandler {
     };
 
     this.container = document.createElement("div");
-    this.container.className = "brian-app";
+    this.container.className = "bedevere-app";
     this.setupTheme();
 
     this.duckDBService = duckDBService;
@@ -142,11 +142,11 @@ export class BrianApp implements EventHandler {
   }
 
   public setTheme(theme: "light" | "dark"): void {
-    this.container.classList.remove(`brian-app--${this.theme}`);
+    this.container.classList.remove(`bedevere-app--${this.theme}`);
     document.body.classList.remove(`theme-${this.theme}`);
 
     this.theme = theme;
-    this.container.classList.add(`brian-app--${this.theme}`);
+    this.container.classList.add(`bedevere-app--${this.theme}`);
     document.body.classList.add(`theme-${this.theme}`);
 
     // Persist theme setting
@@ -157,7 +157,7 @@ export class BrianApp implements EventHandler {
 
   public showMessage(
     message: string,
-    type: BrianAppMessageType = "info",
+    type: BedevereAppMessageType = "info",
     options?: import("../StatusBar/StatusBar").MessageOptions,
   ): void {
     this.statusBar?.showMessage(message, type, options);
@@ -202,15 +202,15 @@ export class BrianApp implements EventHandler {
   private createLayout(): void {
     // Main container (excluding status bar)
     this.mainContainer = document.createElement("div");
-    this.mainContainer.className = "brian-app__main";
+    this.mainContainer.className = "bedevere-app__main";
 
     // Dataset panel container
     this.leftPanelContainer = document.createElement("div");
-    this.leftPanelContainer.className = "brian-app__control-panel";
+    this.leftPanelContainer.className = "bedevere-app__control-panel";
 
     // Spreadsheet container
     this.spreadsheetContainer = document.createElement("div");
-    this.spreadsheetContainer.className = "brian-app__spreadsheet";
+    this.spreadsheetContainer.className = "bedevere-app__spreadsheet";
 
     this.mainContainer.appendChild(this.leftPanelContainer);
     this.mainContainer.appendChild(this.spreadsheetContainer);
@@ -302,7 +302,7 @@ export class BrianApp implements EventHandler {
 
       // Handle panel toggle
       this.leftPanel.setOnToggleCallback((isMinimized) => {
-        this.container.classList.toggle("brian-app--panel-minimized", isMinimized);
+        this.container.classList.toggle("bedevere-app--panel-minimized", isMinimized);
         this.updateDimensions();
 
         // Persist panel state
@@ -321,7 +321,7 @@ export class BrianApp implements EventHandler {
 
   private setupTheme(): void {
     this.theme = this.options.theme === "auto" ? this.detectTheme() : this.options.theme || "dark";
-    this.container.classList.add(`brian-app--${this.theme}`);
+    this.container.classList.add(`bedevere-app--${this.theme}`);
     document.body.classList.add(`theme-${this.theme}`);
   }
 
@@ -333,7 +333,7 @@ export class BrianApp implements EventHandler {
   }
 
   private setupEventSystem(): void {
-    // Register BrianApp as a global event handler
+    // Register BedevereApp as a global event handler
     this.eventDispatcher.addGlobalEventHandler(this);
 
     // Theme change detection
@@ -632,14 +632,6 @@ export class BrianApp implements EventHandler {
       },
     });
 
-    // Developer commands
-    this.commandPalette.registerCommand({
-      id: "developer.showInfo",
-      title: "Show Application Info",
-      description: "Display information about the current application state",
-      category: "Developer",
-      execute: () => this.showApplicationInfo(),
-    });
   }
 
   private async executeCommand(command: string): Promise<void> {
@@ -768,21 +760,6 @@ export class BrianApp implements EventHandler {
     } else {
       this.showMessage("No active dataset to export", "warning");
     }
-  }
-
-  private showApplicationInfo(): void {
-    const datasetIds = this.multiDatasetVisualizer.getDatasetIds();
-    const info = `
-    Brian Application Info:
-    - Active datasets: ${datasetIds.length}
-    - Theme: ${this.theme}
-    - Dataset panel: ${this.options.showLeftPanel ? "visible" : "hidden"}
-    - Status bar: ${this.options.statusBarVisible ? "visible" : "hidden"}
-    - Command palette: ${this.options.commandPaletteEnabled ? "enabled" : "disabled"}
-    `.trim();
-
-    console.log(info);
-    this.showMessage("Application info logged to console", "info");
   }
 
   private async updateStatusBarDatasetInfo(dataset?: DataProvider): Promise<void> {

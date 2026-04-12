@@ -1,6 +1,6 @@
 # Testing Setup
 
-This directory contains the testing infrastructure for the Brian project.
+This directory contains the testing infrastructure for the Bedevere Wise project.
 
 ## Testing Framework
 

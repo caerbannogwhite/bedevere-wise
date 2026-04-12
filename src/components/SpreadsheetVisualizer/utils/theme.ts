@@ -56,7 +56,7 @@ export function detectCurrentTheme(): "light" | "dark" {
   installCacheInvalidation();
   if (cachedTheme !== null) return cachedTheme;
 
-  // Check body class first (set by BrianApp)
+  // Check body class first (set by BedevereApp)
   if (document.body.classList.contains("theme-light")) {
     cachedTheme = "light";
     return cachedTheme;

@@ -17,12 +17,12 @@ export interface AppSettings {
 }
 
 const STORAGE_KEYS = {
-  views: "brian_views",
-  queries: "brian_queries",
-  settings: "brian_settings",
+  views: "bedevere_views",
+  queries: "bedevere_queries",
+  settings: "bedevere_settings",
 } as const;
 
-const DB_NAME = "brian_db";
+const DB_NAME = "bedevere_db";
 const DB_VERSION = 1;
 const TABLE_STORE = "table_snapshots";
 

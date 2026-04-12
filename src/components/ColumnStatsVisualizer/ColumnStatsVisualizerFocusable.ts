@@ -1,4 +1,4 @@
-import { FocusableComponent } from "../BrianApp/types";
+import { FocusableComponent } from "../BedevereApp/types";
 import { SpreadsheetVisualizer } from "../SpreadsheetVisualizer/SpreadsheetVisualizer";
 import { ColumnStatsVisualizer } from "./ColumnStatsVisualizer";
 

@@ -4,7 +4,7 @@ import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
 import { oneDark } from "@codemirror/theme-one-dark";
-import { FocusableComponent } from "../BrianApp/types";
+import { FocusableComponent } from "../BedevereApp/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { keymapService } from "../../data/KeymapService";
 import { SqlAutoComplete } from "./SqlAutoComplete";

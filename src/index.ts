@@ -1,5 +1,5 @@
 // Main components
-export { BrianApp } from "./components/BrianApp";
+export { BedevereApp } from "./components/BedevereApp";
 export { MultiDatasetVisualizer } from "./components/MultiDatasetVisualizer";
 export { ControlPanel } from "./components/ControlPanel";
 export { SpreadsheetVisualizer } from "./components/SpreadsheetVisualizer";
@@ -13,7 +13,7 @@ export { CommandBar } from "./components/CommandBar";
 export type { DataProvider } from "./data/types";
 
 // New component types
-export type { BrianAppOptions } from "./components/BrianApp";
+export type { BedevereAppOptions } from "./components/BedevereApp";
 export type { StatusBarItem } from "./components/StatusBar";
 export type { Command } from "./components/CommandPalette";
 export type { DragDropZoneOptions } from "./components/DragDropZone";

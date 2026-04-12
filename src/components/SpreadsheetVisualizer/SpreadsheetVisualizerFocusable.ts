@@ -1,5 +1,5 @@
 import { DataProvider, SpreadsheetOptions } from "@/index";
-import { FocusableComponent } from "../BrianApp/types";
+import { FocusableComponent } from "../BedevereApp/types";
 import { MouseState, ToDraw } from "./SpreadsheetVisualizerBase";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";

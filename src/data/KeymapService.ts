@@ -58,7 +58,7 @@ export function matchesBinding(event: KeyboardEvent, binding: KeyBinding): boole
 // ─── Default keymap ────────────────────────────────────────────────
 
 const DEFAULT_KEYMAP: KeymapEntry[] = [
-  // Global (BrianApp)
+  // Global (BedevereApp)
   { action: "app.togglePanel",       description: "Toggle control panel",       scope: "global",  binding: { key: "b", ctrl: true } },
   { action: "app.commandPalette",    description: "Open command palette",       scope: "global",  binding: { key: "P", ctrl: true, shift: true } },
   { action: "app.toggleSqlEditor",   description: "Toggle SQL editor",          scope: "global",  binding: { key: "e", ctrl: true } },
@@ -88,7 +88,7 @@ const DEFAULT_KEYMAP: KeymapEntry[] = [
 
 // ─── KeymapService ─────────────────────────────────────────────────
 
-const STORAGE_KEY = "brian_keymap";
+const STORAGE_KEY = "bedevere_keymap";
 
 export class KeymapService {
   private entries: KeymapEntry[];

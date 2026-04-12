@@ -1,10 +1,10 @@
 {
-  "name": "brian",
-  "version": "0.6.0",
+  "name": "bedevere-wise",
+  "version": "0.6.0-it-is-i",
   "author": "Massimo Meneghello",
   "repository": {
     "type": "git",
-    "url": "https://github.com/caerbannogwhite/brian"
+    "url": "https://github.com/caerbannogwhite/bedevere-wise"
   },
   "main": "dist/index.js",
   "module": "dist/index.es.js",
@@ -25,13 +25,13 @@
     },
     "./style.css": "./dist/style.css"
   },
-  "description": "A simple, local-first spreadsheet data viewer tool powered by DuckDB.",
+  "description": "Bedevere Wise — a local-first data viewer powered by DuckDB.",
   "files": [
     "dist",
     "README.md",
     "CHANGELOG"
   ],
-  "homepage": "https://github.com/caerbannogwhite/brian",
+  "homepage": "https://github.com/caerbannogwhite/bedevere-wise",
   "keywords": [
     "spreadsheet",
     "data-analysis",

@@ -1,4 +1,4 @@
-import { EventDispatcher, FocusableComponent } from "../BrianApp/types";
+import { EventDispatcher, FocusableComponent } from "../BedevereApp/types";
 import { ParameterForm } from "./ParameterForm";
 
 export interface CommandParameter {
@@ -423,17 +423,6 @@ export class CommandPalette implements FocusableComponent {
 
   private registerDefaultCommands(): void {
     this.registerCommand({
-      id: "workbench.action.showCommands",
-      title: "Show All Commands",
-      description: "Show command palette",
-      category: "View",
-      keybinding: "Ctrl+P",
-      execute: () => {
-        // This command shows the palette itself, so we don't need to do anything
-      },
-    });
-
-    this.registerCommand({
       id: "workbench.action.reload",
       title: "Reload Window",
       description: "Reload the current window",
@@ -456,69 +445,6 @@ export class CommandPalette implements FocusableComponent {
         } else {
           document.documentElement.requestFullscreen();
         }
-      },
-    });
-
-    // Example command with parameters for testing
-    this.registerCommand({
-      id: "developer.action.showAlert",
-      title: "Show Alert",
-      description: "Show a custom alert message with various options",
-      category: "Developer",
-      parameters: [
-        {
-          name: "message",
-          type: "string",
-          description: "The message to display",
-          required: true,
-        },
-        {
-          name: "title",
-          type: "string",
-          description: "Optional title for the alert",
-          required: false,
-          default: "Alert",
-        },
-        {
-          name: "type",
-          type: "string",
-          description: "Type of alert to show",
-          required: false,
-          default: "info",
-          options: () => ["info", "warning", "error", "success"],
-        },
-        {
-          name: "showConfirm",
-          type: "boolean",
-          description: "Show a confirmation button",
-          required: false,
-          default: "false",
-        },
-        {
-          name: "timeout",
-          type: "number",
-          description: "Auto-hide timeout in seconds",
-          required: false,
-        },
-      ],
-      execute: (params) => {
-        const { message, title, type, showConfirm, timeout } = params || {};
-
-        let alertMessage = `${title || "Alert"}: ${message || "No message"}`;
-        if (type) {
-          alertMessage = `[${type.toUpperCase()}] ${alertMessage}`;
-        }
-        if (showConfirm) {
-          alertMessage += "\n\nPress OK to continue.";
-        }
-        if (timeout) {
-          alertMessage += `\n\nThis alert will auto-close in ${timeout} seconds.`;
-          setTimeout(() => {
-            console.log("Alert auto-closed after timeout");
-          }, timeout * 1000);
-        }
-
-        alert(alertMessage);
       },
     });
   }

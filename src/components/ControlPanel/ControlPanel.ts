@@ -6,12 +6,12 @@ import { FolderScanService } from "../../data/FolderScanService";
 import { FileTreeNode } from "../../data/FileTreeTypes";
 import { FileTreeRenderer, FileTreeCallbacks } from "./FileTreeRenderer";
 import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
-import { BrianAppMessageType } from "../BrianApp/BrianApp";
+import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
 import type { MessageOptions } from "../StatusBar/StatusBar";
 
 export type ShowMessageFn = (
   message: string,
-  type: BrianAppMessageType,
+  type: BedevereAppMessageType,
   options?: MessageOptions,
 ) => void;
 
@@ -92,15 +92,20 @@ export class ControlPanel {
     this.panelElement.className = "control-panel__panel";
     this.panelElement.style.width = `${this.panelWidth}px`;
 
-    // Create header with minimize button
+    // Create header with app name and minimize button
     this.headerElement = document.createElement("div");
     this.headerElement.className = "control-panel__header";
+
+    const appTitle = document.createElement("span");
+    appTitle.className = "control-panel__app-title";
+    appTitle.innerHTML = `<span class="control-panel__app-icon">\uD83E\uDD86</span> Bedevere`;
 
     this.toggleButton = document.createElement("button");
     this.toggleButton.className = "control-panel__toggle";
     this.toggleButton.innerHTML = "−";
     this.toggleButton.title = "Minimize panel";
 
+    this.headerElement.appendChild(appTitle);
     this.headerElement.appendChild(this.toggleButton);
 
     // Create content area

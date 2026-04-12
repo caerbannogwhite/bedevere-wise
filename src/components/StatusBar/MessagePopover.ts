@@ -1,13 +1,13 @@
-import { BrianAppMessageType } from "../BrianApp/BrianApp";
+import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
 
-const ICONS: Record<BrianAppMessageType, string> = {
+const ICONS: Record<BedevereAppMessageType, string> = {
   error: "\u2716", // ✖
   warning: "\u26A0", // ⚠
   success: "\u2713", // ✓
   info: "\u2139", // ℹ
 };
 
-const LABELS: Record<BrianAppMessageType, string> = {
+const LABELS: Record<BedevereAppMessageType, string> = {
   error: "ERROR",
   warning: "WARNING",
   success: "SUCCESS",
@@ -15,7 +15,7 @@ const LABELS: Record<BrianAppMessageType, string> = {
 };
 
 export interface MessagePopoverArgs {
-  type: BrianAppMessageType;
+  type: BedevereAppMessageType;
   title?: string;
   message: string;
   details?: string;

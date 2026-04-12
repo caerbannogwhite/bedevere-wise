@@ -7,7 +7,7 @@ import { DataProvider, DatasetMetadata } from "../../data/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
 import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvider";
-import { EventDispatcher } from "../BrianApp/EventDispatcher";
+import { EventDispatcher } from "../BedevereApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 
 interface DatasetTab {
@@ -368,7 +368,7 @@ export class MultiDatasetVisualizer {
   }
 
   public async resize(): Promise<void> {
-    // Public method to trigger resize from external components (e.g., BrianApp)
+    // Public method to trigger resize from external components (e.g., BedevereApp)
     await this.handleResize();
   }
 

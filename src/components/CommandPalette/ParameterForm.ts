@@ -1,4 +1,4 @@
-import { FocusableComponent } from "../BrianApp/types";
+import { FocusableComponent } from "../BedevereApp/types";
 import { Command, CommandParameter } from "./CommandPalette";
 
 export class ParameterForm implements FocusableComponent {
