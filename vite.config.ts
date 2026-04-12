@@ -2,8 +2,11 @@ import { defineConfig } from "vite";
 import { resolve } from "path";
 
 export default defineConfig(({ command, mode }) => {
-  // Development/app build configuration
+  // GitHub Pages serves from /bedevere-wise/; dev stays at /
+  const base = command === "build" ? "/bedevere-wise/" : "/";
+
   return {
+    base,
     resolve: {
       alias: {
         "@": resolve(__dirname, "./src"),
