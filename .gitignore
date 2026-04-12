@@ -32,6 +32,9 @@ yarn-error.log*
 # Local DuckDB WASM extensions (loaded from remote at runtime)
 public/extensions/
 
+# Claude Code local settings
+.claude/
+
 # Temp
 src/data.ts
 datafiles/
