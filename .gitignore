@@ -29,6 +29,9 @@ yarn-error.log*
 *.sln
 *.sw?
 
+# Local DuckDB WASM extensions (loaded from remote at runtime)
+public/extensions/
+
 # Temp
 src/data.ts
 datafiles/
