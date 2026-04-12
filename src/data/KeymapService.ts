@@ -1,0 +1,181 @@
+/**
+ * A key combination descriptor. Matches against KeyboardEvent properties.
+ * Examples: "Ctrl+B", "Ctrl+Shift+P", "ArrowUp", "Ctrl+Enter", "F11", "Escape"
+ */
+export interface KeyBinding {
+  key: string;        // KeyboardEvent.key value (e.g. "b", "ArrowUp", "Enter", "F11")
+  ctrl?: boolean;     // Require Ctrl (or Cmd on Mac)
+  shift?: boolean;    // Require Shift
+  alt?: boolean;      // Require Alt
+}
+
+export interface KeymapEntry {
+  /** Unique action identifier (e.g. "spreadsheet.moveUp", "app.togglePanel") */
+  action: string;
+  /** Human-readable description shown in UI */
+  description: string;
+  /** Scope where this binding is active */
+  scope: "global" | "spreadsheet" | "sqlEditor" | "commandPalette";
+  /** The key combination */
+  binding: KeyBinding;
+}
+
+/** Serialize a KeyBinding to a display string like "Ctrl+Shift+P" */
+export function formatBinding(b: KeyBinding): string {
+  const parts: string[] = [];
+  if (b.ctrl) parts.push("Ctrl");
+  if (b.shift) parts.push("Shift");
+  if (b.alt) parts.push("Alt");
+  parts.push(b.key.length === 1 ? b.key.toUpperCase() : b.key);
+  return parts.join("+");
+}
+
+/** Parse a display string like "Ctrl+Shift+P" back to a KeyBinding */
+export function parseBinding(s: string): KeyBinding {
+  const parts = s.split("+");
+  const key = parts[parts.length - 1];
+  return {
+    key: key.length === 1 ? key.toLowerCase() : key,
+    ctrl: parts.includes("Ctrl"),
+    shift: parts.includes("Shift"),
+    alt: parts.includes("Alt"),
+  };
+}
+
+/** Check if a KeyboardEvent matches a KeyBinding */
+export function matchesBinding(event: KeyboardEvent, binding: KeyBinding): boolean {
+  const ctrlOrMeta = event.ctrlKey || event.metaKey;
+  if ((binding.ctrl ?? false) !== ctrlOrMeta) return false;
+  if ((binding.shift ?? false) !== event.shiftKey) return false;
+  if ((binding.alt ?? false) !== event.altKey) return false;
+  // Case-insensitive single-char comparison; exact match for named keys
+  if (binding.key.length === 1) {
+    return event.key.toLowerCase() === binding.key.toLowerCase();
+  }
+  return event.key === binding.key;
+}
+
+// ─── Default keymap ────────────────────────────────────────────────
+
+const DEFAULT_KEYMAP: KeymapEntry[] = [
+  // Global (BrianApp)
+  { action: "app.togglePanel",       description: "Toggle control panel",       scope: "global",  binding: { key: "b", ctrl: true } },
+  { action: "app.commandPalette",    description: "Open command palette",       scope: "global",  binding: { key: "P", ctrl: true, shift: true } },
+  { action: "app.toggleSqlEditor",   description: "Toggle SQL editor",          scope: "global",  binding: { key: "e", ctrl: true } },
+  { action: "app.toggleFullscreen",  description: "Toggle fullscreen",          scope: "global",  binding: { key: "F11" } },
+
+  // Spreadsheet navigation
+  { action: "spreadsheet.moveUp",        description: "Move selection up",             scope: "spreadsheet", binding: { key: "ArrowUp" } },
+  { action: "spreadsheet.moveDown",      description: "Move selection down",           scope: "spreadsheet", binding: { key: "ArrowDown" } },
+  { action: "spreadsheet.moveLeft",      description: "Move selection left",           scope: "spreadsheet", binding: { key: "ArrowLeft" } },
+  { action: "spreadsheet.moveRight",     description: "Move selection right",          scope: "spreadsheet", binding: { key: "ArrowRight" } },
+  { action: "spreadsheet.extendUp",      description: "Extend selection up",           scope: "spreadsheet", binding: { key: "ArrowUp", ctrl: true } },
+  { action: "spreadsheet.extendDown",    description: "Extend selection down",         scope: "spreadsheet", binding: { key: "ArrowDown", ctrl: true } },
+  { action: "spreadsheet.extendLeft",    description: "Extend selection left",         scope: "spreadsheet", binding: { key: "ArrowLeft", ctrl: true } },
+  { action: "spreadsheet.extendRight",   description: "Extend selection right",        scope: "spreadsheet", binding: { key: "ArrowRight", ctrl: true } },
+  { action: "spreadsheet.scrollUp",      description: "Scroll viewport up",            scope: "spreadsheet", binding: { key: "ArrowUp", shift: true } },
+  { action: "spreadsheet.scrollDown",    description: "Scroll viewport down",          scope: "spreadsheet", binding: { key: "ArrowDown", shift: true } },
+  { action: "spreadsheet.scrollLeft",    description: "Scroll viewport left",          scope: "spreadsheet", binding: { key: "ArrowLeft", shift: true } },
+  { action: "spreadsheet.scrollRight",   description: "Scroll viewport right",         scope: "spreadsheet", binding: { key: "ArrowRight", shift: true } },
+  { action: "spreadsheet.enter",         description: "Start cell selection",           scope: "spreadsheet", binding: { key: "Enter" } },
+  { action: "spreadsheet.copy",          description: "Copy selection to clipboard",    scope: "spreadsheet", binding: { key: "c", ctrl: true } },
+  { action: "spreadsheet.cancelSelection", description: "Cancel selection",             scope: "spreadsheet", binding: { key: "Escape" } },
+
+  // SQL Editor
+  { action: "sqlEditor.execute",    description: "Execute query",      scope: "sqlEditor", binding: { key: "Enter", ctrl: true } },
+  { action: "sqlEditor.collapse",   description: "Collapse editor",    scope: "sqlEditor", binding: { key: "Escape" } },
+];
+
+// ─── KeymapService ─────────────────────────────────────────────────
+
+const STORAGE_KEY = "brian_keymap";
+
+export class KeymapService {
+  private entries: KeymapEntry[];
+
+  constructor() {
+    this.entries = this.loadKeymap();
+  }
+
+  /** Get all entries, optionally filtered by scope */
+  public getEntries(scope?: string): KeymapEntry[] {
+    if (!scope) return [...this.entries];
+    return this.entries.filter((e) => e.scope === scope);
+  }
+
+  /** Get the binding for a specific action */
+  public getBinding(action: string): KeyBinding | null {
+    return this.entries.find((e) => e.action === action)?.binding ?? null;
+  }
+
+  /** Find which action (if any) matches a keyboard event within a given scope */
+  public matchEvent(event: KeyboardEvent, scope: string): string | null {
+    for (const entry of this.entries) {
+      if (entry.scope === scope && matchesBinding(event, entry.binding)) {
+        return entry.action;
+      }
+    }
+    return null;
+  }
+
+  /** Update a single binding and persist */
+  public setBinding(action: string, binding: KeyBinding): void {
+    const entry = this.entries.find((e) => e.action === action);
+    if (entry) {
+      entry.binding = binding;
+      this.saveKeymap();
+    }
+  }
+
+  /** Reset all bindings to defaults */
+  public resetToDefaults(): void {
+    this.entries = DEFAULT_KEYMAP.map((e) => ({ ...e, binding: { ...e.binding } }));
+    localStorage.removeItem(STORAGE_KEY);
+  }
+
+  /** Get the default binding for comparison / reset */
+  public getDefaultBinding(action: string): KeyBinding | null {
+    return DEFAULT_KEYMAP.find((e) => e.action === action)?.binding ?? null;
+  }
+
+  private loadKeymap(): KeymapEntry[] {
+    // Start with a deep copy of defaults
+    const keymap = DEFAULT_KEYMAP.map((e) => ({ ...e, binding: { ...e.binding } }));
+
+    // Merge any user overrides from localStorage
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) {
+      try {
+        const overrides: Record<string, KeyBinding> = JSON.parse(raw);
+        for (const entry of keymap) {
+          if (overrides[entry.action]) {
+            entry.binding = overrides[entry.action];
+          }
+        }
+      } catch {
+        // Ignore corrupt storage
+      }
+    }
+
+    return keymap;
+  }
+
+  private saveKeymap(): void {
+    // Only save entries that differ from defaults
+    const overrides: Record<string, KeyBinding> = {};
+    for (const entry of this.entries) {
+      const def = DEFAULT_KEYMAP.find((d) => d.action === entry.action);
+      if (def && JSON.stringify(def.binding) !== JSON.stringify(entry.binding)) {
+        overrides[entry.action] = entry.binding;
+      }
+    }
+
+    if (Object.keys(overrides).length > 0) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(overrides));
+    } else {
+      localStorage.removeItem(STORAGE_KEY);
+    }
+  }
+}
+
+export const keymapService = new KeymapService();
