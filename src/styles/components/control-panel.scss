@@ -1,0 +1,340 @@
+.control-panel {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100vh;
+  z-index: 1000;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
+    sans-serif;
+
+  &__panel {
+    width: 320px;
+    height: 100%;
+    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
+    border-right: 1px solid #e8ecf0;
+    display: flex;
+    flex-direction: column;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    overflow: hidden;
+    position: relative;
+
+    body.theme-dark & {
+      background: linear-gradient(180deg, #252526 0%, #1f1f1f 100%);
+      border-right-color: #404040;
+    }
+
+    &--minimized {
+      width: 48px;
+
+      .control-panel__content {
+        opacity: 0;
+        visibility: hidden;
+        pointer-events: none;
+      }
+
+      .control-panel__header {
+        justify-content: center;
+        padding: 6px 8px;
+      }
+
+      .control-panel__toggle {
+        margin: 0;
+      }
+
+      .control-panel__resize-handle {
+        display: none;
+      }
+    }
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 6px 8px;
+    background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
+    border-bottom: 1px solid #e8ecf0;
+    min-height: 36px;
+    flex-shrink: 0;
+
+    body.theme-dark & {
+      background: linear-gradient(180deg, #2d2d30 0%, #252526 100%);
+      border-bottom-color: #404040;
+    }
+  }
+
+  &__toggle {
+    background: none;
+    border: none;
+    font-size: 16px;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    padding: 8px;
+    border-radius: 6px;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
+
+    &:hover {
+      background-color: rgba(0, 0, 0, 0.05);
+      color: #333;
+    }
+
+    body.theme-dark & {
+      color: #ccc;
+
+      &:hover {
+        background-color: rgba(255, 255, 255, 0.1);
+        color: #fff;
+      }
+    }
+  }
+
+  &__content {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    transition: opacity 0.2s ease, visibility 0.2s ease;
+
+  }
+
+  // --- Accordion ---
+
+  &__accordion-section {
+    border-bottom: 1px solid #e8ecf0;
+
+    body.theme-dark & {
+      border-bottom-color: #333;
+    }
+  }
+
+  &__accordion-header {
+    display: flex;
+    align-items: center;
+    padding: 6px 12px;
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: #f0f2f5;
+
+      body.theme-dark & {
+        background: #2d2d30;
+      }
+    }
+  }
+
+  &__accordion-chevron {
+    font-size: 8px;
+    margin-right: 8px;
+    transition: transform 0.2s ease;
+    color: #6b7280;
+    display: inline-block;
+
+    body.theme-dark & {
+      color: #9ca3af;
+    }
+
+    &--expanded {
+      transform: rotate(90deg);
+    }
+  }
+
+  &__accordion-title {
+    font-size: 11px;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+
+    body.theme-dark & {
+      color: #9ca3af;
+    }
+  }
+
+  &__accordion-body {
+    max-height: 0;
+    overflow: hidden;
+    transition: max-height 0.25s ease;
+
+    &--expanded {
+      max-height: 2000px;
+    }
+  }
+
+  // --- Resize Handle ---
+
+  &__resize-handle {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 4px;
+    height: 100%;
+    cursor: col-resize;
+    z-index: 1;
+
+    &:hover {
+      background: rgba(0, 120, 212, 0.3);
+    }
+  }
+
+  // --- Dataset Items ---
+
+  &__list {
+    padding: 0;
+  }
+
+  &__item {
+    display: flex;
+    align-items: center;
+    padding: 6px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    transition: background 0.15s ease;
+    position: relative;
+
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: transparent;
+      transition: background 0.15s ease;
+    }
+
+    body.theme-dark & {
+      border-bottom-color: #333;
+    }
+
+    &:not(&--loaded) {
+      cursor: pointer;
+
+      &:hover {
+        background: #f8f9fa;
+
+        &::before {
+          background: #3b82f6;
+        }
+      }
+
+      body.theme-dark & {
+        &:hover {
+          background: #2d2d30;
+        }
+      }
+    }
+
+    &--loaded {
+      background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
+      color: #0369a1;
+
+      &::before {
+        background: #10b981;
+      }
+
+      body.theme-dark & {
+        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
+        color: #60a5fa;
+      }
+    }
+  }
+
+  &__item-text {
+    flex: 1;
+    min-width: 0;
+  }
+
+  &__item-name {
+    font-weight: 600;
+    font-size: 14px;
+    color: #1f2937;
+    line-height: 1.4;
+
+    body.theme-dark & {
+      color: #e5e7eb;
+    }
+  }
+
+  // --- Section Items (Views, Queries) ---
+
+  &__section-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 16px;
+    cursor: pointer;
+    transition: background 0.15s ease;
+
+    &:hover {
+      background: #f8f9fa;
+
+      body.theme-dark & {
+        background: #2d2d30;
+      }
+    }
+  }
+
+  &__section-item-name {
+    font-size: 13px;
+    font-weight: 500;
+    color: #374151;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+
+    body.theme-dark & {
+      color: #d1d5db;
+    }
+  }
+
+  &__section-item-delete {
+    background: none;
+    border: none;
+    color: #9ca3af;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+    border-radius: 3px;
+    opacity: 0;
+    transition: all 0.15s ease;
+
+    .control-panel__section-item:hover & {
+      opacity: 1;
+    }
+
+    &:hover {
+      color: #dc3545;
+      background: rgba(220, 53, 69, 0.1);
+    }
+  }
+
+  // --- Column Stats (embedded in accordion) ---
+
+  &__column-stats {
+    padding: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .control-panel {
+    &__panel {
+      transition: none;
+    }
+
+    &__accordion-body {
+      transition: none;
+    }
+
+    &__accordion-chevron {
+      transition: none;
+    }
+  }
+}

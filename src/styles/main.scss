@@ -2,17 +2,77 @@
 @use "components/multi-dataset-visualizer";
 @use "components/spreadsheet-visualizer";
 @use "components/column-stats-visualizer";
-@use "components/dataset-panel";
+@use "components/control-panel";
 @use "components/status-bar";
+@use "components/message-popover";
 @use "components/command-palette";
 @use "components/brian-app";
 @use "components/drag-drop-zone";
-@use "components/cell-value-bar";
+@use "components/command-bar";
 @use "components/sql-editor";
+@use "components/file-tree";
 
 // Global styles
 * {
   box-sizing: border-box;
+
+  // Consistent scrollbars matching SpreadsheetVisualizer canvas scrollbars (Firefox)
+  scrollbar-width: thin;
+  scrollbar-color: #d1d5db #f3f3f3;
+}
+
+body.theme-dark * {
+  scrollbar-color: #4b5563 #2d2d30;
+}
+
+// Webkit scrollbar styling (Chrome, Edge, Safari)
+// Colors match the SpreadsheetVisualizer canvas scrollbar theme exactly
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f3f3f3;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #d1d5db;
+  border-radius: 0;
+
+  &:hover {
+    background: #9ca3af;
+  }
+}
+
+// Hide scrollbar arrows/buttons (match canvas scrollbars which have none)
+::-webkit-scrollbar-button {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+// Corner where horizontal and vertical scrollbars meet
+::-webkit-scrollbar-corner {
+  background: #f3f3f3;
+}
+
+body.theme-dark {
+  ::-webkit-scrollbar-track {
+    background: #2d2d30;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: #4b5563;
+
+    &:hover {
+      background: #6b7280;
+    }
+  }
+
+  ::-webkit-scrollbar-corner {
+    background: #2d2d30;
+  }
 }
 
 body {

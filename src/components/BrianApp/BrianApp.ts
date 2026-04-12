@@ -1,5 +1,5 @@
 import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
-import { DatasetPanel } from "../DatasetPanel";
+import { ControlPanel } from "../ControlPanel";
 import { StatusBar } from "../StatusBar";
 import { CommandPalette } from "../CommandPalette/CommandPalette";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
@@ -8,9 +8,17 @@ import { FocusManager } from "./FocusManager";
 import { EventDispatcher } from "./EventDispatcher";
 import { EventHandler } from "./types";
 import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
-import { DatasetInfo } from "../DatasetPanel/DatasetPanel";
+import { DatasetInfo } from "../ControlPanel/ControlPanel";
 import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
 import { DuckDBService } from "@/data/DuckDBService";
+import { ViewManager } from "@/data/ViewManager";
+import { PersistenceService, persistenceService } from "@/data/PersistenceService";
+import { keymapService } from "@/data/KeymapService";
+import { FileImportService } from "@/data/FileImportService";
+import { DuckDBExtensionLoader } from "@/data/DuckDBExtensionLoader";
+import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
+import { StatFormatHandler } from "@/data/formats/StatFormatHandler";
+import { AliasManager } from "@/data/AliasManager";
 
 export type BrianAppTheme = "light" | "dark" | "auto";
 
@@ -34,7 +42,7 @@ export class BrianApp implements EventHandler {
 
   private duckDBService!: DuckDBService;
   private commandPalette!: CommandPalette;
-  private leftPanel!: DatasetPanel;
+  private leftPanel!: ControlPanel;
   private dragDropZone!: DragDropZoneFocusable | null;
   private multiDatasetVisualizer!: MultiDatasetVisualizer;
   private statusBar!: StatusBar;
@@ -42,6 +50,13 @@ export class BrianApp implements EventHandler {
   private options: BrianAppOptions;
   private theme: BrianAppTheme = "dark";
   private version: string;
+
+  // Persistence, views, and import
+  private persistenceService: PersistenceService;
+  private viewManager: ViewManager;
+  private fileImportService: FileImportService;
+  private extensionLoader: DuckDBExtensionLoader;
+  private aliasManager: AliasManager;
 
   // Event system
   private focusManager: FocusManager;
@@ -63,6 +78,13 @@ export class BrianApp implements EventHandler {
     this.duckDBService = duckDBService;
     this.version = version;
 
+    // Initialize persistence, view management, and import service
+    this.persistenceService = persistenceService;
+    this.viewManager = new ViewManager(duckDBService, this.persistenceService);
+    this.extensionLoader = new DuckDBExtensionLoader(duckDBService);
+    this.fileImportService = new FileImportService(duckDBService);
+    this.aliasManager = new AliasManager(duckDBService);
+
     // Initialize event system
     this.focusManager = new FocusManager({ debugMode: options.debugMode || false });
     this.eventDispatcher = new EventDispatcher(this.focusManager, { debugMode: options.debugMode || false });
@@ -73,6 +95,34 @@ export class BrianApp implements EventHandler {
     this.setupEventSystem();
 
     parent.appendChild(this.container);
+  }
+
+  public async initAsync(): Promise<void> {
+    // Try loading DuckDB extensions for additional file format support.
+    // Probe queries verify the function actually works in WASM (catches runtime crashes).
+    await this.extensionLoader.tryLoad("excel", undefined, [
+      "SELECT * FROM read_xlsx('__probe_nonexistent__.xlsx') LIMIT 0",
+    ]);
+
+    // Stats file formats: load stats_duck from its published extension repository
+    await this.extensionLoader.tryLoad("stats_duck", "https://caerbannogwhite.github.io/the-stats-duck");
+
+    // Register extension-based handlers (they self-check if extension loaded)
+    this.fileImportService.register(new ExcelFormatHandler(this.extensionLoader));
+    this.fileImportService.register(new StatFormatHandler(this.extensionLoader));
+
+    // Restore saved views
+    await this.viewManager.initialize();
+    this.leftPanel?.refreshViews();
+
+    // Restore app settings
+    const settings = this.persistenceService.loadAppSettings();
+    if (settings.theme && settings.theme !== "auto") {
+      this.setTheme(settings.theme);
+    }
+    if (settings.panelMinimized && this.leftPanel && !this.leftPanel.getIsMinimized()) {
+      this.leftPanel.toggleMinimize();
+    }
   }
 
   // Public API methods
@@ -98,10 +148,19 @@ export class BrianApp implements EventHandler {
     this.theme = theme;
     this.container.classList.add(`brian-app--${this.theme}`);
     document.body.classList.add(`theme-${this.theme}`);
+
+    // Persist theme setting
+    const settings = this.persistenceService.loadAppSettings();
+    settings.theme = theme;
+    this.persistenceService.saveAppSettings(settings);
   }
 
-  public showMessage(message: string, type: BrianAppMessageType = "info"): void {
-    this.statusBar?.showMessage(message, type);
+  public showMessage(
+    message: string,
+    type: BrianAppMessageType = "info",
+    options?: import("../StatusBar/StatusBar").MessageOptions,
+  ): void {
+    this.statusBar?.showMessage(message, type, options);
   }
 
   public destroy(): void {
@@ -120,31 +179,19 @@ export class BrianApp implements EventHandler {
 
   // EventHandler interface implementation
   public async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
-    switch (e.key) {
-      //@ts-ignore
-      case "b":
-        if (e.ctrlKey) {
-          e.preventDefault();
-          this.toggleDatasetPanel();
-          return true;
-        }
-
-      //@ts-ignore
-      case "P":
-        if (e.ctrlKey && e.shiftKey) {
-          e.preventDefault();
-          this.commandPalette?.show();
-          return true;
-        }
-
-      case "F11":
-        e.preventDefault();
-        this.toggleFullscreen();
-        return true;
-
-      default:
-        return false;
+    const action = keymapService.matchEvent(e, "global");
+    if (action) {
+      e.preventDefault();
+      switch (action) {
+        case "app.togglePanel":      this.toggleControlPanel(); break;
+        case "app.commandPalette":   this.commandPalette?.show(); break;
+        case "app.toggleSqlEditor":  this.toggleSqlEditor(); break;
+        case "app.toggleFullscreen": this.toggleFullscreen(); break;
+      }
+      return true;
     }
+
+    return false;
   }
 
   public async handleResize(_e: Event): Promise<boolean> {
@@ -159,7 +206,7 @@ export class BrianApp implements EventHandler {
 
     // Dataset panel container
     this.leftPanelContainer = document.createElement("div");
-    this.leftPanelContainer.className = "brian-app__dataset-panel";
+    this.leftPanelContainer.className = "brian-app__control-panel";
 
     // Spreadsheet container
     this.spreadsheetContainer = document.createElement("div");
@@ -188,6 +235,8 @@ export class BrianApp implements EventHandler {
     // Drag drop zone
     if (this.options.showDragDropZone) {
       this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
+      this.dragDropZone.setFileImportService(this.fileImportService);
+      this.dragDropZone.setOnBrowseFolderCallback(() => this.leftPanel?.openFolderPicker());
       this.setOnFileDroppedCallback();
     }
 
@@ -197,21 +246,73 @@ export class BrianApp implements EventHandler {
     // Multi-dataset visualizer
     this.multiDatasetVisualizer = new MultiDatasetVisualizer(this.spreadsheetContainer, this.options.spreadsheetOptions);
 
+    // Initialize SQL editor within the multi-dataset visualizer
+    this.multiDatasetVisualizer.initSqlEditor(this.duckDBService);
+
     // Set event dispatcher on multi-dataset visualizer
     this.multiDatasetVisualizer.setEventDispatcher(this.eventDispatcher);
     this.setOnCloseTabCallback();
     this.setOnCellSelectionCallback();
 
+    // Surface SQL query errors in status bar
+    this.multiDatasetVisualizer.setOnQueryErrorCallback((error) => {
+      this.showMessage(error.message, "error");
+    });
+
     // Dataset panel
     if (this.options.showLeftPanel) {
-      this.leftPanel = new DatasetPanel(this.leftPanelContainer, this.multiDatasetVisualizer);
+      this.leftPanel = new ControlPanel(this.leftPanelContainer, this.multiDatasetVisualizer);
       this.setOnSelectDatasetCallback();
+
+      // Move column stats into left panel
+      this.multiDatasetVisualizer.setColumnStatsParent(this.leftPanel.getColumnStatsContainer());
+
+      // Auto-expand column stats accordion when a column is selected
+      this.multiDatasetVisualizer.getStatsVisualizer().setOnShowStatsCallback(() => {
+        this.leftPanel.expandSection("column-stats");
+        if (this.leftPanel.getIsMinimized()) {
+          this.leftPanel.toggleMinimize();
+        }
+      });
+
+      // Wire services to panel
+      this.leftPanel.setFileImportService(this.fileImportService);
+      this.leftPanel.setOnAliasChangeCallback(async (tableName, alias) => {
+        try {
+          await this.aliasManager.setAlias(tableName, alias);
+          this.showMessage(`Alias "${alias}" set for "${tableName}"`, "success");
+          // Force SQL autocomplete to pick up the new name
+          this.multiDatasetVisualizer.getSqlEditor()?.refreshSchema?.();
+        } catch (error) {
+          this.showMessage(`Failed to set alias: ${error instanceof Error ? error.message : "unknown error"}`, "error");
+        }
+      });
+      this.leftPanel.setViewManager(this.viewManager);
+      this.leftPanel.setPersistenceService(this.persistenceService);
+      this.leftPanel.setOnShowMessageCallback((msg, type, options) =>
+        this.showMessage(msg, type, options),
+      );
+      this.leftPanel.setOnOpenQueryCallback((sql) => {
+        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        if (editor) {
+          editor.setQuery(sql);
+          editor.expand();
+        }
+      });
 
       // Handle panel toggle
       this.leftPanel.setOnToggleCallback((isMinimized) => {
         this.container.classList.toggle("brian-app--panel-minimized", isMinimized);
         this.updateDimensions();
+
+        // Persist panel state
+        const settings = this.persistenceService.loadAppSettings();
+        settings.panelMinimized = isMinimized;
+        this.persistenceService.saveAppSettings(settings);
       });
+
+      // Re-sync layout now that persisted panel width has been restored
+      this.updateDimensions();
     }
 
     // Listen for dataset changes
@@ -247,11 +348,23 @@ export class BrianApp implements EventHandler {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
     const statusBarHeight = this.options.statusBarVisible ? 22 : 0;
-    const panelWidth = this.options.showLeftPanel ? (this.leftPanel?.getIsMinimized() ? 48 : 280) : 0;
+    const panelWidth = this.options.showLeftPanel ? (this.leftPanel?.getWidth() ?? 320) : 0;
 
     // Update main container
     this.mainContainer.style.height = `${windowHeight - statusBarHeight}px`;
     this.mainContainer.style.paddingBottom = `${statusBarHeight}px`;
+
+    // Sync the outer panel container width (flex layout) with the inner panel width
+    if (this.leftPanelContainer) {
+      // Disable transition during resize drag for instant feedback
+      if (this.leftPanel?.isResizing) {
+        this.leftPanelContainer.style.transition = "none";
+      } else {
+        this.leftPanelContainer.style.transition = "";
+      }
+      this.leftPanelContainer.style.width = `${panelWidth}px`;
+      this.leftPanelContainer.style.minWidth = `${panelWidth}px`;
+    }
 
     // Update spreadsheet container
     const contentWidth = windowWidth - panelWidth;
@@ -297,7 +410,7 @@ export class BrianApp implements EventHandler {
       title: "Toggle Left Panel",
       description: "Show or hide the left panel",
       category: "View",
-      execute: () => this.toggleDatasetPanel(),
+      execute: () => this.toggleControlPanel(),
     });
 
     this.commandPalette.registerCommand({
@@ -309,6 +422,22 @@ export class BrianApp implements EventHandler {
     });
 
     // Dataset commands
+    this.commandPalette.registerCommand({
+      id: "dataset.executeQuery",
+      title: "Execute Query",
+      description: "Execute a query on the currently active dataset",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "query",
+          type: "string",
+          description: "The query to execute",
+          required: true,
+        },
+      ],
+      execute: (params?: Record<string, any>) => this.executeQuery(params?.query),
+    });
+
     this.commandPalette.registerCommand({
       id: "dataset.open",
       title: "Open Dataset",
@@ -376,6 +505,133 @@ export class BrianApp implements EventHandler {
       execute: () => this.closeAllDatasets(),
     });
 
+    // SQL Editor commands
+    this.commandPalette.registerCommand({
+      id: "sql.toggleEditor",
+      title: "Toggle SQL Editor",
+      description: "Show or hide the SQL editor panel",
+      category: "SQL",
+      keybinding: "Ctrl+E",
+      execute: () => this.toggleSqlEditor(),
+    });
+
+    this.commandPalette.registerCommand({
+      id: "sql.executeQuery",
+      title: "Execute SQL Query",
+      description: "Execute the current query in the SQL editor",
+      category: "SQL",
+      keybinding: "Ctrl+Enter",
+      when: () => this.multiDatasetVisualizer.getSqlEditor()?.isExpanded() === true,
+      execute: () => this.multiDatasetVisualizer.getSqlEditor()?.execute(),
+    });
+
+    this.commandPalette.registerCommand({
+      id: "sql.clearEditor",
+      title: "Clear SQL Editor",
+      description: "Clear the SQL editor content",
+      category: "SQL",
+      when: () => this.multiDatasetVisualizer.getSqlEditor()?.isExpanded() === true,
+      execute: () => this.multiDatasetVisualizer.getSqlEditor()?.clear(),
+    });
+
+    // View/Query commands
+    this.commandPalette.registerCommand({
+      id: "view.createView",
+      title: "Create View",
+      description: "Save the SQL editor query as a reusable view",
+      category: "View",
+      parameters: [
+        {
+          name: "name",
+          type: "string",
+          description: "Name for the view",
+          required: true,
+        },
+      ],
+      when: () => {
+        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
+      },
+      execute: async (params?: Record<string, any>) => {
+        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        if (!editor || !params?.name) return;
+        try {
+          await this.viewManager.createView(params.name, editor.getQuery());
+          this.showMessage(`View "${params.name}" created`, "success");
+        } catch (error) {
+          this.showMessage(`Failed to create view: ${error instanceof Error ? error.message : "unknown error"}`, "error");
+        }
+      },
+    });
+
+    this.commandPalette.registerCommand({
+      id: "query.saveQuery",
+      title: "Save Query",
+      description: "Save the current SQL editor query as a bookmark",
+      category: "Query",
+      parameters: [
+        {
+          name: "name",
+          type: "string",
+          description: "Name for the saved query",
+          required: true,
+        },
+      ],
+      when: () => {
+        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
+      },
+      execute: (params?: Record<string, any>) => {
+        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        if (!editor || !params?.name) return;
+        this.persistenceService.saveQueryBookmark(params.name, editor.getQuery());
+        this.leftPanel?.refreshSavedQueries();
+        this.showMessage(`Query "${params.name}" saved`, "success");
+      },
+    });
+
+    // Import commands
+    this.commandPalette.registerCommand({
+      id: "dataset.importFolder",
+      title: "Import Folder",
+      description: "Open a folder and scan for supported data files",
+      category: "Dataset",
+      execute: () => this.leftPanel?.openFolderPicker(),
+    });
+
+    this.commandPalette.registerCommand({
+      id: "dataset.setAlias",
+      title: "Set Dataset Alias",
+      description: "Set a custom alias for a dataset table",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "dataset",
+          type: "string",
+          description: "The dataset to rename",
+          required: true,
+          options: () => this.multiDatasetVisualizer.getDatasetIds(),
+        },
+        {
+          name: "alias",
+          type: "string",
+          description: "The new alias",
+          required: true,
+        },
+      ],
+      when: () => this.multiDatasetVisualizer.getDatasetIds().length > 0,
+      execute: async (params?: Record<string, any>) => {
+        if (params?.dataset && params?.alias) {
+          try {
+            await this.aliasManager.setAlias(params.dataset, params.alias);
+            this.showMessage(`Alias "${params.alias}" set`, "success");
+          } catch (error) {
+            this.showMessage(`Failed: ${error instanceof Error ? error.message : "unknown"}`, "error");
+          }
+        }
+      },
+    });
+
     // Developer commands
     this.commandPalette.registerCommand({
       id: "developer.showInfo",
@@ -401,7 +657,7 @@ export class BrianApp implements EventHandler {
     }
   }
 
-  private toggleDatasetPanel(): void {
+  private toggleControlPanel(): void {
     this.leftPanel.toggleMinimize();
   }
 
@@ -425,6 +681,21 @@ export class BrianApp implements EventHandler {
       console.log("selection", selection);
     } else {
       this.showMessage("No active dataset to export", "warning");
+    }
+  }
+
+  private toggleSqlEditor(): void {
+    this.multiDatasetVisualizer.toggleSqlEditor();
+  }
+
+  private async executeQuery(query: string): Promise<void> {
+    try {
+      await this.multiDatasetVisualizer.addQueryResult(query, this.duckDBService);
+      this.showMessage("Query executed successfully", "success");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Query execution failed";
+      this.showMessage(msg, "error");
+      console.error("Query error:", error);
     }
   }
 
@@ -579,6 +850,7 @@ export class BrianApp implements EventHandler {
       // If there are no datasets left, show the drag drop zone
       if (this.multiDatasetVisualizer.getDatasetIds().length === 0 && this.dragDropZone === null) {
         this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
+        this.dragDropZone.setFileImportService(this.fileImportService);
         this.setOnFileDroppedCallback();
       }
     });
@@ -591,6 +863,8 @@ export class BrianApp implements EventHandler {
   private setOnCellSelectionCallback(): void {
     this.multiDatasetVisualizer.setOnCellSelectionCallback((cellSelection) => {
       this.statusBar.updateSelection(cellSelection);
+      this.statusBar.updatePosition(cellSelection);
+      this.statusBar.updateCellValue(cellSelection);
     });
   }
 }

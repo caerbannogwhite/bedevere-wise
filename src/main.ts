@@ -1,5 +1,4 @@
 import "./styles/main.scss";
-import { datasetAeCsv, datasetDmCsv } from "./data.ts";
 import { BrianApp } from "./components/BrianApp";
 import { duckDBService } from "./data/DuckDBService.ts";
 
@@ -40,30 +39,10 @@ async function initApplication() {
     debugMode: false,
   });
 
-  // Option to load sample datasets for development
-  const loadSampleData = true; // Set to true to load sample datasets
+  // Restore persisted state (views, settings)
+  await brianApp.initAsync();
 
-  if (loadSampleData) {
-    try {
-      const ae = await duckDBService.importFile(new File([datasetAeCsv], "ae.csv"), "ae", {
-        fileType: "csv",
-      });
-
-      const dm = await duckDBService.importFile(new File([datasetDmCsv], "dm.csv"), "dm", {
-        fileType: "csv",
-      });
-
-      await brianApp.addDataset(ae);
-      await brianApp.addDataset(dm);
-
-      brianApp.showMessage("Sample datasets loaded successfully", "info");
-    } catch (error) {
-      console.error("Error loading datasets:", error);
-      brianApp.showMessage("Error loading sample datasets", "error");
-    }
-  } else {
-    brianApp.showMessage("Drop a CSV or TSV file to get started", "info");
-  }
+  brianApp.showMessage("Drop a file or open a folder to get started", "info");
 
   // Make brianApp and duckDBService globally available for debugging
   if (debugMode) {

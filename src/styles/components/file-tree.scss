@@ -1,0 +1,112 @@
+.file-tree__node {
+  user-select: none;
+
+  &--unavailable {
+    opacity: 0.45;
+  }
+
+  &--imported > .file-tree__row {
+    &::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      top: 0;
+      bottom: 0;
+      width: 3px;
+      background: #10b981;
+    }
+  }
+}
+
+.file-tree__row {
+  display: flex;
+  align-items: center;
+  padding: 3px 8px;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.1s ease;
+  gap: 4px;
+  min-height: 24px;
+  font-size: 13px;
+
+  &:hover {
+    background: #f0f2f5;
+
+    body.theme-dark & {
+      background: #2d2d30;
+    }
+  }
+
+  .file-tree__node--unavailable & {
+    cursor: default;
+  }
+}
+
+.file-tree__chevron {
+  font-size: 8px;
+  width: 14px;
+  text-align: center;
+  flex-shrink: 0;
+  transition: transform 0.15s ease;
+  color: #6b7280;
+  cursor: pointer;
+
+  body.theme-dark & {
+    color: #9ca3af;
+  }
+
+  &--expanded {
+    transform: rotate(90deg);
+  }
+}
+
+.file-tree__chevron-spacer {
+  width: 14px;
+  flex-shrink: 0;
+}
+
+.file-tree__icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 18px;
+  text-align: center;
+}
+
+.file-tree__name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #1f2937;
+  font-weight: 400;
+
+  body.theme-dark & {
+    color: #e5e7eb;
+  }
+
+  .file-tree__node--imported & {
+    font-weight: 500;
+  }
+}
+
+.file-tree__children {
+  // Indentation handled by paddingLeft on rows
+}
+
+.file-tree__edit-input {
+  width: 100%;
+  padding: 1px 4px;
+  border: 1px solid #0078d4;
+  border-radius: 3px;
+  font-size: 13px;
+  font-family: inherit;
+  outline: none;
+  background: #ffffff;
+  color: #1f2937;
+
+  body.theme-dark & {
+    background: #1e1e1e;
+    color: #e5e7eb;
+    border-color: #0078d4;
+  }
+}

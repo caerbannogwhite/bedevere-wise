@@ -13,7 +13,7 @@
     background-color: #1e1e1e;
   }
 
-  // Light theme  
+  // Light theme
   body.theme-light & {
     background-color: #ffffff;
   }
@@ -29,7 +29,7 @@
   flex-shrink: 0;
   background-color: #f8f9fa;
   border-left: 1px solid #e1e5e9;
-  
+
   // Dark theme
   body.theme-dark & {
     background-color: #2d2d30;
@@ -60,18 +60,18 @@
   width: 100%;
   height: 100%;
   position: relative;
-  
+
   // Ensure spreadsheet takes full space when active
   &--active {
     display: flex !important;
     flex-direction: column;
   }
-  
+
   #spreadsheet-container {
     width: 100% !important;
     height: 100% !important;
     flex: 1;
-    
+
     // Ensure canvas takes full container size
     canvas {
       max-width: 100%;
@@ -89,7 +89,7 @@
     width: 12px;
     height: 100%;
     background-color: #f3f3f3;
-    
+
     // Dark theme
     body.theme-dark & {
       background-color: #2d2d30;
@@ -103,25 +103,25 @@
     width: 100%;
     height: 12px;
     background-color: #f3f3f3;
-    
+
     // Dark theme
     body.theme-dark & {
       background-color: #2d2d30;
     }
   }
-  
+
   &--thumb {
     background-color: #d6dade;
     border-radius: 6px;
-    
+
     // Dark theme
     body.theme-dark & {
       background-color: #666666;
     }
-    
+
     &:hover {
       background-color: #c1c8cd;
-      
+
       // Dark theme
       body.theme-dark & {
         background-color: #777777;
@@ -134,12 +134,12 @@
 #spreadsheet-container:focus-within {
   outline: 2px solid #0078d4;
   outline-offset: -2px;
-  
+
   // Dark theme
   body.theme-dark & {
     outline-color: #0078d4;
   }
-  
+
   // Light theme
   body.theme-light & {
     outline-color: #0078d4;
@@ -150,11 +150,11 @@
 @media (prefers-contrast: high) {
   #spreadsheet-container {
     border: 2px solid;
-    
+
     body.theme-dark & {
       border-color: #ffffff;
     }
-    
+
     body.theme-light & {
       border-color: #000000;
     }
@@ -166,4 +166,4 @@
   #spreadsheet-container canvas {
     transition: none;
   }
-} 
+}
