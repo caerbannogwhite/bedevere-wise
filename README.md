@@ -1,19 +1,22 @@
 # Bedevere Wise
 
-A local-first data viewer powered by DuckDB.
+A local-first data viewer powered by [DuckDB-WASM](https://duckdb.org/docs/api/wasm/overview).
 
 [Live Demo](https://caerbannogwhite.github.io/bedevere-wise/)
 
 ## Features
 
-- 📈 **Column statistics** and data analysis
-- 🎨 **Responsive design** that works on all screen sizes
-- ⚡ **High performance** with virtual scrolling
+- **Multi-format import** — CSV, TSV, JSON, Parquet, Excel, SAS, Stata, SPSS
+- **SQL editor** — CodeMirror 6 with schema-aware autocomplete
+- **Column statistics** — per-type stats, histograms, and value filters
+- **High performance** — canvas-based rendering with virtual scrolling
+- **Persistence** — views, saved queries, and settings survive page reloads
+- **Fully client-side** — no server, no uploads; data stays in your browser
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT — see [LICENSE](LICENSE) for details.
 
 ## Changelog
 
-See [CHANGELOG](CHANGELOG) for version history and updates.
+See [CHANGELOG.md](CHANGELOG.md) for version history.

@@ -312,7 +312,7 @@ export class StatusBar {
         <div class="about-panel__links">
           <a href="https://github.com/caerbannogwhite/bedevere-wise" target="_blank" rel="noopener noreferrer">GitHub</a>
           <span class="about-panel__separator">\u00B7</span>
-          <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG" target="_blank" rel="noopener noreferrer">Changelog</a>
+          <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG.md" target="_blank" rel="noopener noreferrer">Changelog</a>
           <span class="about-panel__separator">\u00B7</span>
           <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
         </div>
@@ -425,7 +425,7 @@ export class StatusBar {
     versionElement.title = `Bedevere Wise v${this.version}\nClick to view changelog`;
     versionElement.textContent = `v${this.version}`;
     versionElement.addEventListener("click", () => {
-      window.open("https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG", "_blank", "noopener,noreferrer");
+      window.open("https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG.md", "_blank", "noopener,noreferrer");
     });
     this.rightSection.appendChild(versionElement);
 
