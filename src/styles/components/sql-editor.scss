@@ -1,0 +1,181 @@
+.sql-editor {
+  display: flex;
+  flex-direction: column;
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  border-bottom: none;
+  background: #ffffff;
+  flex-shrink: 0;
+
+  body.theme-dark & {
+    background: #1e1e1e;
+  }
+
+  &--expanded {
+    // 10 lines × 18px + toolbar ~32px = ~212px
+    min-height: 212px;
+    max-height: 400px;
+    border-bottom: 1px solid #e1e5e9;
+
+    body.theme-dark & {
+      border-bottom-color: #3c3c3c;
+    }
+  }
+
+  &__editor {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    // 10 lines × ~18px line-height
+    height: 180px;
+
+    .cm-editor {
+      height: 100%;
+      font-size: 13px;
+      font-family: "Consolas", "Monaco", "Courier New", monospace;
+
+      &.cm-focused {
+        outline: none;
+      }
+    }
+
+    .cm-scroller {
+      overflow: auto;
+    }
+
+    // Light theme CodeMirror overrides
+    body.theme-light & {
+      .cm-editor {
+        background-color: #ffffff;
+      }
+
+      .cm-gutters {
+        background-color: #f8f9fa;
+        border-right: 1px solid #e1e5e9;
+        color: #999;
+      }
+
+      .cm-activeLineGutter {
+        background-color: #e8ecf0;
+      }
+
+      .cm-activeLine {
+        background-color: rgba(59, 130, 246, 0.06);
+      }
+
+      .cm-selectionBackground {
+        background-color: rgba(59, 130, 246, 0.2) !important;
+      }
+
+      .cm-cursor {
+        border-left-color: #1f2937;
+      }
+    }
+  }
+
+  &__toolbar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    background: #f8f9fa;
+    border-top: 1px solid #e1e5e9;
+    flex-shrink: 0;
+
+    body.theme-dark & {
+      background: #2d2d30;
+      border-top-color: #3c3c3c;
+    }
+  }
+
+  &__run-button,
+  &__clear-button {
+    padding: 3px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: inherit;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-weight: 500;
+  }
+
+  &__run-button {
+    background: #0078d4;
+    color: #ffffff;
+    border-color: #0078d4;
+
+    &:hover {
+      background: #006abc;
+    }
+
+    body.theme-dark & {
+      background: #0078d4;
+      border-color: #0078d4;
+
+      &:hover {
+        background: #1a8ae8;
+      }
+    }
+  }
+
+  &__clear-button {
+    background: transparent;
+    color: #495057;
+
+    &:hover {
+      background: #e9ecef;
+    }
+
+    body.theme-dark & {
+      color: #cccccc;
+      border-color: #4b5563;
+
+      &:hover {
+        background: #37373d;
+      }
+    }
+  }
+}
+
+// CodeMirror autocomplete tooltip theming
+body.theme-dark {
+  .cm-tooltip {
+    background: #2d2d30 !important;
+    border-color: #3c3c3c !important;
+    color: #cccccc !important;
+  }
+
+  .cm-tooltip-autocomplete {
+    ul li {
+      &[aria-selected] {
+        background: #094771 !important;
+        color: #ffffff !important;
+      }
+    }
+  }
+}
+
+body.theme-light {
+  .cm-tooltip {
+    background: #ffffff !important;
+    border-color: #e1e5e9 !important;
+  }
+
+  .cm-tooltip-autocomplete {
+    ul li {
+      &[aria-selected] {
+        background: #0078d4 !important;
+        color: #ffffff !important;
+      }
+    }
+  }
+}
+
+// Reduced motion support
+@media (prefers-reduced-motion: reduce) {
+  .sql-editor {
+    transition: none;
+  }
+}
