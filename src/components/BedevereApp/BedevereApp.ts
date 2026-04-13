@@ -1,7 +1,9 @@
 import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
 import { ControlPanel } from "../ControlPanel";
 import { StatusBar } from "../StatusBar";
+import { HelpPanel } from "../HelpPanel";
 import { CommandPalette } from "../CommandPalette/CommandPalette";
+import penguinsCsv from "@/assets/samples/penguins.csv?raw";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
 import { DataProvider } from "../../data/types";
 import { FocusManager } from "./FocusManager";
@@ -46,6 +48,7 @@ export class BedevereApp implements EventHandler {
   private dragDropZone!: DragDropZoneFocusable | null;
   private multiDatasetVisualizer!: MultiDatasetVisualizer;
   private statusBar!: StatusBar;
+  private helpPanel!: HelpPanel;
 
   private options: BedevereAppOptions;
   private theme: BedevereAppTheme = "dark";
@@ -122,6 +125,12 @@ export class BedevereApp implements EventHandler {
     }
     if (settings.panelMinimized && this.leftPanel && !this.leftPanel.getIsMinimized()) {
       this.leftPanel.toggleMinimize();
+    }
+
+    if (!settings.hasSeenOnboarding) {
+      this.helpPanel.show("howto");
+      settings.hasSeenOnboarding = true;
+      this.persistenceService.saveAppSettings(settings);
     }
   }
 
@@ -224,6 +233,14 @@ export class BedevereApp implements EventHandler {
       this.statusBar = new StatusBar(this.container, this.version);
       this.statusBar.setOnCommandCallback((command) => this.executeCommand(command));
     }
+
+    // Help panel (mounted on body so it overlays the entire app)
+    this.helpPanel = new HelpPanel(document.body, {
+      version: this.version,
+      onLoadSampleDataset: () => this.loadSampleDataset(),
+      onShowMessage: (msg, type) => this.showMessage(msg, type),
+    });
+    this.statusBar?.setOnHelpClickCallback(() => this.helpPanel.show("howto"));
 
     // Command palette
     if (this.options.commandPaletteEnabled) {
@@ -405,6 +422,14 @@ export class BedevereApp implements EventHandler {
     if (!this.commandPalette) return;
 
     // View commands
+    this.commandPalette.registerCommand({
+      id: "help.show",
+      title: "Show Help",
+      description: "Open the Help panel",
+      category: "View",
+      execute: () => this.helpPanel.show("howto"),
+    });
+
     this.commandPalette.registerCommand({
       id: "view.toggleLeftPanel",
       title: "Toggle Left Panel",
@@ -693,6 +718,21 @@ export class BedevereApp implements EventHandler {
 
   protected async findDatasetByName(name: string): Promise<DatasetInfo | undefined> {
     return this.leftPanel.getAvailableDatasets().find((d) => d.metadata.name === name);
+  }
+
+  private async loadSampleDataset(): Promise<void> {
+    try {
+      const file = new File([penguinsCsv], "penguins.csv", { type: "text/csv" });
+      const dataset = await this.fileImportService.importFile(file);
+      const metadata = await dataset.getMetadata();
+      await this._openDataset({ metadata, dataset, isLoaded: true });
+      this.helpPanel.hide();
+      this.showMessage("Palmer Penguins loaded \u2014 try: SELECT * FROM penguins;", "success");
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "unknown error";
+      this.showMessage(`Failed to load sample: ${msg}`, "error");
+      throw error;
+    }
   }
 
   private async _openDataset(datasetInfo: DatasetInfo): Promise<void> {

@@ -1,0 +1,515 @@
+// Help panel: tabbed onboarding + about modal.
+// Mounted on document.body. Replaces the v0.6 .about-panel.
+
+.help-panel-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+}
+
+.help-panel {
+  background: #ffffff;
+  color: #333;
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
+  width: min(640px, 100%);
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+
+  body.theme-dark & {
+    background: #2d2d30;
+    color: #e0e0e0;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 20px 12px;
+    flex-shrink: 0;
+  }
+
+  &__title {
+    font-size: 18px;
+    font-weight: 700;
+    color: #222;
+    margin: 0;
+
+    body.theme-dark & {
+      color: #e0e0e0;
+    }
+  }
+
+  &__close {
+    background: none;
+    border: none;
+    font-size: 22px;
+    color: #999;
+    cursor: pointer;
+    padding: 4px 10px;
+    border-radius: 4px;
+    line-height: 1;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.06);
+      color: #333;
+    }
+
+    body.theme-dark &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      color: #ddd;
+    }
+  }
+
+  &__tabs {
+    display: flex;
+    gap: 4px;
+    padding: 0 16px;
+    border-bottom: 1px solid #e5e5e5;
+    flex-shrink: 0;
+
+    body.theme-dark & {
+      border-bottom-color: #3c3c3c;
+    }
+  }
+
+  &__tab {
+    background: none;
+    border: none;
+    padding: 8px 14px;
+    font-size: 13px;
+    font-weight: 500;
+    color: #666;
+    cursor: pointer;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color 0.15s ease, border-color 0.15s ease;
+
+    &:hover {
+      color: #007acc;
+    }
+
+    &--active {
+      color: #007acc;
+      border-bottom-color: #007acc;
+      font-weight: 600;
+    }
+
+    body.theme-dark & {
+      color: #aaa;
+
+      &:hover,
+      &--active {
+        color: #4ea1d3;
+      }
+
+      &--active {
+        border-bottom-color: #4ea1d3;
+      }
+    }
+  }
+
+  &__body {
+    overflow-y: auto;
+    padding: 16px 20px 20px;
+    flex: 1;
+    min-height: 0;
+  }
+
+  &__tab-body {
+    display: none;
+
+    &--active {
+      display: block;
+    }
+  }
+
+  // ------- How To tab -------
+
+  &__lead {
+    font-size: 14px;
+    line-height: 1.5;
+    margin: 0 0 16px;
+
+    strong {
+      color: #007acc;
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+  }
+
+  &__callout {
+    border-radius: 6px;
+    padding: 10px 12px;
+    margin-bottom: 12px;
+    font-size: 12.5px;
+    line-height: 1.5;
+
+    p {
+      margin: 0;
+    }
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+
+    &--privacy {
+      background: rgba(16, 185, 129, 0.08);
+      border-left: 3px solid #10b981;
+
+      body.theme-dark & {
+        background: rgba(16, 185, 129, 0.14);
+      }
+    }
+
+    &--deps {
+      background: rgba(0, 122, 204, 0.08);
+      border-left: 3px solid #007acc;
+
+      body.theme-dark & {
+        background: rgba(78, 161, 211, 0.14);
+        border-left-color: #4ea1d3;
+      }
+    }
+  }
+
+  &__callout-title {
+    font-weight: 600;
+    margin-bottom: 4px;
+    color: #333;
+
+    body.theme-dark & {
+      color: #f0f0f0;
+    }
+  }
+
+  &__section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #888;
+    margin: 18px 0 8px;
+
+    body.theme-dark & {
+      color: #999;
+    }
+  }
+
+  &__steps {
+    margin: 0 0 14px;
+    padding-left: 20px;
+    font-size: 13px;
+    line-height: 1.6;
+
+    li {
+      margin-bottom: 4px;
+    }
+
+    kbd {
+      background: rgba(0, 0, 0, 0.08);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      border-radius: 3px;
+      padding: 1px 5px;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 11px;
+
+      body.theme-dark & {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #e0e0e0;
+      }
+    }
+  }
+
+  &__hint {
+    font-size: 12.5px;
+    color: #666;
+    margin: 0 0 10px;
+    line-height: 1.5;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+
+    body.theme-dark & {
+      color: #aaa;
+    }
+  }
+
+  &__sample-btn {
+    background: #007acc;
+    color: #ffffff;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.05s ease;
+
+    &:hover:not(:disabled) {
+      background: #0090e0;
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(1px);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+  }
+
+  &__snippets {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+
+  &__snippet {
+    border: 1px solid #e5e5e5;
+    border-radius: 6px;
+    overflow: hidden;
+    background: #fafafa;
+
+    body.theme-dark & {
+      border-color: #3c3c3c;
+      background: #1e1e1e;
+    }
+  }
+
+  &__snippet-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 6px 10px;
+    background: #f0f0f0;
+    border-bottom: 1px solid #e5e5e5;
+
+    body.theme-dark & {
+      background: #252526;
+      border-bottom-color: #3c3c3c;
+    }
+  }
+
+  &__snippet-title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #555;
+
+    body.theme-dark & {
+      color: #ccc;
+    }
+  }
+
+  &__snippet-code {
+    margin: 0;
+    padding: 10px 12px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.5;
+    color: #333;
+    overflow-x: auto;
+    white-space: pre;
+
+    body.theme-dark & {
+      color: #d4d4d4;
+    }
+
+    code {
+      font-family: inherit;
+    }
+  }
+
+  &__copy-btn {
+    background: rgba(0, 0, 0, 0.04);
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    color: #555;
+    font-size: 11px;
+    font-weight: 500;
+    padding: 3px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background-color 0.15s ease, color 0.15s ease;
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.08);
+      color: #222;
+    }
+
+    &--copied {
+      background: #10b981;
+      color: #ffffff;
+      border-color: #10b981;
+    }
+
+    body.theme-dark & {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.12);
+      color: #ccc;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.14);
+        color: #fff;
+      }
+
+      &.help-panel__copy-btn--copied {
+        background: #10b981;
+        color: #fff;
+        border-color: #10b981;
+      }
+    }
+  }
+
+  &__footer-note {
+    font-size: 12px;
+    color: #888;
+    margin: 12px 0 0;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+
+    body.theme-dark & {
+      color: #999;
+    }
+  }
+
+  // ------- About tab -------
+
+  &__about-version {
+    font-size: 12px;
+    color: #888;
+    margin: 0 0 12px;
+  }
+
+  &__about-description {
+    font-size: 13px;
+    color: #555;
+    margin: 0 0 16px;
+    line-height: 1.5;
+
+    body.theme-dark & {
+      color: #bbb;
+    }
+  }
+
+  &__about-section {
+    margin-bottom: 16px;
+  }
+
+  &__about-section-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: #999;
+    margin: 0 0 6px;
+  }
+
+  &__about-deps {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    gap: 12px;
+    font-size: 12px;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+  }
+
+  &__about-links {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    font-size: 12px;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+  }
+
+  &__about-separator {
+    color: #ccc;
+
+    body.theme-dark & {
+      color: #555;
+    }
+  }
+
+  &__about-author {
+    font-size: 12px;
+    color: #888;
+    margin: 0;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .help-panel__tab,
+  .help-panel__sample-btn,
+  .help-panel__copy-btn {
+    transition: none;
+  }
+}

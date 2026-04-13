@@ -17,3 +17,8 @@ declare module '@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url' {
   const content: string;
   export default content;
 }
+
+declare module '*?raw' {
+  const content: string;
+  export default content;
+}

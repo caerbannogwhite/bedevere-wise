@@ -14,6 +14,7 @@ export interface AppSettings {
   theme?: "light" | "dark" | "auto";
   panelMinimized?: boolean;
   panelWidth?: number;
+  hasSeenOnboarding?: boolean;
 }
 
 const STORAGE_KEYS = {
