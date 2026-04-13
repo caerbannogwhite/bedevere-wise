@@ -1,3 +1,5 @@
+import duckPng from "@/assets/duck.png?url";
+
 export type HelpPanelTab = "howto" | "about";
 
 export interface HelpPanelOptions {
@@ -124,7 +126,7 @@ export class HelpPanel {
 
     const title = document.createElement("h2");
     title.className = "help-panel__title";
-    title.textContent = "\uD83E\uDD86 Bedevere Wise";
+    title.innerHTML = `<img class="help-panel__brand-icon" src="${duckPng}" alt="" /> Bedevere Wise`;
 
     const close = document.createElement("button");
     close.className = "help-panel__close";
@@ -335,6 +337,9 @@ export class HelpPanel {
         <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
       </div>
       <p class="help-panel__about-author">Made by <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer">caerbannogwhite</a></p>
+      <p class="help-panel__attribution">
+        Duck icons created by <a href="https://www.flaticon.com/free-icons/duck" target="_blank" rel="noopener noreferrer" title="duck icons">Marz Gallery &mdash; Flaticon</a>.
+      </p>
     `;
 
     return body;

@@ -81,7 +81,7 @@
     align-items: center;
     justify-content: center;
     border: 1px solid #cbd5e1;
-    border-radius: 3px;
+    border-radius: 0;
     background: transparent;
     color: #9ca3af;
     font-size: 9px;
@@ -215,7 +215,7 @@
   &__filter-clear {
     padding: 1px 5px;
     border: 1px solid #dc3545;
-    border-radius: 3px;
+    border-radius: 0;
     background: transparent;
     color: #dc3545;
     font-size: 10px;
@@ -240,7 +240,7 @@
     align-items: center;
     gap: 6px;
     padding: 2px 4px;
-    border-radius: 3px;
+    border-radius: 0;
     font-size: 11px;
     color: #374151;
     cursor: pointer;
@@ -297,7 +297,7 @@
     width: 100%;
     padding: 3px 6px;
     border: 1px solid #cbd5e1;
-    border-radius: 3px;
+    border-radius: 0;
     font-size: 12px;
     background: #ffffff;
     color: #1f2937;
@@ -313,7 +313,7 @@
     width: 100%;
     padding: 4px 10px;
     border: 1px solid #0078d4;
-    border-radius: 3px;
+    border-radius: 0;
     background: #0078d4;
     color: #ffffff;
     font-size: 11px;
@@ -393,7 +393,7 @@
     flex: 1;
     height: 14px;
     background: #eef0f2;
-    border-radius: 2px;
+    border-radius: 0;
     overflow: hidden;
     min-width: 0;
 
@@ -405,7 +405,7 @@
   &__bar-fill {
     height: 100%;
     background: linear-gradient(90deg, #0078d4, #00a4ef);
-    border-radius: 2px;
+    border-radius: 0;
     min-width: 2px;
 
     body.theme-dark & {
@@ -442,7 +442,7 @@
     padding: 6px 4px;
     background: #f8f9fa;
     border: 1px solid #e1e5e9;
-    border-radius: 4px;
+    border-radius: 0;
 
     body.theme-dark & {
       background: #1e2024;
@@ -461,7 +461,7 @@
   &__numerical-bar-fill {
     width: 100%;
     background: linear-gradient(180deg, #00a4ef, #0078d4);
-    border-radius: 2px 2px 0 0;
+    border-radius: 0;
     min-height: 1px;
 
     body.theme-dark & {

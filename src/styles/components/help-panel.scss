@@ -15,7 +15,7 @@
 .help-panel {
   background: #ffffff;
   color: #333;
-  border-radius: 10px;
+  border-top: 3px solid #f5b927;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.25);
   width: min(640px, 100%);
   max-height: 82vh;
@@ -42,10 +42,20 @@
     font-weight: 700;
     color: #222;
     margin: 0;
+    display: flex;
+    align-items: center;
 
     body.theme-dark & {
       color: #e0e0e0;
     }
+  }
+
+  &__brand-icon {
+    width: 26px;
+    height: 26px;
+    margin-right: 8px;
+    display: inline-block;
+    vertical-align: middle;
   }
 
   &__close {
@@ -55,7 +65,6 @@
     color: #999;
     cursor: pointer;
     padding: 4px 10px;
-    border-radius: 4px;
     line-height: 1;
 
     &:hover {
@@ -149,7 +158,6 @@
   }
 
   &__callout {
-    border-radius: 6px;
     padding: 10px 12px;
     margin-bottom: 12px;
     font-size: 12.5px;
@@ -226,7 +234,6 @@
     kbd {
       background: rgba(0, 0, 0, 0.08);
       border: 1px solid rgba(0, 0, 0, 0.12);
-      border-radius: 3px;
       padding: 1px 5px;
       font-family: "Consolas", "Monaco", monospace;
       font-size: 11px;
@@ -262,10 +269,9 @@
   }
 
   &__sample-btn {
-    background: #007acc;
-    color: #ffffff;
+    background: #f5b927;
+    color: #1e1e1e;
     border: none;
-    border-radius: 6px;
     padding: 9px 16px;
     font-size: 13px;
     font-weight: 600;
@@ -273,7 +279,7 @@
     transition: background-color 0.15s ease, transform 0.05s ease;
 
     &:hover:not(:disabled) {
-      background: #0090e0;
+      background: #ffd14a;
     }
 
     &:active:not(:disabled) {
@@ -295,7 +301,6 @@
 
   &__snippet {
     border: 1px solid #e5e5e5;
-    border-radius: 6px;
     overflow: hidden;
     background: #fafafa;
 
@@ -355,7 +360,6 @@
     font-size: 11px;
     font-weight: 500;
     padding: 3px 10px;
-    border-radius: 4px;
     cursor: pointer;
     transition: background-color 0.15s ease, color 0.15s ease;
 
@@ -501,6 +505,36 @@
 
       body.theme-dark & {
         color: #4ea1d3;
+      }
+    }
+  }
+
+  &__attribution {
+    font-size: 11px;
+    color: #888;
+    margin: 16px 0 0;
+    padding-top: 10px;
+    border-top: 1px solid #e5e5e5;
+
+    a {
+      color: #888;
+      text-decoration: underline;
+
+      &:hover {
+        color: #555;
+      }
+    }
+
+    body.theme-dark & {
+      color: #777;
+      border-top-color: #3c3c3c;
+
+      a {
+        color: #777;
+
+        &:hover {
+          color: #aaa;
+        }
       }
     }
   }

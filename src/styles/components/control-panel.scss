@@ -73,6 +73,8 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    display: inline-flex;
+    align-items: center;
 
     body.theme-dark & {
       color: #ccc;
@@ -83,6 +85,14 @@
     }
   }
 
+  &__app-icon {
+    width: 18px;
+    height: 18px;
+    margin-right: 6px;
+    display: inline-block;
+    vertical-align: middle;
+  }
+
   &__toggle {
     background: none;
     border: none;
@@ -91,7 +101,7 @@
     color: #666;
     cursor: pointer;
     padding: 8px;
-    border-radius: 6px;
+    border-radius: 0;
     transition: all 0.2s ease;
     display: flex;
     align-items: center;
@@ -321,7 +331,7 @@
     font-size: 14px;
     cursor: pointer;
     padding: 2px 4px;
-    border-radius: 3px;
+    border-radius: 0;
     opacity: 0;
     transition: all 0.15s ease;
 

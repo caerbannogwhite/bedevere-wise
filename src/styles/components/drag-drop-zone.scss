@@ -16,7 +16,6 @@
     justify-content: center;
     padding: 60px 40px;
     border: 2px dashed #666666;
-    border-radius: 12px;
     background-color: #f8f9fa;
     color: #495057;
     text-align: center;
@@ -43,13 +42,13 @@
     }
 
     &--active {
-      border-color: #007acc;
-      background-color: #e6f3ff;
+      border-color: #f5b927;
+      background-color: rgba(245, 185, 39, 0.14);
       transform: scale(1.02);
 
       body.theme-dark & {
-        background-color: #1e3a52;
-        border-color: #0099ff;
+        background-color: rgba(245, 185, 39, 0.18);
+        border-color: #f5b927;
       }
     }
 
@@ -130,7 +129,6 @@
     background-color: #007acc;
     color: white;
     border: none;
-    border-radius: 6px 0 0 6px;
     font-size: 16px;
     font-weight: 500;
     cursor: pointer;
@@ -152,7 +150,6 @@
     color: white;
     border: none;
     border-left: 1px solid rgba(255, 255, 255, 0.3);
-    border-radius: 0 6px 6px 0;
     font-size: 14px;
     cursor: pointer;
     transition: background-color 0.2s ease;
@@ -169,7 +166,6 @@
     margin-top: 4px;
     background: #ffffff;
     border: 1px solid #e1e5e9;
-    border-radius: 6px;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     z-index: 10;
     min-width: 150px;
@@ -273,7 +269,6 @@
     background-color: #6c757d;
     color: white;
     border: none;
-    border-radius: 4px;
     font-size: 14px;
     cursor: pointer;
     transition: background-color 0.2s ease;

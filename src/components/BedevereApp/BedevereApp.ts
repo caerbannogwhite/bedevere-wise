@@ -364,7 +364,7 @@ export class BedevereApp implements EventHandler {
   private updateDimensions(): void {
     const windowWidth = window.innerWidth;
     const windowHeight = window.innerHeight;
-    const statusBarHeight = this.options.statusBarVisible ? 22 : 0;
+    const statusBarHeight = this.options.statusBarVisible ? 26 : 0;
     const panelWidth = this.options.showLeftPanel ? (this.leftPanel?.getWidth() ?? 320) : 0;
 
     // Update main container

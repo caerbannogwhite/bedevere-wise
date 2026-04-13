@@ -1,3 +1,4 @@
+import duckPng from "@/assets/duck.png?url";
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { ViewManager } from "../../data/ViewManager";
 import { PersistenceService } from "../../data/PersistenceService";
@@ -98,7 +99,7 @@ export class ControlPanel {
 
     const appTitle = document.createElement("span");
     appTitle.className = "control-panel__app-title";
-    appTitle.innerHTML = `<span class="control-panel__app-icon">\uD83E\uDD86</span> Bedevere`;
+    appTitle.innerHTML = `<img class="control-panel__app-icon" src="${duckPng}" alt="" /> Bedevere Wise`;
 
     this.toggleButton = document.createElement("button");
     this.toggleButton.className = "control-panel__toggle";

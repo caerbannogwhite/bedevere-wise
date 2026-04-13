@@ -3,11 +3,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  height: 22px;
+  height: 26px;
   background-color: #007acc;
   color: #ffffff;
   font-size: 12px;
-  line-height: 22px;
+  line-height: 26px;
   padding: 0 8px;
   position: fixed;
   bottom: 0;
@@ -94,7 +94,6 @@
       gap: 6px;
       font-weight: 600;
       padding: 0 10px;
-      border-radius: 3px;
       margin: 0 4px;
       max-width: 480px;
       overflow: hidden;
@@ -197,7 +196,6 @@
       font-family: "Consolas", "Monaco", "Courier New", monospace;
       font-size: 11px;
       background-color: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
       padding: 1px 8px;
       max-width: 300px;
       overflow: hidden;
@@ -263,10 +261,40 @@
 
     &[data-id="command-palette"] {
       background-color: rgba(255, 255, 255, 0.1);
-      border-radius: 3px;
       font-size: 10px;
       padding: 2px 6px;
       margin-left: 8px;
+    }
+
+    // Version badge — yellow brand accent (duck gold), opaque so it
+    // doesn't composite over the blue bar and read as teal/green.
+    &--version {
+      background-color: #f5b927;
+      color: #1e1e1e;
+      font-weight: 600;
+      padding: 0 10px;
+      margin: 0 4px;
+      gap: 6px;
+
+      &:hover {
+        background-color: #ffd14a;
+      }
+
+      .status-bar__version-num {
+        font-family: "Consolas", "Monaco", "Courier New", monospace;
+        letter-spacing: 0.02em;
+      }
+
+      .status-bar__version-sep {
+        opacity: 0.45;
+        font-weight: 400;
+      }
+
+      .status-bar__version-codename {
+        font-weight: 500;
+        font-style: italic;
+        opacity: 0.85;
+      }
     }
 
     // Created by styling

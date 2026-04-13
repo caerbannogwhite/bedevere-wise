@@ -366,9 +366,16 @@ export class StatusBar {
 
     // Add version and made by information
     const versionElement = document.createElement("div");
-    versionElement.className = "status-bar__item status-bar__item--clickable";
+    versionElement.className = "status-bar__item status-bar__item--clickable status-bar__item--version";
     versionElement.title = `Bedevere Wise v${this.version}\nClick to view changelog`;
-    versionElement.textContent = `v${this.version}`;
+    const dash = this.version.indexOf("-");
+    const versionNum = dash >= 0 ? this.version.slice(0, dash) : this.version;
+    const codename = dash >= 0 ? this.version.slice(dash + 1) : "";
+    versionElement.innerHTML = codename
+      ? `<span class="status-bar__version-num">v${escapeHtml(versionNum)}</span>` +
+        `<span class="status-bar__version-sep">\u00B7</span>` +
+        `<span class="status-bar__version-codename">${escapeHtml(codename)}</span>`
+      : `<span class="status-bar__version-num">v${escapeHtml(versionNum)}</span>`;
     versionElement.addEventListener("click", () => {
       window.open("https://github.com/caerbannogwhite/bedevere-wise/blob/main/CHANGELOG.md", "_blank", "noopener,noreferrer");
     });
