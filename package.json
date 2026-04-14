@@ -19,9 +19,9 @@
   },
   "exports": {
     ".": {
+      "types": "./dist/index.d.ts",
       "import": "./dist/index.es.js",
-      "require": "./dist/index.js",
-      "types": "./dist/index.d.ts"
+      "require": "./dist/index.js"
     },
     "./style.css": "./dist/style.css"
   },
@@ -65,7 +65,7 @@
     "@codemirror/state": "^6.6.0",
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.41.0",
-    "@duckdb/duckdb-wasm": "^1.29.1-dev132.0",
+    "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
     "codemirror": "^6.0.2"
   }
 }
