@@ -1,11 +1,14 @@
 import duckPng from "@/assets/duck.png?url";
 
-export type HelpPanelTab = "howto" | "about";
+export type HelpPanelTab = "howto" | "import" | "about";
 
 export interface HelpPanelOptions {
   version: string;
   onLoadSampleDataset: () => Promise<void> | void;
   onShowMessage?: (msg: string, type: "info" | "success" | "error") => void;
+  onBrowseFolder?: () => void;
+  onFilesReceived?: (files: File[]) => void | Promise<void>;
+  supportedFormats?: string[];
 }
 
 interface SnippetDef {
@@ -113,6 +116,7 @@ export class HelpPanel {
     const body = document.createElement("div");
     body.className = "help-panel__body";
     body.appendChild(this.buildHowToBody());
+    body.appendChild(this.buildImportBody());
     body.appendChild(this.buildAboutBody());
     this.panel.appendChild(body);
 
@@ -144,12 +148,15 @@ export class HelpPanel {
     tabs.className = "help-panel__tabs";
 
     const howToBtn = this.makeTabButton("howto", "How To");
+    const importBtn = this.makeTabButton("import", "Import");
     const aboutBtn = this.makeTabButton("about", "About");
 
     this.tabButtons.set("howto", howToBtn);
+    this.tabButtons.set("import", importBtn);
     this.tabButtons.set("about", aboutBtn);
 
     tabs.appendChild(howToBtn);
+    tabs.appendChild(importBtn);
     tabs.appendChild(aboutBtn);
     return tabs;
   }
@@ -311,6 +318,108 @@ export class HelpPanel {
       // BedevereApp surfaces its own error; just restore button
       this.sampleButton.disabled = false;
       this.sampleButton.textContent = original;
+    }
+  }
+
+  private buildImportBody(): HTMLElement {
+    const body = document.createElement("div");
+    body.className = "help-panel__tab-body help-panel__tab-body--import";
+    this.tabBodies.set("import", body);
+
+    const formats = this.options.supportedFormats ?? [];
+
+    // Drop zone area
+    const dropzone = document.createElement("div");
+    dropzone.className = "help-panel__import-dropzone";
+    dropzone.innerHTML = `
+      <svg class="help-panel__import-icon" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="7,10 12,15 17,10"/>
+        <line x1="12" y1="15" x2="12" y2="3"/>
+      </svg>
+      <h3 class="help-panel__import-title">Import Data</h3>
+      <p class="help-panel__import-description">
+        Drag files here, or use the buttons below.
+      </p>
+      <p class="help-panel__import-formats">
+        Supported: ${formats.join(", ") || "CSV, TSV, JSON, Parquet, Excel, SAS, SPSS, Stata"}
+      </p>
+    `;
+
+    // Scoped drag-drop handlers on the dropzone div
+    const prevent = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+    dropzone.addEventListener("dragenter", (e) => { prevent(e); dropzone.classList.add("help-panel__import-dropzone--active"); });
+    dropzone.addEventListener("dragover", (e) => { prevent(e); dropzone.classList.add("help-panel__import-dropzone--active"); });
+    dropzone.addEventListener("dragleave", (e) => { prevent(e); dropzone.classList.remove("help-panel__import-dropzone--active"); });
+    dropzone.addEventListener("drop", (e) => {
+      prevent(e);
+      dropzone.classList.remove("help-panel__import-dropzone--active");
+      const files = Array.from((e as DragEvent).dataTransfer?.files || []);
+      if (files.length > 0) this.handleImportFiles(files);
+    });
+
+    body.appendChild(dropzone);
+
+    // Action buttons
+    const actions = document.createElement("div");
+    actions.className = "help-panel__import-actions";
+
+    // Hidden file input
+    const fileInput = document.createElement("input");
+    fileInput.type = "file";
+    fileInput.accept = formats.join(",");
+    fileInput.multiple = true;
+    fileInput.style.display = "none";
+    fileInput.addEventListener("change", () => {
+      if (fileInput.files && fileInput.files.length > 0) {
+        this.handleImportFiles(Array.from(fileInput.files));
+        fileInput.value = "";
+      }
+    });
+    body.appendChild(fileInput);
+
+    const browseBtn = document.createElement("button");
+    browseBtn.type = "button";
+    browseBtn.className = "help-panel__import-btn";
+    browseBtn.textContent = "Browse Files";
+    browseBtn.addEventListener("click", () => fileInput.click());
+    actions.appendChild(browseBtn);
+
+    const folderBtn = document.createElement("button");
+    folderBtn.type = "button";
+    folderBtn.className = "help-panel__import-btn help-panel__import-btn--secondary";
+    folderBtn.textContent = "Browse Folder";
+    folderBtn.addEventListener("click", () => {
+      this.options.onBrowseFolder?.();
+      this.hide();
+    });
+    actions.appendChild(folderBtn);
+
+    body.appendChild(actions);
+
+    // Status area for inline feedback
+    const status = document.createElement("div");
+    status.className = "help-panel__import-status";
+    status.dataset.importStatus = "";
+    body.appendChild(status);
+
+    return body;
+  }
+
+  private async handleImportFiles(files: File[]): Promise<void> {
+    const statusEl = this.panel?.querySelector<HTMLElement>("[data-import-status]");
+    if (statusEl) {
+      statusEl.textContent = `Importing ${files.length} file${files.length > 1 ? "s" : ""}\u2026`;
+      statusEl.className = "help-panel__import-status help-panel__import-status--loading";
+    }
+    try {
+      await this.options.onFilesReceived?.(files);
+      this.hide();
+    } catch (error) {
+      if (statusEl) {
+        statusEl.textContent = `Import failed: ${error instanceof Error ? error.message : "unknown error"}`;
+        statusEl.className = "help-panel__import-status help-panel__import-status--error";
+      }
     }
   }
 

@@ -9,7 +9,6 @@ import { DataProvider } from "../../data/types";
 import { FocusManager } from "./FocusManager";
 import { EventDispatcher } from "./EventDispatcher";
 import { EventHandler } from "./types";
-import { DragDropZoneFocusable } from "../DragDropZone/DragDropZoneFocusable";
 import { DatasetInfo } from "../ControlPanel/ControlPanel";
 import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
 import { DuckDBService } from "@/data/DuckDBService";
@@ -32,7 +31,6 @@ export interface BedevereAppOptions {
   showLeftPanel?: boolean;
   statusBarVisible?: boolean;
   commandPaletteEnabled?: boolean;
-  showDragDropZone?: boolean;
   debugMode?: boolean;
 }
 
@@ -45,7 +43,6 @@ export class BedevereApp implements EventHandler {
   private duckDBService!: DuckDBService;
   private commandPalette!: CommandPalette;
   private leftPanel!: ControlPanel;
-  private dragDropZone!: DragDropZoneFocusable | null;
   private multiDatasetVisualizer!: MultiDatasetVisualizer;
   private statusBar!: StatusBar;
   private helpPanel!: HelpPanel;
@@ -131,6 +128,8 @@ export class BedevereApp implements EventHandler {
       this.helpPanel.show("howto");
       settings.hasSeenOnboarding = true;
       this.persistenceService.saveAppSettings(settings);
+    } else {
+      this.helpPanel.show("import");
     }
   }
 
@@ -181,7 +180,6 @@ export class BedevereApp implements EventHandler {
     this.statusBar?.destroy();
     this.commandPalette?.destroy();
     this.leftPanel?.destroy();
-    this.dragDropZone?.destroy();
 
     this.container.remove();
   }
@@ -239,6 +237,9 @@ export class BedevereApp implements EventHandler {
       version: this.version,
       onLoadSampleDataset: () => this.loadSampleDataset(),
       onShowMessage: (msg, type) => this.showMessage(msg, type),
+      onBrowseFolder: () => this.leftPanel?.openFolderPicker(),
+      onFilesReceived: (files) => this.leftPanel?.addFilesFromDrop(files, true),
+      supportedFormats: this.fileImportService.getSupportedExtensions(),
     });
     this.statusBar?.setOnHelpClickCallback(() => this.helpPanel.show("howto"));
 
@@ -247,14 +248,6 @@ export class BedevereApp implements EventHandler {
       this.commandPalette = new CommandPalette(this.container, "command-palette");
       this.commandPalette.setEventDispatcher(this.eventDispatcher);
       this.eventDispatcher.registerComponent(this.commandPalette);
-    }
-
-    // Drag drop zone
-    if (this.options.showDragDropZone) {
-      this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
-      this.dragDropZone.setFileImportService(this.fileImportService);
-      this.dragDropZone.setOnBrowseFolderCallback(() => this.leftPanel?.openFolderPicker());
-      this.setOnFileDroppedCallback();
     }
 
     // Calculate dimensions
@@ -359,6 +352,24 @@ export class BedevereApp implements EventHandler {
         this.setTheme(e.matches ? "dark" : "light");
       });
     }
+
+    // Body-level drag-drop: users can drop files anywhere on the page as a
+    // shortcut, without opening Help → Import. The files route to ControlPanel
+    // through the same addFilesFromDrop pipeline.
+    const preventDrag = (e: Event) => { e.preventDefault(); e.stopPropagation(); };
+    document.body.addEventListener("dragenter", preventDrag);
+    document.body.addEventListener("dragover", preventDrag);
+    document.body.addEventListener("dragleave", preventDrag);
+    document.body.addEventListener("drop", (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const files = Array.from(e.dataTransfer?.files || []);
+      if (files.length > 0 && this.leftPanel) {
+        this.leftPanel.addFilesFromDrop(files, true).catch((err) => {
+          this.showMessage(`Failed to import: ${err instanceof Error ? err.message : "unknown error"}`, "error");
+        });
+      }
+    });
   }
 
   private updateDimensions(): void {
@@ -743,10 +754,6 @@ export class BedevereApp implements EventHandler {
     // Mark as loaded in panel
     this.leftPanel.markDatasetAsLoaded(datasetInfo.metadata.name);
 
-    // Destroy drag drop zone
-    this.dragDropZone?.destroy();
-    this.dragDropZone = null;
-
     await this.multiDatasetVisualizer.switchToDataset(datasetInfo.metadata.name);
 
     // Update status bar
@@ -815,60 +822,19 @@ export class BedevereApp implements EventHandler {
     }
   }
 
-  /**
-   * When files are dropped onto the drop zone, hand them to the ControlPanel
-   * so they appear in the dataset tree just like folder-scanned files. The
-   * panel auto-imports non-Excel files (preserves drop-to-open), and lets
-   * the user pick a sheet for Excel workbooks.
-   */
-  private setOnFileDroppedCallback(): void {
-    this.dragDropZone?.setOnFilesReceivedCallback(async (files: File[]): Promise<void> => {
-      try {
-        await this.leftPanel.addFilesFromDrop(files, true);
-        // Even if every file was Excel (no auto-import), the user has moved
-        // past the empty state — dismiss the drop zone so the panel is visible.
-        this.dragDropZone?.destroy();
-        this.dragDropZone = null;
-      } catch (error) {
-        console.error("Error handling dropped files:", error);
-        const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        this.showMessage(`Failed to add files: ${errorMessage}`, "error");
-      }
-    });
-  }
-
-  /**
-   * Set the callback for when a dataset is selected.
-   * Destroy the drag drop zone.
-   */
   private setOnSelectDatasetCallback(): void {
     const callback = async (dataset: DataProvider) => {
       await this.updateStatusBarDatasetInfo(dataset);
-
-      this.dragDropZone?.destroy();
-      this.dragDropZone = null;
     };
 
     this.leftPanel.setOnSelectCallback(callback);
     this.multiDatasetVisualizer.setOnSelectCallback(callback);
   }
 
-  /**
-   * Set the callback for when a tab is closed.
-   * If there are no datasets left, show the drag drop zone.
-   */
   private setOnCloseTabCallback(): void {
     this.multiDatasetVisualizer.setOnCloseTabCallback(() => {
       this.updateFocusAfterDatasetChange();
       this.updateStatusBarDatasetInfo();
-
-      // If there are no datasets left, show the drag drop zone
-      if (this.multiDatasetVisualizer.getDatasetIds().length === 0 && this.dragDropZone === null) {
-        this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
-        this.dragDropZone.setFileImportService(this.fileImportService);
-        this.dragDropZone.setOnBrowseFolderCallback(() => this.leftPanel?.openFolderPicker());
-        this.setOnFileDroppedCallback();
-      }
     });
   }
 

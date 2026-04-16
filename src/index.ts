@@ -6,7 +6,6 @@ export { SpreadsheetVisualizer } from "./components/SpreadsheetVisualizer";
 export { ColumnStatsVisualizer } from "./components/ColumnStatsVisualizer/ColumnStatsVisualizer";
 export { StatusBar } from "./components/StatusBar";
 export { CommandPalette } from "./components/CommandPalette";
-export { DragDropZone } from "./components/DragDropZone";
 export { CommandBar } from "./components/CommandBar";
 
 // Data types and utilities
@@ -16,7 +15,6 @@ export type { DataProvider } from "./data/types";
 export type { BedevereAppOptions } from "./components/BedevereApp";
 export type { StatusBarItem } from "./components/StatusBar";
 export type { Command } from "./components/CommandPalette";
-export type { DragDropZoneOptions } from "./components/DragDropZone";
 export type { CommandBarOptions, CellInfo } from "./components/CommandBar";
 
 // SpreadsheetVisualizer types

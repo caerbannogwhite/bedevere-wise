@@ -7,9 +7,9 @@
   z-index: 10000;
   background: rgba(0, 0, 0, 0.45);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 24px;
+  padding: 48px 24px 24px;
 }
 
 .help-panel {
@@ -506,6 +506,128 @@
       body.theme-dark & {
         color: #4ea1d3;
       }
+    }
+  }
+
+  // ------- Import tab -------
+
+  &__import-dropzone {
+    border: 2px dashed #ccc;
+    padding: 32px 20px;
+    text-align: center;
+    color: #666;
+    cursor: default;
+    transition: border-color 0.15s ease, background-color 0.15s ease;
+
+    body.theme-dark & {
+      border-color: #3c3c3c;
+      color: #aaa;
+    }
+
+    &--active {
+      border-color: #f5b927;
+      background-color: rgba(245, 185, 39, 0.08);
+
+      body.theme-dark & {
+        border-color: #f5b927;
+        background-color: rgba(245, 185, 39, 0.14);
+      }
+    }
+  }
+
+  &__import-icon {
+    margin-bottom: 12px;
+    opacity: 0.5;
+
+    body.theme-dark & {
+      opacity: 0.4;
+    }
+  }
+
+  &__import-title {
+    font-size: 15px;
+    font-weight: 600;
+    margin: 0 0 6px;
+    color: #333;
+
+    body.theme-dark & {
+      color: #e0e0e0;
+    }
+  }
+
+  &__import-description {
+    font-size: 13px;
+    margin: 0 0 6px;
+    line-height: 1.5;
+  }
+
+  &__import-formats {
+    font-size: 11px;
+    opacity: 0.6;
+    margin: 0;
+  }
+
+  &__import-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: center;
+  }
+
+  &__import-btn {
+    background: #007acc;
+    color: #ffffff;
+    border: none;
+    padding: 8px 18px;
+    font-size: 13px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+
+    &:hover {
+      background: #0090e0;
+    }
+
+    &--secondary {
+      background: transparent;
+      color: #007acc;
+      border: 1px solid #007acc;
+
+      &:hover {
+        background: rgba(0, 122, 204, 0.08);
+      }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+        border-color: #4ea1d3;
+
+        &:hover {
+          background: rgba(78, 161, 211, 0.12);
+        }
+      }
+    }
+  }
+
+  &__import-status {
+    margin-top: 12px;
+    font-size: 12px;
+    text-align: center;
+    min-height: 18px;
+
+    &--loading {
+      color: #007acc;
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+
+    &--success {
+      color: #10b981;
+    }
+
+    &--error {
+      color: #f14c4c;
     }
   }
 

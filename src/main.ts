@@ -26,7 +26,6 @@ async function initApplication() {
     theme: "auto", // Automatically detect user's preferred theme
     // theme: "light",
     showLeftPanel: true,
-    showDragDropZone: true,
     statusBarVisible: true,
     commandPaletteEnabled: true,
     spreadsheetOptions: {

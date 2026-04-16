@@ -320,16 +320,6 @@ export class StatusBar {
       visible: false,
     });
 
-    // Right side items
-    this.addItem({
-      id: "command-palette",
-      text: "Ctrl+P",
-      priority: 100,
-      alignment: "right",
-      tooltip: "Open Command Palette",
-      command: "workbench.action.showCommands",
-    });
-
     // this.addItem({
     //   id: "column-stats",
     //   text: "Stats",
