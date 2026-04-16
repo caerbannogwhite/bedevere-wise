@@ -4,6 +4,7 @@ import mvp_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?ur
 import duckdb_wasm_eh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
 import eh_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import { DuckDBDataProvider } from "./DuckDBDataProvider";
+import { quoteIdent } from "./sqlIdent";
 
 export interface ImportOptions {
   fileType: "csv" | "json" | "parquet";
@@ -126,11 +127,11 @@ export class DuckDBService {
   }
 
   public async getTableInfo(tableName: string): Promise<any[]> {
-    return await this.executeQuery(`DESCRIBE ${tableName}`);
+    return await this.executeQuery(`DESCRIBE ${quoteIdent(tableName)}`);
   }
 
   public async getColumnInfo(tableName: string, columnName: string): Promise<any> {
-    const columns = await this.executeQuery(`DESCRIBE ${tableName}`);
+    const columns = await this.executeQuery(`DESCRIBE ${quoteIdent(tableName)}`);
     return columns.find((column: any) => column.column_name === columnName);
   }
 

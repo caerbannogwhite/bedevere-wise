@@ -1,6 +1,6 @@
 import { DuckDBService } from "./DuckDBService";
 import { DuckDBDataProvider } from "./DuckDBDataProvider";
-import { detectFileType, SupportedFileType } from "./FileTreeTypes";
+import { detectFileType, getAllSupportedExtensions, SupportedFileType } from "./FileTreeTypes";
 import { FormatHandler, ImportFileOptions } from "./formats/FormatHandler";
 import { CsvFormatHandler } from "./formats/CsvFormatHandler";
 import { JsonFormatHandler } from "./formats/JsonFormatHandler";
@@ -60,20 +60,11 @@ export class FileImportService {
   }
 
   public getSupportedExtensions(): string[] {
-    const exts = [".csv", ".tsv", ".txt", ".json", ".parquet"];
-
-    // Dynamically add extensions based on registered handlers
-    const extMap: Record<string, string> = {
-      xlsx: ".xlsx", xls: ".xls",
-      sas7bdat: ".sas7bdat", xpt: ".xpt", sav: ".sav", dta: ".dta",
-    };
-
-    for (const [fileType, ext] of Object.entries(extMap)) {
-      if (this.handlers.some((h) => h.canHandle(fileType as SupportedFileType))) {
-        exts.push(ext);
-      }
-    }
-
-    return exts;
+    // Surface every extension the app knows about, even if the backing
+    // extension (e.g. Excel, stats_duck) hasn't finished loading yet. The
+    // file picker needs a stable list at open time; if a chosen format
+    // isn't actually usable, the import step surfaces a clear error rather
+    // than silently greying out files in the OS dialog.
+    return getAllSupportedExtensions();
   }
 }

@@ -1,4 +1,5 @@
 import { DuckDBService } from "./DuckDBService";
+import { quoteIdent } from "./sqlIdent";
 import {
   Column,
   ColumnStats,
@@ -27,7 +28,7 @@ export class DuckDBDataProvider implements DataProvider {
   }
 
   public setName(name: string): void {
-    this.duckDBService.executeQuery(`ALTER TABLE ${this.name} RENAME TO ${name}`).then(() => {
+    this.duckDBService.executeQuery(`ALTER TABLE ${quoteIdent(this.name)} RENAME TO ${quoteIdent(name)}`).then(() => {
       this.name = name;
     });
   }
@@ -41,7 +42,7 @@ export class DuckDBDataProvider implements DataProvider {
   }
 
   public async getMetadata(): Promise<DatasetMetadata> {
-    const totalRows = (await this.duckDBService.executeQuery(`SELECT COUNT(*) FROM ${this.name}`))[0].toArray()[0] as BigInt;
+    const totalRows = (await this.duckDBService.executeQuery(`SELECT COUNT(*) FROM ${quoteIdent(this.name)}`))[0].toArray()[0] as BigInt;
     const columns = await this.duckDBService.getTableInfo(this.name);
 
     return {
@@ -64,16 +65,16 @@ export class DuckDBDataProvider implements DataProvider {
   }
 
   public async fetchData(startRow: number, endRow: number): Promise<any[][]> {
-    const query = `SELECT * FROM ${this.name} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
+    const query = `SELECT * FROM ${quoteIdent(this.name)} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
     return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
   }
 
   public async fetchDataColumnRange(startRow: number, endRow: number, startCol: number, endCol: number): Promise<any[][]> {
     const columns = await this.duckDBService.getTableInfo(this.name);
     const columnNames = columns.map((column: any) => column.column_name).slice(startCol, endCol);
-    const columnNamesString = columnNames.join(", ");
+    const columnNamesString = columnNames.map(quoteIdent).join(", ");
 
-    const query = `SELECT ${columnNamesString} FROM ${this.name} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
+    const query = `SELECT ${columnNamesString} FROM ${quoteIdent(this.name)} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
     return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
   }
 
@@ -119,7 +120,7 @@ export class DuckDBDataProvider implements DataProvider {
       SELECT COUNT(*) as total_count,
              COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
              COUNT(DISTINCT "${columnName}") as distinct_count
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
     `;
     const row = (await this.duckDBService.executeQuery(query))[0];
     return {
@@ -140,13 +141,13 @@ export class DuckDBDataProvider implements DataProvider {
       SELECT COUNT(*) as total_count,
              COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
              COUNT(DISTINCT "${columnName}") as distinct_count
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
     `;
     const basic = (await this.duckDBService.executeQuery(statsQuery))[0];
 
     const valueCountsQuery = `
       SELECT "${columnName}" as val, COUNT(*) as cnt
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
       WHERE "${columnName}" IS NOT NULL
       GROUP BY "${columnName}"
       ORDER BY cnt DESC
@@ -181,7 +182,7 @@ export class DuckDBDataProvider implements DataProvider {
              COUNT(CASE WHEN "${columnName}" IS NULL THEN 1 END) as null_count,
              COUNT(CASE WHEN "${columnName}" = TRUE THEN 1 END) as true_count,
              COUNT(CASE WHEN "${columnName}" = FALSE THEN 1 END) as false_count
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
     `;
     const row = (await this.duckDBService.executeQuery(query))[0];
     const trueCount = Number(row.true_count);
@@ -222,7 +223,7 @@ export class DuckDBDataProvider implements DataProvider {
              CAST(AVG("${columnName}") AS DOUBLE) as mean_val,
              CAST(MEDIAN("${columnName}") AS DOUBLE) as median_val,
              CAST(STDDEV("${columnName}") AS DOUBLE) as stddev_val
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
     `;
     const row = (await this.duckDBService.executeQuery(statsQuery))[0];
     const totalCount = Number(row.total_count);
@@ -263,7 +264,7 @@ export class DuckDBDataProvider implements DataProvider {
       // Small-cardinality integer column: one bin per distinct value
       const query = `
         SELECT "${columnName}" as val, COUNT(*) as cnt
-        FROM ${this.name}
+        FROM ${quoteIdent(this.name)}
         WHERE "${columnName}" IS NOT NULL
         GROUP BY "${columnName}"
         ORDER BY val
@@ -284,7 +285,7 @@ export class DuckDBDataProvider implements DataProvider {
 
       const histQuery = `
         SELECT CAST(FLOOR((CAST("${columnName}" AS DOUBLE) - ${min}) / ${binWidth}) AS INTEGER) AS bin, COUNT(*) AS cnt
-        FROM ${this.name}
+        FROM ${quoteIdent(this.name)}
         WHERE "${columnName}" IS NOT NULL
         GROUP BY bin
         ORDER BY bin
@@ -353,7 +354,7 @@ export class DuckDBDataProvider implements DataProvider {
              COUNT(DISTINCT "${columnName}") as distinct_count,
              CAST(MIN(${epochExpr}) AS DOUBLE) as min_val,
              CAST(MAX(${epochExpr}) AS DOUBLE) as max_val
-      FROM ${this.name}
+      FROM ${quoteIdent(this.name)}
     `;
     let basic: any;
     try {
@@ -416,7 +417,7 @@ export class DuckDBDataProvider implements DataProvider {
 
       const histQuery = `
         SELECT CAST(FLOOR((CAST(${epochExpr} AS DOUBLE) - ${min}) / ${binWidth}) AS INTEGER) as bin, COUNT(*) as cnt
-        FROM ${this.name}
+        FROM ${quoteIdent(this.name)}
         WHERE "${columnName}" IS NOT NULL
         GROUP BY bin
         ORDER BY bin

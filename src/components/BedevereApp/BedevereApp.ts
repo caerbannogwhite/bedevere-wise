@@ -723,9 +723,7 @@ export class BedevereApp implements EventHandler {
   private async loadSampleDataset(): Promise<void> {
     try {
       const file = new File([penguinsCsv], "penguins.csv", { type: "text/csv" });
-      const dataset = await this.fileImportService.importFile(file);
-      const metadata = await dataset.getMetadata();
-      await this._openDataset({ metadata, dataset, isLoaded: true });
+      await this.leftPanel.addFilesFromDrop([file], true);
       this.helpPanel.hide();
       this.showMessage("Palmer Penguins loaded \u2014 try: SELECT * FROM penguins;", "success");
     } catch (error) {
@@ -818,23 +816,23 @@ export class BedevereApp implements EventHandler {
   }
 
   /**
-   * Set the callback for when a file is dropped.
-   * Add the dataset to the dataset panel and visualizer.
-   * Mark the dataset as loaded in the panel.
-   * Update the status bar.
+   * When files are dropped onto the drop zone, hand them to the ControlPanel
+   * so they appear in the dataset tree just like folder-scanned files. The
+   * panel auto-imports non-Excel files (preserves drop-to-open), and lets
+   * the user pick a sheet for Excel workbooks.
    */
   private setOnFileDroppedCallback(): void {
-    this.dragDropZone?.setOnFileDroppedCallback(async (dataset: DataProvider): Promise<void> => {
+    this.dragDropZone?.setOnFilesReceivedCallback(async (files: File[]): Promise<void> => {
       try {
-        const metadata = await dataset.getMetadata();
-        await this._openDataset({ metadata, dataset, isLoaded: true });
-
-        // Show success message
-        this.showMessage(`Dataset "${metadata.name}" loaded successfully`, "success");
+        await this.leftPanel.addFilesFromDrop(files, true);
+        // Even if every file was Excel (no auto-import), the user has moved
+        // past the empty state — dismiss the drop zone so the panel is visible.
+        this.dragDropZone?.destroy();
+        this.dragDropZone = null;
       } catch (error) {
-        console.error("Error adding dropped dataset:", error);
+        console.error("Error handling dropped files:", error);
         const errorMessage = error instanceof Error ? error.message : "Unknown error occurred";
-        this.showMessage(`Failed to load dataset: ${errorMessage}`, "error");
+        this.showMessage(`Failed to add files: ${errorMessage}`, "error");
       }
     });
   }
@@ -868,6 +866,7 @@ export class BedevereApp implements EventHandler {
       if (this.multiDatasetVisualizer.getDatasetIds().length === 0 && this.dragDropZone === null) {
         this.dragDropZone = new DragDropZoneFocusable(this.container, this.duckDBService);
         this.dragDropZone.setFileImportService(this.fileImportService);
+        this.dragDropZone.setOnBrowseFolderCallback(() => this.leftPanel?.openFolderPicker());
         this.setOnFileDroppedCallback();
       }
     });

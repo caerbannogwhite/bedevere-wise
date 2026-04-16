@@ -1,9 +1,8 @@
-import { DataProvider } from "../../data/types";
 import { DuckDBService } from "@/data/DuckDBService";
 import { FileImportService } from "@/data/FileImportService";
 
 export interface DragDropZoneOptions {
-  onFileDropped?: (dataset: DataProvider) => void;
+  onFilesReceived?: (files: File[]) => void | Promise<void>;
   onError?: (error: string) => void;
 }
 
@@ -15,6 +14,8 @@ export class DragDropZone {
   private options: DragDropZoneOptions;
   private isDragOver: boolean = false;
   private onBrowseFolderCallback?: () => void;
+  private descriptionElement: HTMLElement | null = null;
+  private fileInput: HTMLInputElement | null = null;
 
   constructor(parent: HTMLElement, duckDBService: DuckDBService, options: DragDropZoneOptions = {}) {
     this.duckDBService = duckDBService;
@@ -30,6 +31,26 @@ export class DragDropZone {
 
   public setFileImportService(service: FileImportService): void {
     this.fileImportService = service;
+    // createDropZone ran before this service was wired in, so the
+    // "Supported formats" line and file input's accept list both reflect
+    // the DuckDB-only fallback. Refresh them now that the real list
+    // (xlsx/xpt/sav/dta/sas7bdat etc.) is available.
+    this.refreshSupportedFormats();
+  }
+
+  private refreshSupportedFormats(): void {
+    const formats = this.fileImportService
+      ? this.fileImportService.getSupportedExtensions()
+      : this.duckDBService.getSupportedFileTypes();
+    if (this.descriptionElement) {
+      this.descriptionElement.innerHTML = `
+        Drop a file here to automatically add it as a dataset<br>
+        <small>Supported formats: ${formats.join(", ")}</small>
+      `;
+    }
+    if (this.fileInput) {
+      this.fileInput.accept = formats.join(",");
+    }
   }
 
   public setOnBrowseFolderCallback(callback: () => void): void {
@@ -61,8 +82,8 @@ export class DragDropZone {
     return this.container;
   }
 
-  public setOnFileDroppedCallback(callback: (dataset: DataProvider) => void): void {
-    this.options.onFileDropped = callback;
+  public setOnFilesReceivedCallback(callback: (files: File[]) => void | Promise<void>): void {
+    this.options.onFilesReceived = callback;
   }
 
   private createDropZone(): void {
@@ -88,13 +109,7 @@ export class DragDropZone {
     // Create description
     const description = document.createElement("p");
     description.className = "drag-drop-zone__description";
-    const formats = this.fileImportService
-      ? this.fileImportService.getSupportedExtensions().join(", ")
-      : this.duckDBService.getSupportedFileTypes().join(", ");
-    description.innerHTML = `
-      Drop a file here to automatically add it as a dataset<br>
-      <small>Supported formats: ${formats}</small>
-    `;
+    this.descriptionElement = description;
 
     // Create alternative action — split button: main "Browse" + dropdown arrow for folder
     const alternative = document.createElement("div");
@@ -102,11 +117,12 @@ export class DragDropZone {
 
     const fileInput = document.createElement("input");
     fileInput.type = "file";
-    fileInput.accept = this.fileImportService
-      ? this.fileImportService.getSupportedExtensions().join(",")
-      : this.duckDBService.getSupportedFileTypes().join(",");
     fileInput.style.display = "none";
     fileInput.multiple = true;
+    this.fileInput = fileInput;
+
+    // Populate description + accept from whichever service is available now.
+    this.refreshSupportedFormats();
 
     const splitButton = document.createElement("div");
     splitButton.className = "drag-drop-zone__split-button";
@@ -216,45 +232,31 @@ export class DragDropZone {
   }
 
   private async _handleFiles(files: File[]): Promise<void> {
+    // Validate every file before handing off, so the caller gets a clean batch.
+    const supported: File[] = [];
     for (const file of files) {
-      // Use FileImportService if available, fallback to old CSV-only path
       if (this.fileImportService) {
         if (!this.fileImportService.canImport(file.name)) {
           this.showError(`Unsupported file type: ${file.name.split(".").pop() || "unknown"}`);
           return;
         }
-
-        try {
-          this.showLoading();
-          const result = await this.fileImportService.importFile(file);
-          this.hideLoading();
-          this.options.onFileDropped?.(result);
-        } catch (error) {
-          this.hideLoading();
-          this.showError(`Failed to import file: ${error instanceof Error ? error.message : "Unknown error"}`);
-        }
-      } else {
-        // Legacy fallback
-        if (!this.duckDBService.isSupportedFileType(file)) {
-          this.showError(`Unsupported file type: ${file.type || "unknown"}. Please use CSV or TSV files.`);
-          return;
-        }
-
-        try {
-          this.showLoading();
-          const tableName = file.name.replace(/\.[^/.]+$/, "");
-          const result = await this.duckDBService.importFile(file, tableName, {
-            fileType: "csv",
-            hasHeader: true,
-            delimiter: ",",
-          });
-          this.hideLoading();
-          this.options.onFileDropped?.(result);
-        } catch (error) {
-          this.hideLoading();
-          this.showError(`Failed to parse file: ${error instanceof Error ? error.message : "Unknown error"}`);
-        }
+      } else if (!this.duckDBService.isSupportedFileType(file)) {
+        this.showError(`Unsupported file type: ${file.type || "unknown"}.`);
+        return;
       }
+      supported.push(file);
+    }
+
+    if (supported.length === 0) return;
+    if (!this.options.onFilesReceived) return;
+
+    try {
+      this.showLoading();
+      await this.options.onFilesReceived(supported);
+      this.hideLoading();
+    } catch (error) {
+      this.hideLoading();
+      this.showError(`Failed to handle files: ${error instanceof Error ? error.message : "Unknown error"}`);
     }
   }
 

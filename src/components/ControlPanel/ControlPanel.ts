@@ -4,7 +4,7 @@ import { ViewManager } from "../../data/ViewManager";
 import { PersistenceService } from "../../data/PersistenceService";
 import { FileImportService } from "../../data/FileImportService";
 import { FolderScanService } from "../../data/FolderScanService";
-import { FileTreeNode } from "../../data/FileTreeTypes";
+import { FileTreeNode, detectFileType } from "../../data/FileTreeTypes";
 import { FileTreeRenderer, FileTreeCallbacks } from "./FileTreeRenderer";
 import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
 import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
@@ -21,6 +21,10 @@ function formatError(err: unknown): { message: string; details?: string } {
     return { message: err.message, details: err.stack };
   }
   return { message: String(err) };
+}
+
+function stripExt(fileName: string): string {
+  return fileName.replace(/\.[^/.]+$/, "");
 }
 
 export interface DatasetInfo {
@@ -223,18 +227,38 @@ export class ControlPanel {
   public async addDataset(dataset: DataProvider): Promise<void> {
     const metadata = await dataset.getMetadata();
 
-    const existingDataset = this.datasets.find((d) => d.metadata.name === metadata.name);
-    if (existingDataset) return;
+    const existing = this.datasets.find((d) => d.metadata.name === metadata.name);
+    if (existing) return;
 
-    this.datasets.push({ metadata, dataset, isLoaded: false });
-    this.renderDatasetList();
+    this.datasets.push({ metadata, dataset, isLoaded: true });
+
+    // If no tree node represents this dataset yet (e.g. programmatic add via
+    // command palette or view materialization), synthesize one so the user
+    // sees it in the panel.
+    const alreadyTracked = this.findTreeNodeByTableName(metadata.name);
+    if (!alreadyTracked) {
+      this.fileTree.push({
+        id: `dataset/${metadata.name}`,
+        name: metadata.name,
+        kind: "file",
+        fileType: undefined,
+        isImported: true,
+        tableName: metadata.name,
+        isExpanded: false,
+      });
+      this.renderTree();
+    }
   }
 
   public markDatasetAsLoaded(name: string): void {
     const dataset = this.datasets.find((d) => d.metadata.name === name);
     if (dataset) {
       dataset.isLoaded = true;
-      this.renderDatasetList();
+    }
+    const node = this.findTreeNodeByTableName(name);
+    if (node) {
+      node.isImported = true;
+      this.treeRenderer?.updateNode(node.id, { isImported: true });
     }
   }
 
@@ -242,8 +266,28 @@ export class ControlPanel {
     const dataset = this.datasets.find((d) => d.metadata.name === name);
     if (dataset) {
       dataset.isLoaded = false;
-      this.renderDatasetList();
     }
+    // Reflect tab-closed state on the tree node too, so the panel no longer
+    // shows the file as "open".
+    const node = this.findTreeNodeByTableName(name);
+    if (node) {
+      node.isImported = false;
+      this.treeRenderer?.updateNode(node.id, { isImported: false });
+    }
+  }
+
+  private findTreeNodeByTableName(tableName: string): FileTreeNode | undefined {
+    const walk = (nodes: FileTreeNode[]): FileTreeNode | undefined => {
+      for (const n of nodes) {
+        if (n.tableName === tableName) return n;
+        if (n.children) {
+          const found = walk(n.children);
+          if (found) return found;
+        }
+      }
+      return undefined;
+    };
+    return walk(this.fileTree);
   }
 
   public getLoadedDatasets(): string[] {
@@ -291,10 +335,52 @@ export class ControlPanel {
     }
 
     if (tree) {
+      // If the same folder (by id) is already open, replace it in place so
+      // a re-browse acts as a refresh instead of duplicating the subtree.
+      const existingIdx = this.fileTree.findIndex((n) => n.id === tree.id);
+      if (existingIdx >= 0) {
+        const existing = this.fileTree[existingIdx];
+        this.preserveImportedState(existing, tree);
+        this.fileTree[existingIdx] = tree;
+        this.renderTree();
+        this.expandSection("datasets");
+        this.onShowMessageCallback?.(
+          `Refreshed folder "${tree.name}"`,
+          "info",
+        );
+        return;
+      }
+
       this.fileTree.push(tree);
       this.renderTree();
       this.expandSection("datasets");
     }
+  }
+
+  /**
+   * Copy `isImported` / `tableName` from the old tree's nodes onto the newly
+   * scanned tree, keyed by node id. Ensures a re-browse doesn't reset the
+   * "open" markers on files the user had already imported.
+   */
+  private preserveImportedState(oldTree: FileTreeNode, newTree: FileTreeNode): void {
+    const oldStates = new Map<string, { isImported: boolean; tableName?: string }>();
+    const collect = (n: FileTreeNode) => {
+      if (n.isImported || n.tableName) {
+        oldStates.set(n.id, { isImported: n.isImported, tableName: n.tableName });
+      }
+      n.children?.forEach(collect);
+    };
+    collect(oldTree);
+
+    const apply = (n: FileTreeNode) => {
+      const prev = oldStates.get(n.id);
+      if (prev) {
+        n.isImported = prev.isImported;
+        n.tableName = prev.tableName;
+      }
+      n.children?.forEach(apply);
+    };
+    apply(newTree);
   }
 
   public addFileTreeNode(node: FileTreeNode): void {
@@ -302,9 +388,45 @@ export class ControlPanel {
     this.renderTree();
   }
 
-  private renderTree(): void {
-    if (this.fileTree.length === 0) return;
+  /**
+   * Add files from a drag-drop (or programmatic injection like the
+   * "Load sample dataset" button). Each file becomes a top-level tree node,
+   * mirroring how folder-scanned files look. If `autoImport` is true, every
+   * non-Excel file is imported + opened immediately (preserves drop-to-open
+   * UX); Excel files are never auto-imported because the user has to pick a
+   * sheet first.
+   */
+  public async addFilesFromDrop(files: File[], autoImport: boolean = true): Promise<void> {
+    const newNodes: FileTreeNode[] = [];
+    for (const file of files) {
+      const fileType = detectFileType(file.name) ?? undefined;
+      const node: FileTreeNode = {
+        id: `drop/${file.name}/${Date.now()}/${Math.random().toString(36).slice(2, 8)}`,
+        name: file.name,
+        kind: "file",
+        fileHandle: file,
+        fileType,
+        isImported: false,
+        isExpanded: false,
+      };
+      this.fileTree.push(node);
+      newNodes.push(node);
+    }
 
+    this.renderTree();
+    this.expandSection("datasets");
+
+    if (!autoImport) return;
+
+    // Auto-import non-Excel files so dropping a CSV/Parquet still opens it
+    // straight away. Excel files stay collapsed until the user picks a sheet.
+    for (const node of newNodes) {
+      if (node.fileType === "xlsx" || node.fileType === "xls") continue;
+      await this.handleTreeNodeClick(node);
+    }
+  }
+
+  private renderTree(): void {
     if (!this.treeRenderer) {
       const callbacks: FileTreeCallbacks = {
         onNodeClick: (node) => this.handleTreeNodeClick(node),
@@ -315,27 +437,47 @@ export class ControlPanel {
       this.treeRenderer = new FileTreeRenderer(this.datasetListElement, callbacks);
     }
 
-    // Combine flat datasets with tree nodes
-    const flatNodes: FileTreeNode[] = this.datasets.map((d) => ({
-      id: d.metadata.name,
-      name: d.metadata.name,
-      kind: "file" as const,
-      fileType: undefined,
-      isImported: d.isLoaded,
-      isExpanded: false,
-    }));
-
-    this.treeRenderer.render([...flatNodes, ...this.fileTree]);
+    this.treeRenderer.render(this.fileTree);
   }
 
   private async handleTreeNodeClick(node: FileTreeNode): Promise<void> {
-    if (node.kind === "folder") {
+    const isExcelFile =
+      node.kind === "file" && (node.fileType === "xlsx" || node.fileType === "xls");
+
+    // Folders and Excel files: row click toggles expand, same as chevron.
+    // Excel files have sheets as children; clicking the file itself should
+    // reveal them, not attempt to import the whole workbook.
+    if (node.kind === "folder" || isExcelFile) {
       node.isExpanded = !node.isExpanded;
       this.treeRenderer?.updateNode(node.id, { isExpanded: node.isExpanded });
+      if (node.isExpanded) {
+        await this.handleTreeNodeExpand(node);
+      }
       return;
     }
 
-    if (node.isImported || node.isUnavailable || !this.fileImportService) return;
+    if (node.isUnavailable) return;
+
+    // Already-tracked node (we've imported this file before): re-select the
+    // existing tab if open, or re-open the tab from cached DataProvider if the
+    // user had closed it. Avoids a duplicate import and the "Component with id
+    // X is already registered" error from a duplicate tab.
+    if (node.tableName) {
+      const existing = this.datasets.find((d) => d.metadata.name === node.tableName);
+      if (existing) {
+        const openTabs = this.multiDatasetVisualizer.getDatasetIds();
+        if (!openTabs.includes(existing.metadata.name)) {
+          await this.multiDatasetVisualizer.addDataset(existing.metadata, existing.dataset);
+        }
+        await this.multiDatasetVisualizer.switchToDataset(existing.metadata.name);
+        node.isImported = true;
+        this.treeRenderer?.updateNode(node.id, { isImported: true });
+        this.onSelectCallback?.(existing.dataset);
+        return;
+      }
+    }
+
+    if (!this.fileImportService) return;
 
     try {
       let file: File;
@@ -347,13 +489,20 @@ export class ControlPanel {
         return;
       }
 
-      const tableName = node.alias || node.name.replace(/\.[^/.]+$/, "");
+      const baseName =
+        node.kind === "sheet" && node.sheetName
+          ? `${node.alias || stripExt((node.fileHandle as any)?.name || node.name)}__${node.sheetName}`
+          : node.alias || stripExt(node.name);
+      const tableName = baseName;
       const options = node.kind === "sheet" && node.sheetName ? { sheetName: node.sheetName } : undefined;
       const provider = await this.fileImportService.importFile(file, tableName, options);
       const metadata = await provider.getMetadata();
 
       node.isImported = true;
+      node.tableName = metadata.name;
       this.treeRenderer?.updateNode(node.id, { isImported: true });
+
+      this.datasets.push({ metadata, dataset: provider, isLoaded: true });
 
       await this.multiDatasetVisualizer.addDataset(metadata, provider);
       await this.multiDatasetVisualizer.switchToDataset(metadata.name);
@@ -544,42 +693,6 @@ export class ControlPanel {
 
   // --- Renderers ---
 
-  private renderDatasetList(): void {
-    // If tree data exists, use tree renderer
-    if (this.fileTree.length > 0) {
-      this.renderTree();
-      return;
-    }
-
-    // Flat list for individually added datasets
-    this.datasetListElement.innerHTML = "";
-
-    this.datasets.forEach((datasetInfo) => {
-      const itemElement = document.createElement("div");
-      itemElement.className = `control-panel__item ${datasetInfo.isLoaded ? "control-panel__item--loaded" : ""}`;
-
-      const textElement = document.createElement("div");
-      textElement.className = "control-panel__item-text";
-
-      const nameElement = document.createElement("div");
-      nameElement.className = "control-panel__item-name";
-      nameElement.textContent = datasetInfo.metadata.name.toUpperCase();
-
-      textElement.appendChild(nameElement);
-      itemElement.appendChild(textElement);
-
-      if (!datasetInfo.isLoaded) {
-        itemElement.style.cursor = "pointer";
-        itemElement.addEventListener("click", async () => {
-          await this.loadDataset(datasetInfo);
-          this.onSelectCallback?.(datasetInfo.dataset);
-        });
-      }
-
-      this.datasetListElement.appendChild(itemElement);
-    });
-  }
-
   private renderViews(): void {
     if (!this.viewManager) return;
 
@@ -654,19 +767,4 @@ export class ControlPanel {
     }
   }
 
-  private async loadDataset(datasetInfo: DatasetInfo): Promise<void> {
-    try {
-      await this.multiDatasetVisualizer.addDataset(datasetInfo.metadata, datasetInfo.dataset);
-      await this.multiDatasetVisualizer.switchToDataset(datasetInfo.metadata.name);
-      this.markDatasetAsLoaded(datasetInfo.metadata.name);
-    } catch (error) {
-      console.error(`Failed to load dataset ${datasetInfo.metadata.name}:`, error);
-      const { message, details } = formatError(error);
-      this.onShowMessageCallback?.(
-        `Failed to load dataset "${datasetInfo.metadata.name}": ${message}`,
-        "error",
-        { details },
-      );
-    }
-  }
 }

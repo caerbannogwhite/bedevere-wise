@@ -99,8 +99,12 @@ export class FileTreeRenderer {
     row.className = "file-tree__row";
     row.style.paddingLeft = `${depth * 16 + 8}px`;
 
-    // Chevron (for expandable nodes)
-    const hasChildren = node.kind === "folder" || (node.fileType === "xlsx" || node.fileType === "xls");
+    // Chevron (for expandable nodes): folders always expand; Excel workbooks
+    // (kind === "file") expand to list their sheets. Sheet-kind children
+    // inherit xlsx/xls fileType but are leaves — no chevron.
+    const isExcelWorkbook =
+      node.kind === "file" && (node.fileType === "xlsx" || node.fileType === "xls");
+    const hasChildren = node.kind === "folder" || isExcelWorkbook;
     if (hasChildren) {
       const chevron = document.createElement("span");
       chevron.className = "file-tree__chevron";

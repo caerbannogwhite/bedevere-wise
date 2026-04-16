@@ -13,6 +13,8 @@ export interface FileTreeNode {
   isImported: boolean;
   isExpanded: boolean;
   sheetName?: string;
+  /** DuckDB table name assigned when this node was imported; used to re-select the dataset on later clicks. */
+  tableName?: string;
   /** True if the format handler reports this type as unavailable (extension not loaded) */
   isUnavailable?: boolean;
 }
