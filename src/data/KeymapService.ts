@@ -63,6 +63,8 @@ const DEFAULT_KEYMAP: KeymapEntry[] = [
   { action: "app.commandPalette",    description: "Open command palette",       scope: "global",  binding: { key: "P", ctrl: true, shift: true } },
   { action: "app.toggleSqlEditor",   description: "Toggle SQL editor",          scope: "global",  binding: { key: "e", ctrl: true } },
   { action: "app.toggleFullscreen",  description: "Toggle fullscreen",          scope: "global",  binding: { key: "F11" } },
+  { action: "tabs.next",             description: "Switch to next tab",         scope: "global",  binding: { key: "ArrowRight", ctrl: true, alt: true } },
+  { action: "tabs.prev",             description: "Switch to previous tab",     scope: "global",  binding: { key: "ArrowLeft", ctrl: true, alt: true } },
 
   // Spreadsheet navigation
   { action: "spreadsheet.moveUp",        description: "Move selection up",             scope: "spreadsheet", binding: { key: "ArrowUp" } },

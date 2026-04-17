@@ -4,6 +4,7 @@ import { MouseState, ToDraw } from "./SpreadsheetVisualizerBase";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";
 import { keymapService } from "../../data/KeymapService";
+import { persistenceService } from "../../data/PersistenceService";
 
 export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelection implements FocusableComponent {
   private _isFocused: boolean = false;
@@ -279,9 +280,12 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
         event.preventDefault();
         const selected = await this.getSelectedFormattedValues();
         if (selected.data.length > 0) {
-          const headerLine = selected.headers.join("\t");
-          const dataLines = selected.data.map((row) => row.join("\t")).join("\n");
-          navigator.clipboard.writeText(headerLine + "\n" + dataLines).catch(console.error);
+          const s = persistenceService.loadAppSettings();
+          const delim = s.copyDelimiter === "comma" ? "," : "\t";
+          const includeHeader = s.copyIncludeHeader ?? true;
+          const lines = selected.data.map((row) => row.join(delim));
+          if (includeHeader) lines.unshift(selected.headers.join(delim));
+          navigator.clipboard.writeText(lines.join("\n")).catch(console.error);
         }
         break;
       }

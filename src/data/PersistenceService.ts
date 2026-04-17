@@ -15,6 +15,8 @@ export interface AppSettings {
   panelMinimized?: boolean;
   panelWidth?: number;
   hasSeenOnboarding?: boolean;
+  copyDelimiter?: "tab" | "comma";
+  copyIncludeHeader?: boolean;
 }
 
 const STORAGE_KEYS = {
@@ -159,6 +161,45 @@ export class PersistenceService {
       const request = tx.objectStore(TABLE_STORE).getAllKeys();
       request.onsuccess = () => resolve(request.result as string[]);
       request.onerror = () => reject(request.error);
+    });
+  }
+
+  /**
+   * Wipe every piece of persisted state: all localStorage keys under the
+   * `bedevere_` prefix (views, queries, settings, keymap overrides) and the
+   * IndexedDB snapshot database. A partial failure on one side still allows
+   * the other to proceed.
+   */
+  public async clearAll(): Promise<void> {
+    // localStorage
+    try {
+      const toRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.startsWith("bedevere_")) toRemove.push(key);
+      }
+      for (const key of toRemove) localStorage.removeItem(key);
+    } catch (err) {
+      console.error("clearAll: failed to clear localStorage", err);
+    }
+
+    // IndexedDB
+    await new Promise<void>((resolve) => {
+      try {
+        const req = indexedDB.deleteDatabase(DB_NAME);
+        req.onsuccess = () => resolve();
+        req.onerror = () => {
+          console.error("clearAll: failed to delete IndexedDB", req.error);
+          resolve();
+        };
+        req.onblocked = () => {
+          console.warn("clearAll: IndexedDB delete blocked (open connection elsewhere)");
+          resolve();
+        };
+      } catch (err) {
+        console.error("clearAll: threw while deleting IndexedDB", err);
+        resolve();
+      }
     });
   }
 }

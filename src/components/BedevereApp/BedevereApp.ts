@@ -186,6 +186,15 @@ export class BedevereApp implements EventHandler {
 
   // EventHandler interface implementation
   public async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
+    // Alt+1..9 jumps directly to tab N. Handled outside the keymap to avoid
+    // nine near-identical entries — see tabs.next / tabs.prev in the keymap
+    // for the rebindable cyclical shortcuts.
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
+      e.preventDefault();
+      this.tabManager.switchToTabByIndex(Number(e.key) - 1);
+      return true;
+    }
+
     const action = keymapService.matchEvent(e, "global");
     if (action) {
       e.preventDefault();
@@ -194,6 +203,8 @@ export class BedevereApp implements EventHandler {
         case "app.commandPalette":   this.commandPalette?.show(); break;
         case "app.toggleSqlEditor":  this.toggleSqlEditor(); break;
         case "app.toggleFullscreen": this.toggleFullscreen(); break;
+        case "tabs.next":            this.tabManager.switchToNextTab(); break;
+        case "tabs.prev":            this.tabManager.switchToPreviousTab(); break;
       }
       return true;
     }
@@ -240,6 +251,31 @@ export class BedevereApp implements EventHandler {
       onBrowseFolder: () => this.leftPanel?.openFolderPicker(),
       onFilesReceived: (files) => this.leftPanel?.addFilesFromDrop(files, true),
       supportedFormats: this.fileImportService.getSupportedExtensions(),
+      initialTheme: this.persistenceService.loadAppSettings().theme ?? "auto",
+      onThemeChange: (theme) => {
+        const resolved = theme === "auto" ? this.detectTheme() : theme;
+        this.setTheme(resolved);
+        // setTheme persists the resolved value; re-save to preserve "auto"
+        // intent so reloads keep following OS preference.
+        const s = this.persistenceService.loadAppSettings();
+        s.theme = theme;
+        this.persistenceService.saveAppSettings(s);
+      },
+      onResetKeymap: () => keymapService.resetToDefaults(),
+      onClearAllData: () => this.persistenceService.clearAll(),
+      getCopyOptions: () => {
+        const s = this.persistenceService.loadAppSettings();
+        return {
+          delimiter: s.copyDelimiter ?? "tab",
+          includeHeader: s.copyIncludeHeader ?? true,
+        };
+      },
+      setCopyOptions: (opts) => {
+        const s = this.persistenceService.loadAppSettings();
+        s.copyDelimiter = opts.delimiter;
+        s.copyIncludeHeader = opts.includeHeader;
+        this.persistenceService.saveAppSettings(s);
+      },
     });
     this.statusBar?.setOnHelpClickCallback(() => this.helpPanel.show("howto"));
 

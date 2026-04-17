@@ -1,6 +1,13 @@
 import duckPng from "@/assets/duck.png?url";
+import {
+  KeyBinding,
+  KeymapEntry,
+  formatBinding,
+  keymapService,
+  matchesBinding,
+} from "@/data/KeymapService";
 
-export type HelpPanelTab = "howto" | "import" | "about";
+export type HelpPanelTab = "howto" | "import" | "shortcuts" | "settings" | "about";
 
 export interface HelpPanelOptions {
   version: string;
@@ -9,7 +16,24 @@ export interface HelpPanelOptions {
   onBrowseFolder?: () => void;
   onFilesReceived?: (files: File[]) => void | Promise<void>;
   supportedFormats?: string[];
+  initialTheme?: "light" | "dark" | "auto";
+  onThemeChange?: (theme: "light" | "dark" | "auto") => void;
+  onResetKeymap?: () => void;
+  onClearAllData?: () => Promise<void> | void;
+  getCopyOptions?: () => { delimiter: "tab" | "comma"; includeHeader: boolean };
+  setCopyOptions?: (opts: { delimiter: "tab" | "comma"; includeHeader: boolean }) => void;
 }
+
+const TAB_ORDER: HelpPanelTab[] = ["howto", "import", "shortcuts", "settings", "about"];
+
+const SCOPE_LABELS: Record<string, string> = {
+  global: "App",
+  spreadsheet: "Spreadsheet",
+  sqlEditor: "SQL Editor",
+  commandPalette: "Command Palette",
+};
+
+const SCOPE_ORDER: string[] = ["global", "spreadsheet", "sqlEditor", "commandPalette"];
 
 interface SnippetDef {
   title: string;
@@ -56,8 +80,48 @@ export class HelpPanel {
   private tabButtons: Map<HelpPanelTab, HTMLButtonElement> = new Map();
   private tabBodies: Map<HelpPanelTab, HTMLElement> = new Map();
   private sampleButton: HTMLButtonElement | null = null;
+  private currentTab: HelpPanelTab = "howto";
+  private captureActive: boolean = false;
+
+  // Capture-phase listener so we pre-empt EventDispatcher's keydown routing.
+  // Runs before BedevereApp.handleKeyDown, lets us own Escape / tab-nav keys
+  // while the panel is open.
   private onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === "Escape") this.hide();
+    // Capture-mode (rebinding a shortcut) owns every key — don't steal events.
+    if (this.captureActive) return;
+
+    if (e.key === "Escape") {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      this.hide();
+      return;
+    }
+
+    // Ctrl+Alt+←/→ cycles Help tabs; mirrors dataset-tab nav.
+    if (e.ctrlKey && e.altKey && !e.shiftKey) {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.cycleTab(1);
+        return;
+      }
+      if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.cycleTab(-1);
+        return;
+      }
+    }
+
+    // Alt+1..N jumps directly to tab N while Help is open.
+    if (e.altKey && !e.ctrlKey && !e.shiftKey && !e.metaKey && /^[1-9]$/.test(e.key)) {
+      const idx = Number(e.key) - 1;
+      if (idx < TAB_ORDER.length) {
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        this.setTab(TAB_ORDER[idx]);
+      }
+    }
   };
 
   constructor(parent: HTMLElement, options: HelpPanelOptions) {
@@ -70,11 +134,12 @@ export class HelpPanel {
       this.build();
     }
     this.setTab(tab);
-    document.addEventListener("keydown", this.onKeyDown);
+    document.addEventListener("keydown", this.onKeyDown, { capture: true });
   }
 
   public hide(): void {
-    document.removeEventListener("keydown", this.onKeyDown);
+    document.removeEventListener("keydown", this.onKeyDown, { capture: true });
+    this.captureActive = false;
     this.overlay?.remove();
     this.overlay = null;
     this.panel = null;
@@ -83,11 +148,18 @@ export class HelpPanel {
     this.sampleButton = null;
   }
 
+  private cycleTab(delta: number): void {
+    const idx = TAB_ORDER.indexOf(this.currentTab);
+    const next = (idx + delta + TAB_ORDER.length) % TAB_ORDER.length;
+    this.setTab(TAB_ORDER[next]);
+  }
+
   public isOpen(): boolean {
     return this.overlay !== null;
   }
 
   public setTab(tab: HelpPanelTab): void {
+    this.currentTab = tab;
     for (const [id, btn] of this.tabButtons) {
       btn.classList.toggle("help-panel__tab--active", id === tab);
     }
@@ -117,6 +189,8 @@ export class HelpPanel {
     body.className = "help-panel__body";
     body.appendChild(this.buildHowToBody());
     body.appendChild(this.buildImportBody());
+    body.appendChild(this.buildShortcutsBody());
+    body.appendChild(this.buildSettingsBody());
     body.appendChild(this.buildAboutBody());
     this.panel.appendChild(body);
 
@@ -147,17 +221,18 @@ export class HelpPanel {
     const tabs = document.createElement("div");
     tabs.className = "help-panel__tabs";
 
-    const howToBtn = this.makeTabButton("howto", "How To");
-    const importBtn = this.makeTabButton("import", "Import");
-    const aboutBtn = this.makeTabButton("about", "About");
-
-    this.tabButtons.set("howto", howToBtn);
-    this.tabButtons.set("import", importBtn);
-    this.tabButtons.set("about", aboutBtn);
-
-    tabs.appendChild(howToBtn);
-    tabs.appendChild(importBtn);
-    tabs.appendChild(aboutBtn);
+    const labels: Record<HelpPanelTab, string> = {
+      howto: "How To",
+      import: "Import",
+      shortcuts: "Shortcuts",
+      settings: "Settings",
+      about: "About",
+    };
+    for (const id of TAB_ORDER) {
+      const btn = this.makeTabButton(id, labels[id]);
+      this.tabButtons.set(id, btn);
+      tabs.appendChild(btn);
+    }
     return tabs;
   }
 
@@ -423,6 +498,389 @@ export class HelpPanel {
     }
   }
 
+  private buildShortcutsBody(): HTMLElement {
+    const body = document.createElement("div");
+    body.className = "help-panel__tab-body help-panel__tab-body--shortcuts";
+    this.tabBodies.set("shortcuts", body);
+    this.renderShortcutsInto(body);
+    return body;
+  }
+
+  /**
+   * Re-render the shortcuts tab body in place. Used after rebind / reset so
+   * the updated keymap is reflected without closing the panel.
+   */
+  private renderShortcutsInto(body: HTMLElement): void {
+    const scrollTop = body.scrollTop;
+    body.innerHTML = "";
+
+    const intro = document.createElement("p");
+    intro.className = "help-panel__hint";
+    intro.textContent = "Click a shortcut to rebind it. Esc cancels capture.";
+    body.appendChild(intro);
+
+    const entries = keymapService.getEntries();
+    const byScope = new Map<string, KeymapEntry[]>();
+    for (const e of entries) {
+      if (!byScope.has(e.scope)) byScope.set(e.scope, []);
+      byScope.get(e.scope)!.push(e);
+    }
+
+    for (const scope of SCOPE_ORDER) {
+      const scopeEntries = byScope.get(scope);
+      if (!scopeEntries || scopeEntries.length === 0) continue;
+
+      const section = document.createElement("div");
+      section.className = "help-panel__shortcuts-section";
+
+      const title = document.createElement("h3");
+      title.className = "help-panel__section-title";
+      title.textContent = SCOPE_LABELS[scope] ?? scope;
+      section.appendChild(title);
+
+      const list = document.createElement("dl");
+      list.className = "help-panel__shortcuts-list";
+      for (const entry of scopeEntries) {
+        list.appendChild(this.buildShortcutRow(entry));
+      }
+
+      // After the global/"App" section, slot in the Alt+1..9 jump. Handled
+      // outside the keymap so not rebindable — show it read-only.
+      if (scope === "global") {
+        list.appendChild(this.buildStaticShortcutRow("Jump to tab N", "Alt+1 \u2026 Alt+9"));
+      }
+
+      section.appendChild(list);
+      body.appendChild(section);
+    }
+
+    body.scrollTop = scrollTop;
+  }
+
+  /** Build a rebindable shortcut row for a KeymapEntry. */
+  private buildShortcutRow(entry: KeymapEntry): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "help-panel__shortcut-row help-panel__shortcut-row--rebindable";
+    row.tabIndex = 0;
+
+    const dt = document.createElement("dt");
+    dt.className = "help-panel__shortcut-desc";
+    dt.textContent = entry.description;
+
+    const dd = document.createElement("dd");
+    dd.className = "help-panel__shortcut-keys";
+
+    this.renderShortcutKeys(dd, entry);
+
+    row.appendChild(dt);
+    row.appendChild(dd);
+
+    const startCapture = () => this.beginCapture(entry, row, dd);
+    row.addEventListener("click", (e) => {
+      if ((e.target as HTMLElement).closest(".help-panel__reset-btn")) return;
+      startCapture();
+    });
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        startCapture();
+      }
+    });
+
+    return row;
+  }
+
+  /** Build a read-only shortcut row (e.g. for shortcuts not in the keymap). */
+  private buildStaticShortcutRow(description: string, keys: string): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "help-panel__shortcut-row help-panel__shortcut-row--static";
+
+    const dt = document.createElement("dt");
+    dt.className = "help-panel__shortcut-desc";
+    dt.textContent = description;
+
+    const dd = document.createElement("dd");
+    dd.className = "help-panel__shortcut-keys";
+    this.renderKeyTokens(dd, keys);
+
+    row.appendChild(dt);
+    row.appendChild(dd);
+    return row;
+  }
+
+  /** Render the key area for a rebindable entry: tokens + optional reset btn. */
+  private renderShortcutKeys(dd: HTMLElement, entry: KeymapEntry): void {
+    dd.innerHTML = "";
+    this.renderKeyTokens(dd, formatBinding(entry.binding));
+
+    const def = keymapService.getDefaultBinding(entry.action);
+    if (def && !bindingsEqual(def, entry.binding)) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "help-panel__reset-btn";
+      reset.title = `Reset to default (${formatBinding(def)})`;
+      reset.textContent = "\u21BA";
+      reset.addEventListener("click", (e) => {
+        e.stopPropagation();
+        keymapService.setBinding(entry.action, def);
+        const bodyEl = this.tabBodies.get("shortcuts");
+        if (bodyEl) this.renderShortcutsInto(bodyEl);
+      });
+      dd.appendChild(reset);
+    }
+  }
+
+  private renderKeyTokens(dd: HTMLElement, keys: string): void {
+    const tokens = keys.split("+");
+    tokens.forEach((token, i) => {
+      const kbd = document.createElement("kbd");
+      kbd.className = "help-panel__kbd";
+      kbd.textContent = token;
+      dd.appendChild(kbd);
+      if (i < tokens.length - 1) {
+        const sep = document.createElement("span");
+        sep.className = "help-panel__kbd-sep";
+        sep.textContent = "+";
+        dd.appendChild(sep);
+      }
+    });
+  }
+
+  /**
+   * Enter rebinding capture mode for a single shortcut. Swaps the row's key
+   * display for a "Press keys\u2026" message, installs a capture-phase keydown
+   * listener that records the next non-modifier combo, and either saves or
+   * warns about a conflict.
+   */
+  private beginCapture(entry: KeymapEntry, row: HTMLElement, dd: HTMLElement): void {
+    if (this.captureActive) return;
+    this.captureActive = true;
+
+    row.classList.add("help-panel__shortcut-row--capturing");
+    dd.innerHTML = "";
+    const prompt = document.createElement("span");
+    prompt.className = "help-panel__capture";
+    prompt.textContent = "Press keys\u2026 (Esc to cancel)";
+    dd.appendChild(prompt);
+
+    const restore = () => {
+      row.classList.remove("help-panel__shortcut-row--capturing");
+      this.renderShortcutKeys(dd, entry);
+    };
+
+    const cleanup = () => {
+      document.removeEventListener("keydown", handler, { capture: true });
+      this.captureActive = false;
+    };
+
+    const handler = (e: KeyboardEvent) => {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+
+      // Ignore pure modifier key presses; wait for the real key.
+      if (e.key === "Control" || e.key === "Shift" || e.key === "Alt" || e.key === "Meta") {
+        return;
+      }
+
+      if (e.key === "Escape") {
+        cleanup();
+        restore();
+        return;
+      }
+
+      const binding: KeyBinding = {
+        key: e.key.length === 1 ? e.key.toLowerCase() : e.key,
+        ctrl: e.ctrlKey || e.metaKey,
+        shift: e.shiftKey,
+        alt: e.altKey,
+      };
+
+      const conflict = keymapService
+        .getEntries(entry.scope)
+        .find((other) => other.action !== entry.action && matchesBinding(e, other.binding));
+
+      if (conflict) {
+        prompt.innerHTML = "";
+        const txt = document.createElement("span");
+        txt.textContent = `Conflicts with "${conflict.description}" \u2014 try another combo.`;
+        prompt.appendChild(txt);
+        prompt.classList.add("help-panel__capture--conflict");
+        return;
+      }
+
+      keymapService.setBinding(entry.action, binding);
+      cleanup();
+      const bodyEl = this.tabBodies.get("shortcuts");
+      if (bodyEl) this.renderShortcutsInto(bodyEl);
+    };
+
+    document.addEventListener("keydown", handler, { capture: true });
+  }
+
+  private buildSettingsBody(): HTMLElement {
+    const body = document.createElement("div");
+    body.className = "help-panel__tab-body help-panel__tab-body--settings";
+    this.tabBodies.set("settings", body);
+
+    // --- Theme ---
+    body.appendChild(this.buildSettingsSection("Theme", (section) => {
+      const seg = document.createElement("div");
+      seg.className = "help-panel__segmented";
+      const current = this.options.initialTheme ?? "auto";
+      const opts: Array<{ value: "light" | "dark" | "auto"; label: string }> = [
+        { value: "light", label: "Light" },
+        { value: "dark", label: "Dark" },
+        { value: "auto", label: "Auto" },
+      ];
+      for (const opt of opts) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "help-panel__segmented-btn";
+        btn.textContent = opt.label;
+        if (opt.value === current) btn.classList.add("help-panel__segmented-btn--active");
+        btn.addEventListener("click", () => {
+          for (const sibling of seg.querySelectorAll("button")) {
+            sibling.classList.remove("help-panel__segmented-btn--active");
+          }
+          btn.classList.add("help-panel__segmented-btn--active");
+          this.options.onThemeChange?.(opt.value);
+        });
+        seg.appendChild(btn);
+      }
+      section.appendChild(seg);
+    }));
+
+    // --- Copy format ---
+    body.appendChild(this.buildSettingsSection("Copy format", (section) => {
+      const current = this.options.getCopyOptions?.() ?? { delimiter: "tab" as const, includeHeader: true };
+
+      const delimRow = document.createElement("div");
+      delimRow.className = "help-panel__settings-row";
+      const delimLabel = document.createElement("span");
+      delimLabel.className = "help-panel__settings-label";
+      delimLabel.textContent = "Delimiter";
+      delimRow.appendChild(delimLabel);
+
+      const delimSeg = document.createElement("div");
+      delimSeg.className = "help-panel__segmented";
+      const delims: Array<{ value: "tab" | "comma"; label: string }> = [
+        { value: "tab", label: "Tab" },
+        { value: "comma", label: "Comma" },
+      ];
+      for (const opt of delims) {
+        const btn = document.createElement("button");
+        btn.type = "button";
+        btn.className = "help-panel__segmented-btn";
+        btn.textContent = opt.label;
+        if (opt.value === current.delimiter) btn.classList.add("help-panel__segmented-btn--active");
+        btn.addEventListener("click", () => {
+          for (const sibling of delimSeg.querySelectorAll("button")) {
+            sibling.classList.remove("help-panel__segmented-btn--active");
+          }
+          btn.classList.add("help-panel__segmented-btn--active");
+          const latest = this.options.getCopyOptions?.() ?? { delimiter: "tab" as const, includeHeader: true };
+          this.options.setCopyOptions?.({ delimiter: opt.value, includeHeader: latest.includeHeader });
+        });
+        delimSeg.appendChild(btn);
+      }
+      delimRow.appendChild(delimSeg);
+      section.appendChild(delimRow);
+
+      const headerRow = document.createElement("label");
+      headerRow.className = "help-panel__settings-row help-panel__settings-row--checkbox";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = current.includeHeader;
+      cb.addEventListener("change", () => {
+        const latest = this.options.getCopyOptions?.() ?? { delimiter: "tab" as const, includeHeader: true };
+        this.options.setCopyOptions?.({ delimiter: latest.delimiter, includeHeader: cb.checked });
+      });
+      const cbLabel = document.createElement("span");
+      cbLabel.textContent = "Include header row";
+      headerRow.appendChild(cb);
+      headerRow.appendChild(cbLabel);
+      section.appendChild(headerRow);
+    }));
+
+    // --- Reset keymap ---
+    body.appendChild(this.buildSettingsSection("Reset keymap", (section) => {
+      const hint = document.createElement("p");
+      hint.className = "help-panel__hint";
+      hint.textContent = "Revert every keyboard shortcut to its default binding.";
+      section.appendChild(hint);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "help-panel__settings-btn";
+      btn.textContent = "Reset keymap";
+      btn.addEventListener("click", () => {
+        this.options.onResetKeymap?.();
+        const bodyEl = this.tabBodies.get("shortcuts");
+        if (bodyEl) this.renderShortcutsInto(bodyEl);
+        btn.textContent = "Keymap reset";
+        btn.disabled = true;
+        window.setTimeout(() => { btn.textContent = "Reset keymap"; btn.disabled = false; }, 1500);
+      });
+      section.appendChild(btn);
+    }));
+
+    // --- Clear all data ---
+    body.appendChild(this.buildSettingsSection("Clear all data", (section) => {
+      const hint = document.createElement("p");
+      hint.className = "help-panel__hint";
+      hint.textContent = "Delete every persisted setting, saved view, query bookmark, and cached table. Not undoable.";
+      section.appendChild(hint);
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "help-panel__settings-btn help-panel__settings-btn--danger";
+      btn.textContent = "Clear all data";
+      let armed = false;
+      let armTimer: number | null = null;
+      btn.addEventListener("click", async () => {
+        if (!armed) {
+          armed = true;
+          btn.textContent = "Click again to confirm";
+          btn.classList.add("help-panel__settings-btn--armed");
+          armTimer = window.setTimeout(() => {
+            armed = false;
+            btn.textContent = "Clear all data";
+            btn.classList.remove("help-panel__settings-btn--armed");
+          }, 3000);
+          return;
+        }
+        if (armTimer !== null) window.clearTimeout(armTimer);
+        btn.disabled = true;
+        btn.textContent = "Clearing\u2026";
+        try {
+          await this.options.onClearAllData?.();
+          btn.textContent = "Cleared \u2014 reload the page";
+          btn.classList.remove("help-panel__settings-btn--armed");
+        } catch (err) {
+          btn.textContent = `Failed: ${err instanceof Error ? err.message : "unknown"}`;
+          btn.disabled = false;
+          armed = false;
+        }
+      });
+      section.appendChild(btn);
+    }));
+
+    return body;
+  }
+
+  private buildSettingsSection(title: string, fill: (section: HTMLElement) => void): HTMLElement {
+    const section = document.createElement("div");
+    section.className = "help-panel__settings-section";
+
+    const h = document.createElement("h3");
+    h.className = "help-panel__section-title";
+    h.textContent = title;
+    section.appendChild(h);
+
+    fill(section);
+    return section;
+  }
+
   private buildAboutBody(): HTMLElement {
     const body = document.createElement("div");
     body.className = "help-panel__tab-body help-panel__tab-body--about";
@@ -464,4 +922,13 @@ export class HelpPanel {
 
     return body;
   }
+}
+
+function bindingsEqual(a: KeyBinding, b: KeyBinding): boolean {
+  return (
+    a.key === b.key &&
+    (a.ctrl ?? false) === (b.ctrl ?? false) &&
+    (a.shift ?? false) === (b.shift ?? false) &&
+    (a.alt ?? false) === (b.alt ?? false)
+  );
 }

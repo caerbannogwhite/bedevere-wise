@@ -188,6 +188,25 @@ export class TabManager {
     }
   }
 
+  public switchToNextTab(): void {
+    if (this.tabs.length <= 1) return;
+    const idx = this.tabs.findIndex((t) => t.isActive);
+    const next = idx < 0 ? 0 : (idx + 1) % this.tabs.length;
+    this.activateTab(this.tabs[next].metadata.name);
+  }
+
+  public switchToPreviousTab(): void {
+    if (this.tabs.length <= 1) return;
+    const idx = this.tabs.findIndex((t) => t.isActive);
+    const prev = idx < 0 ? 0 : (idx - 1 + this.tabs.length) % this.tabs.length;
+    this.activateTab(this.tabs[prev].metadata.name);
+  }
+
+  public switchToTabByIndex(index: number): void {
+    if (index < 0 || index >= this.tabs.length) return;
+    this.activateTab(this.tabs[index].metadata.name);
+  }
+
   public closeDataset(name: string): void {
     const tabIndex = this.tabs.findIndex((t) => t.metadata.name === name);
     if (tabIndex === -1) return;

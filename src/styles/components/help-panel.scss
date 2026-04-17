@@ -509,6 +509,308 @@
     }
   }
 
+  // ------- Shortcuts tab -------
+
+  &__shortcuts-section {
+    margin-bottom: 18px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__shortcuts-list {
+    margin: 4px 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+
+  &__shortcut-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 6px 8px;
+    font-size: 12.5px;
+    border-bottom: 1px solid #f0f0f0;
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    body.theme-dark & {
+      border-bottom-color: #333;
+    }
+
+    &--rebindable {
+      cursor: pointer;
+
+      &:hover {
+        background: rgba(0, 0, 0, 0.03);
+
+        body.theme-dark & {
+          background: rgba(255, 255, 255, 0.04);
+        }
+      }
+
+      &:focus-visible {
+        outline: 2px solid #f5b927;
+        outline-offset: -2px;
+      }
+    }
+
+    &--capturing {
+      background: rgba(245, 185, 39, 0.12);
+
+      body.theme-dark & {
+        background: rgba(245, 185, 39, 0.2);
+      }
+    }
+  }
+
+  &__capture {
+    font-style: italic;
+    font-size: 12px;
+    color: #666;
+    padding: 2px 8px;
+
+    body.theme-dark & {
+      color: #aaa;
+    }
+
+    &--conflict {
+      color: #c42020;
+      font-style: normal;
+
+      body.theme-dark & {
+        color: #ff9f9f;
+      }
+    }
+  }
+
+  &__reset-btn {
+    background: transparent;
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    color: #666;
+    font-size: 11px;
+    line-height: 1;
+    padding: 2px 6px;
+    margin-left: 6px;
+    cursor: pointer;
+
+    &:hover {
+      color: #222;
+      background: rgba(0, 0, 0, 0.06);
+    }
+
+    body.theme-dark & {
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #aaa;
+
+      &:hover {
+        color: #eee;
+        background: rgba(255, 255, 255, 0.08);
+      }
+    }
+  }
+
+  &__shortcut-desc {
+    margin: 0;
+    color: #444;
+
+    body.theme-dark & {
+      color: #ccc;
+    }
+  }
+
+  &__shortcut-keys {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+    flex-shrink: 0;
+  }
+
+  &__kbd {
+    display: inline-block;
+    background: rgba(0, 0, 0, 0.06);
+    border: 1px solid rgba(0, 0, 0, 0.12);
+    padding: 1px 7px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 11px;
+    min-width: 18px;
+    text-align: center;
+    color: #333;
+
+    body.theme-dark & {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: rgba(255, 255, 255, 0.15);
+      color: #e0e0e0;
+    }
+  }
+
+  &__kbd-sep {
+    color: #999;
+    font-size: 11px;
+
+    body.theme-dark & {
+      color: #777;
+    }
+  }
+
+  // ------- Settings tab -------
+
+  &__settings-section {
+    margin-bottom: 22px;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  &__settings-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 6px 0;
+
+    &--checkbox {
+      cursor: pointer;
+      user-select: none;
+
+      input[type="checkbox"] {
+        accent-color: #f5b927;
+      }
+    }
+  }
+
+  &__settings-label {
+    min-width: 120px;
+    color: #444;
+    font-size: 12.5px;
+
+    body.theme-dark & {
+      color: #ccc;
+    }
+  }
+
+  &__segmented {
+    display: inline-flex;
+    border: 1px solid #ccc;
+    overflow: hidden;
+
+    body.theme-dark & {
+      border-color: #3c3c3c;
+    }
+  }
+
+  &__segmented-btn {
+    background: transparent;
+    border: none;
+    padding: 5px 14px;
+    font-size: 12px;
+    color: #555;
+    cursor: pointer;
+    border-right: 1px solid #ccc;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:last-child {
+      border-right: none;
+    }
+
+    &:hover {
+      background: rgba(0, 0, 0, 0.04);
+    }
+
+    &--active {
+      background: #f5b927;
+      color: #1e1e1e;
+      font-weight: 600;
+
+      &:hover {
+        background: #ffd14a;
+      }
+    }
+
+    body.theme-dark & {
+      border-right-color: #3c3c3c;
+      color: #ccc;
+
+      &:hover {
+        background: rgba(255, 255, 255, 0.06);
+      }
+
+      &.help-panel__segmented-btn--active {
+        background: #f5b927;
+        color: #1e1e1e;
+      }
+    }
+  }
+
+  &__settings-btn {
+    background: transparent;
+    border: 1px solid #007acc;
+    color: #007acc;
+    padding: 6px 14px;
+    font-size: 12.5px;
+    cursor: pointer;
+    margin-top: 4px;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:hover:not(:disabled) {
+      background: rgba(0, 122, 204, 0.08);
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: default;
+    }
+
+    body.theme-dark & {
+      border-color: #4ea1d3;
+      color: #4ea1d3;
+
+      &:hover:not(:disabled) {
+        background: rgba(78, 161, 211, 0.14);
+      }
+    }
+
+    &--danger {
+      border-color: #c42020;
+      color: #c42020;
+
+      &:hover:not(:disabled) {
+        background: rgba(196, 32, 32, 0.08);
+      }
+
+      body.theme-dark & {
+        border-color: #ff9f9f;
+        color: #ff9f9f;
+
+        &:hover:not(:disabled) {
+          background: rgba(255, 159, 159, 0.12);
+        }
+      }
+    }
+
+    &--armed {
+      background: #c42020;
+      color: #ffffff;
+      border-color: #c42020;
+
+      &:hover:not(:disabled) {
+        background: #e03030;
+      }
+
+      body.theme-dark & {
+        background: #c42020;
+        color: #ffffff;
+      }
+    }
+  }
+
   // ------- Import tab -------
 
   &__import-dropzone {
