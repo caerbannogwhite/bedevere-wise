@@ -190,7 +190,6 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
 
   public async handleKeyDown(event: KeyboardEvent): Promise<boolean> {
     if (!this._isFocused) return false;
-    if (!this.container.contains(event.target as Node)) return false;
 
     const action = keymapService.matchEvent(event, "spreadsheet");
     if (!action) {

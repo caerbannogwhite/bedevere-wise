@@ -147,6 +147,14 @@ export class MultiDatasetVisualizer {
       }
     });
 
+    // Wire the external cell-selection callback exactly once per dataset. Doing
+    // this in activateTab would add a new subscription every time the user
+    // switches to this tab, causing the callback to fire N times after N
+    // activations.
+    if (this.onCellSelectionCallback) {
+      spreadsheetVisualizer.addOnSelectionChangeSubscription(this.onCellSelectionCallback);
+    }
+
     const tab: DatasetTab = {
       metadata,
       dataProvider,
@@ -242,6 +250,10 @@ export class MultiDatasetVisualizer {
 
   public setOnCellSelectionCallback(callback: (cellSelection?: ICellSelection) => void): void {
     this.onCellSelectionCallback = callback;
+    // Back-fill any tabs that were added before the callback was wired.
+    for (const tab of this.tabs) {
+      tab.spreadsheetVisualizer.addOnSelectionChangeSubscription(callback);
+    }
   }
 
   public setOnSelectCallback(callback: (dataset: DataProvider) => void): void {
@@ -320,15 +332,9 @@ export class MultiDatasetVisualizer {
       this.sharedStatsVisualizer.setFilterManager(this.filterManager, newTab.metadata.name);
       await this.sharedStatsVisualizer.setSpreadsheetVisualizer(newTab.spreadsheetVisualizer);
 
-      if (this.onCellSelectionCallback) {
-        newTab.spreadsheetVisualizer.addOnSelectionChangeSubscription(this.onCellSelectionCallback);
-      }
-
       if (this.onSelectCallback) {
         this.onSelectCallback(newTab.dataProvider);
       }
-
-      this.eventDispatcher?.setFocus(newTab.spreadsheetVisualizer.componentId);
     }
   }
 

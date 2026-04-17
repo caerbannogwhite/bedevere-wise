@@ -446,6 +446,17 @@ export class HelpPanel {
         <a href="https://github.com/caerbannogwhite/bedevere-wise/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">MIT License</a>
       </div>
       <p class="help-panel__about-author">Made by <a href="https://github.com/caerbannogwhite" target="_blank" rel="noopener noreferrer">caerbannogwhite</a></p>
+      <details class="help-panel__lore">
+        <summary class="help-panel__lore-summary">Why a duck?</summary>
+        <p class="help-panel__lore-body">
+          Why is there a duck next to the name of a knight of the Round Table? Well, <i>logically</i>, you might think it's because
+          the mighty DuckDB powers this application, and including references to it is wise and fair.<br>However, you would be at fault:
+          the real reason for the duck is that Sir Bedevere the Wise is the one who can tell if a witch is such, thanks to just a duck.
+        </p>
+        <p class="help-panel__lore-body">
+          <a href="https://www.youtube.com/watch?v=yp_l5ntikaU" target="_blank" rel="noopener noreferrer">https://www.youtube.com/watch?v=yp_l5ntikaU</a>
+        </p>
+      </details>
       <p class="help-panel__attribution">
         Duck icons created by <a href="https://www.flaticon.com/free-icons/duck" target="_blank" rel="noopener noreferrer" title="duck icons">Marz Gallery &mdash; Flaticon</a>.
       </p>
