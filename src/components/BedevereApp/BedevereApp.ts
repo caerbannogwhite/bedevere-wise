@@ -1,4 +1,4 @@
-import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
+import { TabManager } from "../TabManager";
 import { ControlPanel } from "../ControlPanel";
 import { StatusBar } from "../StatusBar";
 import { HelpPanel } from "../HelpPanel";
@@ -43,7 +43,7 @@ export class BedevereApp implements EventHandler {
   private duckDBService!: DuckDBService;
   private commandPalette!: CommandPalette;
   private leftPanel!: ControlPanel;
-  private multiDatasetVisualizer!: MultiDatasetVisualizer;
+  private tabManager!: TabManager;
   private statusBar!: StatusBar;
   private helpPanel!: HelpPanel;
 
@@ -254,31 +254,31 @@ export class BedevereApp implements EventHandler {
     this.updateDimensions();
 
     // Multi-dataset visualizer
-    this.multiDatasetVisualizer = new MultiDatasetVisualizer(this.spreadsheetContainer, this.options.spreadsheetOptions);
+    this.tabManager = new TabManager(this.spreadsheetContainer, this.options.spreadsheetOptions);
 
     // Initialize SQL editor within the multi-dataset visualizer
-    this.multiDatasetVisualizer.initSqlEditor(this.duckDBService);
+    this.tabManager.initSqlEditor(this.duckDBService);
 
     // Set event dispatcher on multi-dataset visualizer
-    this.multiDatasetVisualizer.setEventDispatcher(this.eventDispatcher);
+    this.tabManager.setEventDispatcher(this.eventDispatcher);
     this.setOnCloseTabCallback();
     this.setOnCellSelectionCallback();
 
     // Surface SQL query errors in status bar
-    this.multiDatasetVisualizer.setOnQueryErrorCallback((error) => {
+    this.tabManager.setOnQueryErrorCallback((error) => {
       this.showMessage(error.message, "error");
     });
 
     // Dataset panel
     if (this.options.showLeftPanel) {
-      this.leftPanel = new ControlPanel(this.leftPanelContainer, this.multiDatasetVisualizer);
+      this.leftPanel = new ControlPanel(this.leftPanelContainer, this.tabManager);
       this.setOnSelectDatasetCallback();
 
       // Move column stats into left panel
-      this.multiDatasetVisualizer.setColumnStatsParent(this.leftPanel.getColumnStatsContainer());
+      this.tabManager.setColumnStatsParent(this.leftPanel.getColumnStatsContainer());
 
       // Auto-expand column stats accordion when a column is selected
-      this.multiDatasetVisualizer.getStatsVisualizer().setOnShowStatsCallback(() => {
+      this.tabManager.getStatsVisualizer().setOnShowStatsCallback(() => {
         this.leftPanel.expandSection("column-stats");
         if (this.leftPanel.getIsMinimized()) {
           this.leftPanel.toggleMinimize();
@@ -292,7 +292,7 @@ export class BedevereApp implements EventHandler {
           await this.aliasManager.setAlias(tableName, alias);
           this.showMessage(`Alias "${alias}" set for "${tableName}"`, "success");
           // Force SQL autocomplete to pick up the new name
-          this.multiDatasetVisualizer.getSqlEditor()?.refreshSchema?.();
+          this.tabManager.getSqlEditor()?.refreshSchema?.();
         } catch (error) {
           this.showMessage(`Failed to set alias: ${error instanceof Error ? error.message : "unknown error"}`, "error");
         }
@@ -303,7 +303,7 @@ export class BedevereApp implements EventHandler {
         this.showMessage(msg, type, options),
       );
       this.leftPanel.setOnOpenQueryCallback((sql) => {
-        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        const editor = this.tabManager.getSqlEditor();
         if (editor) {
           editor.setQuery(sql);
           editor.expand();
@@ -400,28 +400,28 @@ export class BedevereApp implements EventHandler {
     this.spreadsheetContainer.style.height = `${windowHeight - statusBarHeight}px`;
 
     // Trigger resize on the multi-dataset visualizer to update the active spreadsheet
-    if (this.multiDatasetVisualizer) {
-      this.multiDatasetVisualizer.resize().catch(console.error);
+    if (this.tabManager) {
+      this.tabManager.resize().catch(console.error);
     }
   }
 
   private setupDatasetListeners(): void {
     // Override closeDataset to update panel state
-    const originalCloseDataset = this.multiDatasetVisualizer.closeDataset.bind(this.multiDatasetVisualizer);
-    this.multiDatasetVisualizer.closeDataset = (id: string) => {
+    const originalCloseDataset = this.tabManager.closeDataset.bind(this.tabManager);
+    this.tabManager.closeDataset = (id: string) => {
       originalCloseDataset(id);
       this.leftPanel?.markDatasetAsUnloaded(id);
       this.updateStatusBarDatasetInfo();
       this.updateFocusAfterDatasetChange();
     };
 
-    // Listen for dataset switches (this would require extending MultiDatasetVisualizer)
+    // Listen for dataset switches (this would require extending TabManager)
     // For now, we'll update status bar when datasets are added
   }
 
   private updateFocusAfterDatasetChange(): void {
     // Set focus to the active dataset's spreadsheet, or clear focus if no active dataset
-    const activeDatasetTab = this.multiDatasetVisualizer.getActiveDatasetTab();
+    const activeDatasetTab = this.tabManager.getActiveDatasetTab();
     if (activeDatasetTab) {
       this.eventDispatcher.setFocus(`spreadsheet-${activeDatasetTab.metadata.name}`);
     } else {
@@ -519,7 +519,7 @@ export class BedevereApp implements EventHandler {
           default: "true",
         },
       ],
-      when: () => this.multiDatasetVisualizer.getActiveDatasetTab() !== null,
+      when: () => this.tabManager.getActiveDatasetTab() !== null,
       execute: (params?: Record<string, any>) => this.exportSelection(params),
     });
 
@@ -528,7 +528,7 @@ export class BedevereApp implements EventHandler {
       title: "Export Current Dataset",
       description: "Export the currently active dataset",
       category: "Dataset",
-      when: () => this.multiDatasetVisualizer.getActiveDatasetTab() !== null,
+      when: () => this.tabManager.getActiveDatasetTab() !== null,
       execute: () => this.exportCurrentDataset(),
     });
 
@@ -537,7 +537,7 @@ export class BedevereApp implements EventHandler {
       title: "Close All Datasets",
       description: "Close all open datasets",
       category: "Dataset",
-      when: () => this.multiDatasetVisualizer.getDatasetIds().length > 0,
+      when: () => this.tabManager.getDatasetIds().length > 0,
       execute: () => this.closeAllDatasets(),
     });
 
@@ -557,8 +557,8 @@ export class BedevereApp implements EventHandler {
       description: "Execute the current query in the SQL editor",
       category: "SQL",
       keybinding: "Ctrl+Enter",
-      when: () => this.multiDatasetVisualizer.getSqlEditor()?.isExpanded() === true,
-      execute: () => this.multiDatasetVisualizer.getSqlEditor()?.execute(),
+      when: () => this.tabManager.getSqlEditor()?.isExpanded() === true,
+      execute: () => this.tabManager.getSqlEditor()?.execute(),
     });
 
     this.commandPalette.registerCommand({
@@ -566,8 +566,8 @@ export class BedevereApp implements EventHandler {
       title: "Clear SQL Editor",
       description: "Clear the SQL editor content",
       category: "SQL",
-      when: () => this.multiDatasetVisualizer.getSqlEditor()?.isExpanded() === true,
-      execute: () => this.multiDatasetVisualizer.getSqlEditor()?.clear(),
+      when: () => this.tabManager.getSqlEditor()?.isExpanded() === true,
+      execute: () => this.tabManager.getSqlEditor()?.clear(),
     });
 
     // View/Query commands
@@ -585,11 +585,11 @@ export class BedevereApp implements EventHandler {
         },
       ],
       when: () => {
-        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        const editor = this.tabManager.getSqlEditor();
         return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
       },
       execute: async (params?: Record<string, any>) => {
-        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        const editor = this.tabManager.getSqlEditor();
         if (!editor || !params?.name) return;
         try {
           await this.viewManager.createView(params.name, editor.getQuery());
@@ -614,11 +614,11 @@ export class BedevereApp implements EventHandler {
         },
       ],
       when: () => {
-        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        const editor = this.tabManager.getSqlEditor();
         return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
       },
       execute: (params?: Record<string, any>) => {
-        const editor = this.multiDatasetVisualizer.getSqlEditor();
+        const editor = this.tabManager.getSqlEditor();
         if (!editor || !params?.name) return;
         this.persistenceService.saveQueryBookmark(params.name, editor.getQuery());
         this.leftPanel?.refreshSavedQueries();
@@ -646,7 +646,7 @@ export class BedevereApp implements EventHandler {
           type: "string",
           description: "The dataset to rename",
           required: true,
-          options: () => this.multiDatasetVisualizer.getDatasetIds(),
+          options: () => this.tabManager.getDatasetIds(),
         },
         {
           name: "alias",
@@ -655,7 +655,7 @@ export class BedevereApp implements EventHandler {
           required: true,
         },
       ],
-      when: () => this.multiDatasetVisualizer.getDatasetIds().length > 0,
+      when: () => this.tabManager.getDatasetIds().length > 0,
       execute: async (params?: Record<string, any>) => {
         if (params?.dataset && params?.alias) {
           try {
@@ -703,7 +703,7 @@ export class BedevereApp implements EventHandler {
   }
 
   private async exportCurrentDataset(): Promise<void> {
-    const activeDatasetTab = this.multiDatasetVisualizer.getActiveDatasetTab();
+    const activeDatasetTab = this.tabManager.getActiveDatasetTab();
     if (activeDatasetTab) {
       const selection = await activeDatasetTab.spreadsheetVisualizer.getSelection();
       console.log("selection", selection);
@@ -713,12 +713,12 @@ export class BedevereApp implements EventHandler {
   }
 
   private toggleSqlEditor(): void {
-    this.multiDatasetVisualizer.toggleSqlEditor();
+    this.tabManager.toggleSqlEditor();
   }
 
   private async executeQuery(query: string): Promise<void> {
     try {
-      await this.multiDatasetVisualizer.addQueryResult(query, this.duckDBService);
+      await this.tabManager.addQueryResult(query, this.duckDBService);
       this.showMessage("Query executed successfully", "success");
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Query execution failed";
@@ -749,12 +749,12 @@ export class BedevereApp implements EventHandler {
     this.addDataset(datasetInfo.dataset);
 
     // Create data provider and add to visualizer
-    await this.multiDatasetVisualizer.addDataset(datasetInfo.metadata, datasetInfo.dataset);
+    await this.tabManager.addDataset(datasetInfo.metadata, datasetInfo.dataset);
 
     // Mark as loaded in panel
     this.leftPanel.markDatasetAsLoaded(datasetInfo.metadata.name);
 
-    await this.multiDatasetVisualizer.switchToDataset(datasetInfo.metadata.name);
+    await this.tabManager.switchToDataset(datasetInfo.metadata.name);
 
     // Update status bar
     this.updateStatusBarDatasetInfo();
@@ -771,13 +771,13 @@ export class BedevereApp implements EventHandler {
   }
 
   private closeAllDatasets(): void {
-    const datasetIds = this.multiDatasetVisualizer.getDatasetIds();
-    datasetIds.forEach((id) => this.multiDatasetVisualizer.closeDataset(id));
+    const datasetIds = this.tabManager.getDatasetIds();
+    datasetIds.forEach((id) => this.tabManager.closeDataset(id));
     this.showMessage("All datasets closed", "info");
   }
 
   private async exportSelection(params?: Record<string, any>): Promise<void> {
-    const activeDataset = this.multiDatasetVisualizer.getActiveDatasetTab();
+    const activeDataset = this.tabManager.getActiveDatasetTab();
 
     if (activeDataset) {
       const selection = await activeDataset.spreadsheetVisualizer.getSelection();
@@ -812,7 +812,7 @@ export class BedevereApp implements EventHandler {
       const metadata = await dataset.getMetadata();
       this.statusBar.updateDatasetInfo(metadata.name, metadata.totalRows, metadata.totalColumns);
     } else {
-      const activeDataset = this.multiDatasetVisualizer.getActiveDatasetTab();
+      const activeDataset = this.tabManager.getActiveDatasetTab();
       if (activeDataset) {
         const metadata = activeDataset.metadata;
         this.statusBar.updateDatasetInfo(metadata.name, metadata.totalRows, metadata.totalColumns);
@@ -828,11 +828,11 @@ export class BedevereApp implements EventHandler {
     };
 
     this.leftPanel.setOnSelectCallback(callback);
-    this.multiDatasetVisualizer.setOnSelectCallback(callback);
+    this.tabManager.setOnSelectCallback(callback);
   }
 
   private setOnCloseTabCallback(): void {
-    this.multiDatasetVisualizer.setOnCloseTabCallback(() => {
+    this.tabManager.setOnCloseTabCallback(() => {
       this.updateFocusAfterDatasetChange();
       this.updateStatusBarDatasetInfo();
     });
@@ -843,7 +843,7 @@ export class BedevereApp implements EventHandler {
    * Update the status bar.
    */
   private setOnCellSelectionCallback(): void {
-    this.multiDatasetVisualizer.setOnCellSelectionCallback((cellSelection) => {
+    this.tabManager.setOnCellSelectionCallback((cellSelection) => {
       this.statusBar.updateSelection(cellSelection);
       this.statusBar.updatePosition(cellSelection);
       this.statusBar.updateCellValue(cellSelection);

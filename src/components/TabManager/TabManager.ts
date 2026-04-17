@@ -19,7 +19,7 @@ interface DatasetTab {
   onCloseTab?: () => void;
 }
 
-export class MultiDatasetVisualizer {
+export class TabManager {
   private container: HTMLElement;
   private tabsContainer: HTMLElement;
   private sqlEditorContainer: HTMLElement;
@@ -41,7 +41,7 @@ export class MultiDatasetVisualizer {
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
-    this.container.className = "multi-dataset-visualizer";
+    this.container.className = "tab-manager";
     this.options = options;
 
     // Set explicit dimensions if provided
@@ -54,19 +54,19 @@ export class MultiDatasetVisualizer {
 
     // Create tabs container
     this.tabsContainer = document.createElement("div");
-    this.tabsContainer.className = "multi-dataset-visualizer__tabs-container";
+    this.tabsContainer.className = "tab-manager__tabs-container";
 
     // Create command bar container (above tabs)
     this.commandBarContainer = document.createElement("div");
-    this.commandBarContainer.className = "multi-dataset-visualizer__command-bar-container";
+    this.commandBarContainer.className = "tab-manager__command-bar-container";
 
     // Create SQL editor container (between tabs and content)
     this.sqlEditorContainer = document.createElement("div");
-    this.sqlEditorContainer.className = "multi-dataset-visualizer__sql-editor-container";
+    this.sqlEditorContainer.className = "tab-manager__sql-editor-container";
 
     // Create content container
     this.contentContainer = document.createElement("div");
-    this.contentContainer.className = "multi-dataset-visualizer__content-container";
+    this.contentContainer.className = "tab-manager__content-container";
 
     this.container.appendChild(this.commandBarContainer);
     this.container.appendChild(this.sqlEditorContainer);
@@ -90,7 +90,7 @@ export class MultiDatasetVisualizer {
   public async addDataset(metadata: DatasetMetadata, dataProvider: DataProvider): Promise<void> {
     // Create a separate container for this dataset's spreadsheet visualizer
     const datasetContainer = document.createElement("div");
-    datasetContainer.className = "multi-dataset-visualizer__dataset-container";
+    datasetContainer.className = "tab-manager__dataset-container";
     this.contentContainer.appendChild(datasetContainer);
 
     // Force layout calculation to get accurate dimensions
@@ -271,17 +271,17 @@ export class MultiDatasetVisualizer {
   private createTabElement(tab: DatasetTab): void {
     const tabElement = document.createElement("div");
     tabElement.setAttribute("data-tab-id", tab.metadata.name);
-    tabElement.className = "multi-dataset-visualizer__tab";
+    tabElement.className = "tab-manager__tab";
 
     // Tab title
     const titleElement = document.createElement("span");
     titleElement.textContent = tab.metadata.name;
-    titleElement.className = "multi-dataset-visualizer__tab-title";
+    titleElement.className = "tab-manager__tab-title";
 
     // Close button
     const closeButton = document.createElement("button");
     closeButton.innerHTML = "×";
-    closeButton.className = "multi-dataset-visualizer__tab-close";
+    closeButton.className = "tab-manager__tab-close";
 
     // Event listeners
     tabElement.addEventListener("click", (e) => {
@@ -306,7 +306,7 @@ export class MultiDatasetVisualizer {
       const currentTab = this.tabs.find((t) => t.metadata.name === this.activeTabId);
       if (currentTab) {
         currentTab.isActive = false;
-        currentTab.container.classList.remove("multi-dataset-visualizer__dataset-container--active");
+        currentTab.container.classList.remove("tab-manager__dataset-container--active");
         this.updateTabStyles(this.activeTabId, false);
       }
     }
@@ -316,7 +316,7 @@ export class MultiDatasetVisualizer {
     if (newTab) {
       newTab.isActive = true;
       this.activeTabId = id;
-      newTab.container.classList.add("multi-dataset-visualizer__dataset-container--active");
+      newTab.container.classList.add("tab-manager__dataset-container--active");
       this.updateTabStyles(id, true);
 
       // Set focus on the new active tab
@@ -342,9 +342,9 @@ export class MultiDatasetVisualizer {
     const tabElement = this.tabsContainer.querySelector(`[data-tab-id="${tabId}"]`) as HTMLElement;
     if (tabElement) {
       if (isActive) {
-        tabElement.classList.add("multi-dataset-visualizer__tab--active");
+        tabElement.classList.add("tab-manager__tab--active");
       } else {
-        tabElement.classList.remove("multi-dataset-visualizer__tab--active");
+        tabElement.classList.remove("tab-manager__tab--active");
       }
     }
   }

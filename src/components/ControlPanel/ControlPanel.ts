@@ -6,7 +6,7 @@ import { FileImportService } from "../../data/FileImportService";
 import { FolderScanService } from "../../data/FolderScanService";
 import { FileTreeNode, detectFileType } from "../../data/FileTreeTypes";
 import { FileTreeRenderer, FileTreeCallbacks } from "./FileTreeRenderer";
-import { MultiDatasetVisualizer } from "../MultiDatasetVisualizer";
+import { TabManager } from "../TabManager";
 import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
 import type { MessageOptions } from "../StatusBar/StatusBar";
 
@@ -49,7 +49,7 @@ export class ControlPanel {
   private contentElement: HTMLElement;
   private toggleButton: HTMLElement;
   private datasets: DatasetInfo[] = [];
-  private multiDatasetVisualizer: MultiDatasetVisualizer;
+  private tabManager: TabManager;
   private isMinimized: boolean = false;
   private panelWidth: number = 320;
   private onToggleCallback?: (isMinimized: boolean) => void;
@@ -81,8 +81,8 @@ export class ControlPanel {
   private readonly onResizeMove: (e: MouseEvent) => void;
   private readonly onResizeEnd: (e: MouseEvent) => void;
 
-  constructor(parent: HTMLElement, multiDatasetVisualizer: MultiDatasetVisualizer) {
-    this.multiDatasetVisualizer = multiDatasetVisualizer;
+  constructor(parent: HTMLElement, tabManager: TabManager) {
+    this.tabManager = tabManager;
 
     // Bind resize handlers once
     this.onResizeMove = this.handleResizeMove.bind(this);
@@ -465,11 +465,11 @@ export class ControlPanel {
     if (node.tableName) {
       const existing = this.datasets.find((d) => d.metadata.name === node.tableName);
       if (existing) {
-        const openTabs = this.multiDatasetVisualizer.getDatasetIds();
+        const openTabs = this.tabManager.getDatasetIds();
         if (!openTabs.includes(existing.metadata.name)) {
-          await this.multiDatasetVisualizer.addDataset(existing.metadata, existing.dataset);
+          await this.tabManager.addDataset(existing.metadata, existing.dataset);
         }
-        await this.multiDatasetVisualizer.switchToDataset(existing.metadata.name);
+        await this.tabManager.switchToDataset(existing.metadata.name);
         node.isImported = true;
         this.treeRenderer?.updateNode(node.id, { isImported: true });
         this.onSelectCallback?.(existing.dataset);
@@ -504,8 +504,8 @@ export class ControlPanel {
 
       this.datasets.push({ metadata, dataset: provider, isLoaded: true });
 
-      await this.multiDatasetVisualizer.addDataset(metadata, provider);
-      await this.multiDatasetVisualizer.switchToDataset(metadata.name);
+      await this.tabManager.addDataset(metadata, provider);
+      await this.tabManager.switchToDataset(metadata.name);
       this.onSelectCallback?.(provider);
     } catch (error) {
       console.error(`Failed to import ${node.name}:`, error);
@@ -723,8 +723,8 @@ export class ControlPanel {
       item.addEventListener("click", async () => {
         const provider = this.viewManager!.getViewAsDataProvider(view.name);
         const metadata = await provider.getMetadata();
-        await this.multiDatasetVisualizer.addDataset(metadata, provider);
-        await this.multiDatasetVisualizer.switchToDataset(view.name);
+        await this.tabManager.addDataset(metadata, provider);
+        await this.tabManager.switchToDataset(view.name);
       });
 
       this.viewsListElement.appendChild(item);

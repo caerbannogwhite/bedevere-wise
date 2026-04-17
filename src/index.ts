@@ -1,6 +1,6 @@
 // Main components
 export { BedevereApp } from "./components/BedevereApp";
-export { MultiDatasetVisualizer } from "./components/MultiDatasetVisualizer";
+export { TabManager } from "./components/TabManager";
 export { ControlPanel } from "./components/ControlPanel";
 export { SpreadsheetVisualizer } from "./components/SpreadsheetVisualizer";
 export { ColumnStatsVisualizer } from "./components/ColumnStatsVisualizer/ColumnStatsVisualizer";
