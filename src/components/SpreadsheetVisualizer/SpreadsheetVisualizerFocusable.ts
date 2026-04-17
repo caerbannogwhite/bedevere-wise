@@ -192,6 +192,19 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
   public async handleKeyDown(event: KeyboardEvent): Promise<boolean> {
     if (!this._isFocused) return false;
 
+    // The spreadsheet container isn't DOM-focusable (no tabindex), so
+    // _isFocused stays true even while the user is typing inside the SQL
+    // editor or another input. Without this guard, arrow keys in CodeMirror
+    // would also move the cell selection. Bail when any editable element
+    // has real DOM focus.
+    const ae = document.activeElement as HTMLElement | null;
+    if (
+      ae &&
+      (ae.tagName === "INPUT" || ae.tagName === "TEXTAREA" || ae.isContentEditable)
+    ) {
+      return false;
+    }
+
     const action = keymapService.matchEvent(event, "spreadsheet");
     if (!action) {
       return false;
