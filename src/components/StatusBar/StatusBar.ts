@@ -1,6 +1,8 @@
 import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
-import { ICellSelection } from "../SpreadsheetVisualizer/types";
+import { ICellSelection, SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
 import { MessagePopover } from "./MessagePopover";
+import { CellValuePopover } from "./CellValuePopover";
+import { ComplexKind, getComplexKind, isComplexType } from "../../data/types";
 
 export interface MessageOptions {
   /** Duration in ms; 0 means persistent until dismissed. Defaults per type. */
@@ -62,7 +64,12 @@ export class StatusBar {
   private activeMessage: ActiveMessage | null = null;
   private messageTimeoutId: number | null = null;
   private popover: MessagePopover;
+  private cellValuePopover: CellValuePopover;
   private onHelpClickCallback?: () => void;
+
+  // Latest complex-cell state for the cell-value inspector popover.
+  private lastComplexCell: { raw: any; columnName: string; kind: ComplexKind | null } | null = null;
+  private spreadsheetOptions: SpreadsheetOptions = {};
 
   constructor(parent: HTMLElement, version: string) {
     this.container = document.createElement("div");
@@ -81,8 +88,18 @@ export class StatusBar {
     this.version = version;
 
     this.popover = new MessagePopover(document.body);
+    this.cellValuePopover = new CellValuePopover(document.body);
 
     this.initializeDefaultItems();
+  }
+
+  /**
+   * Cache the spreadsheet options so the cell-value popover can render
+   * complex values (numbers, dates) with the same formatting as the canvas.
+   * Called once during app setup; all tabs share the same numberFormat etc.
+   */
+  public setSpreadsheetOptions(options: SpreadsheetOptions): void {
+    this.spreadsheetOptions = options;
   }
 
   public addItem(item: StatusBarItem): void {
@@ -184,14 +201,61 @@ export class StatusBar {
 
   public updateCellValue(cellSelection?: ICellSelection): void {
     if (!cellSelection || cellSelection.rows.length === 0) {
-      this.updateItem("cell-value", { text: "", html: undefined, visible: false });
+      this.lastComplexCell = null;
+      if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
+      this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
       return;
     }
 
     if (cellSelection.formatted.length > 0 && cellSelection.formatted[0].length > 0) {
       const formatted = cellSelection.formatted[0][0];
       const raw = cellSelection.values[0][0];
-      const dataType = cellSelection.columns[0]?.dataType?.toLowerCase() ?? "";
+      const column = cellSelection.columns[0];
+      const columnDataType = column?.dataType;
+      const dataType = columnDataType?.toLowerCase() ?? "";
+      const complex = columnDataType ? isComplexType(columnDataType) : false;
+
+      if (complex) {
+        // Stash the raw value so the popover can render the full structure.
+        this.lastComplexCell = {
+          raw,
+          columnName: column?.name ?? "value",
+          kind: getComplexKind(columnDataType!),
+        };
+
+        const escapedFormatted = this.escapeHtml(formatted);
+        // Only show the "\u2026" expand hint when the compact preview had to
+        // drop fields or collapse nested values. For a small flat struct /
+        // list that fits entirely in the preview, the hint is noise.
+        const hintNeeded = previewWasTruncated(raw);
+        const html =
+          `<span class="cell-value__formatted cell-value__formatted--${dataType}">${escapedFormatted}</span>` +
+          (hintNeeded ? ` <span class="status-bar__msg-more" title="Click to expand">\u2026</span>` : "");
+
+        this.updateItem("cell-value", {
+          text: formatted,
+          html,
+          tooltip: "Click to inspect",
+          visible: true,
+          expandable: true,
+        });
+
+        // Refresh the popover content if the user left it open across cells.
+        if (this.cellValuePopover.isOpen() && this.lastComplexCell.kind) {
+          this.cellValuePopover.show({
+            columnName: this.lastComplexCell.columnName,
+            kind: this.lastComplexCell.kind,
+            value: this.lastComplexCell.raw,
+            options: this.spreadsheetOptions,
+          });
+        }
+        return;
+      }
+
+      // Non-complex: preserve the legacy formatted + raw inline rendering.
+      this.lastComplexCell = null;
+      if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
+
       const hasRaw = raw != null && String(raw) !== formatted;
       const plainText = hasRaw ? `${formatted} [${raw}]` : formatted;
 
@@ -204,11 +268,29 @@ export class StatusBar {
         html: formattedSpan + rawSpan,
         tooltip: `Cell value: ${plainText}`,
         visible: true,
+        expandable: false,
       });
       return;
     }
 
-    this.updateItem("cell-value", { text: "", html: undefined, visible: false });
+    this.lastComplexCell = null;
+    if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
+    this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
+  }
+
+  /** Toggle the inspector popover for the currently selected complex cell. */
+  private toggleCellValuePopover(): void {
+    if (!this.lastComplexCell || !this.lastComplexCell.kind) return;
+    if (this.cellValuePopover.isOpen()) {
+      this.cellValuePopover.hide();
+    } else {
+      this.cellValuePopover.show({
+        columnName: this.lastComplexCell.columnName,
+        kind: this.lastComplexCell.kind,
+        value: this.lastComplexCell.raw,
+        options: this.spreadsheetOptions,
+      });
+    }
   }
 
   private escapeHtml(s: string): string {
@@ -424,7 +506,11 @@ export class StatusBar {
       element.classList.add("status-bar__item--clickable");
       element.addEventListener("click", (e) => {
         e.stopPropagation();
-        this.toggleMessagePopover();
+        if (item.id === "cell-value") {
+          this.toggleCellValuePopover();
+        } else {
+          this.toggleMessagePopover();
+        }
       });
     } else if (item.command) {
       element.classList.add("status-bar__item--clickable");
@@ -444,6 +530,7 @@ export class StatusBar {
       this.messageTimeoutId = null;
     }
     this.popover.destroy();
+    this.cellValuePopover.destroy();
     this.container.remove();
   }
 }
@@ -453,4 +540,33 @@ function escapeHtml(s: string): string {
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+/**
+ * Does the compact cell preview drop any information? True if the complex
+ * value has more than {@link PREVIEW_MAX_ENTRIES} fields/items, or if any
+ * field/item is itself an object/array (which the preview collapses to
+ * `{\u2026}` / `[\u2026]`). The status-bar uses this to decide whether to
+ * show the "\u2026 click to expand" hint next to the cell value.
+ */
+const PREVIEW_MAX_ENTRIES = 3;
+
+function previewWasTruncated(value: any): boolean {
+  if (value == null) return false;
+  if (Array.isArray(value)) {
+    if (value.length > PREVIEW_MAX_ENTRIES) return true;
+    return value.some(isNestedForPreview);
+  }
+  if (typeof value === "object" && !(value instanceof Date) && !(value instanceof Uint8Array)) {
+    const entries = Object.entries(value);
+    if (entries.length > PREVIEW_MAX_ENTRIES) return true;
+    return entries.some(([, v]) => isNestedForPreview(v));
+  }
+  return false;
+}
+
+function isNestedForPreview(v: any): boolean {
+  if (v == null || typeof v !== "object") return false;
+  if (v instanceof Date || v instanceof Uint8Array) return false;
+  return true;
 }

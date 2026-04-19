@@ -139,15 +139,94 @@ function formatBlob(value: any): string {
 }
 
 /**
- * Format a complex type (LIST, STRUCT, MAP, JSON) as a JSON string.
+ * Maximum entries/fields shown in the compact preview before collapsing
+ * to "\u2026 N more". Chosen to fit a typical cell width without clipping
+ * the closing brace.
  */
-function formatComplex(value: any): string {
+const COMPLEX_PREVIEW_MAX_ENTRIES = 3;
+
+/** Cache for the preview number formatter, keyed on the options reference. */
+let previewNumFmtCache: { opts: Intl.NumberFormatOptions; fmt: Intl.NumberFormat } | null = null;
+
+function getPreviewNumberFormatter(options: SpreadsheetOptions): Intl.NumberFormat | null {
+  const nfOpts = options.numberFormat;
+  if (typeof nfOpts !== "object" || nfOpts === null) return null;
+  if (previewNumFmtCache && previewNumFmtCache.opts === nfOpts) return previewNumFmtCache.fmt;
+  try {
+    const fmt = new Intl.NumberFormat(undefined, nfOpts);
+    previewNumFmtCache = { opts: nfOpts, fmt };
+    return fmt;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Format a complex type (LIST, STRUCT, MAP, JSON) as a compact one-line
+ * preview. Objects render as `{ k: v, k: v, k: v, \u2026 N more }`; arrays
+ * as `[ v, v, v, \u2026 N more ]`. Nested objects/arrays collapse to
+ * `{\u2026}` / `[\u2026]` placeholders to keep the preview single-line.
+ * Numbers respect `options.numberFormat` so cell text and status bar agree.
+ */
+function formatComplex(value: any, options: SpreadsheetOptions): string {
   if (value == null) return "";
   try {
-    return JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+    return previewAny(value, options, false);
   } catch {
-    return String(value);
+    // Defensive fallback so a pathological value doesn't break rendering.
+    try {
+      return JSON.stringify(value, (_, v) => (typeof v === "bigint" ? v.toString() : v));
+    } catch {
+      return String(value);
+    }
   }
+}
+
+function previewAny(value: any, options: SpreadsheetOptions, asNested: boolean): string {
+  if (value === null || value === undefined) return "null";
+  if (Array.isArray(value)) {
+    return asNested ? "[\u2026]" : previewArray(value, options);
+  }
+  if (typeof value === "object") {
+    if (value instanceof Date) {
+      if (isNaN(value.getTime())) return "null";
+      return value.toISOString().slice(0, 19).replace("T", " ");
+    }
+    if (value instanceof Uint8Array) return formatBlob(value);
+    return asNested ? "{\u2026}" : previewObject(value as Record<string, any>, options);
+  }
+  return previewScalar(value, options);
+}
+
+function previewArray(arr: any[], options: SpreadsheetOptions): string {
+  if (arr.length === 0) return "[]";
+  const shown = arr.slice(0, COMPLEX_PREVIEW_MAX_ENTRIES).map((v) => previewAny(v, options, true));
+  const more = arr.length - shown.length;
+  const parts = shown.join(", ");
+  return more > 0 ? `[ ${parts}, \u2026 ${more} more ]` : `[ ${parts} ]`;
+}
+
+function previewObject(obj: Record<string, any>, options: SpreadsheetOptions): string {
+  const entries = Object.entries(obj);
+  if (entries.length === 0) return "{}";
+  const shown = entries
+    .slice(0, COMPLEX_PREVIEW_MAX_ENTRIES)
+    .map(([k, v]) => `${k}: ${previewAny(v, options, true)}`);
+  const more = entries.length - shown.length;
+  const parts = shown.join(", ");
+  return more > 0 ? `{ ${parts}, \u2026 ${more} more }` : `{ ${parts} }`;
+}
+
+function previewScalar(value: any, options: SpreadsheetOptions): string {
+  if (typeof value === "bigint") return value.toString();
+  if (typeof value === "number") {
+    if (!isFinite(value)) return String(value);
+    const fmt = getPreviewNumberFormatter(options);
+    return fmt ? fmt.format(value) : String(value);
+  }
+  if (typeof value === "string") return JSON.stringify(value);
+  if (typeof value === "boolean") return value ? "true" : "false";
+  return String(value);
 }
 
 export const formatValue = (value: any, column: ColumnInternal, options: SpreadsheetOptions): { raw: any; formatted: string } => {
@@ -231,7 +310,7 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
 
   // Complex / JSON
   if (isComplexType(dt)) {
-    return { raw: original, formatted: formatComplex(original) };
+    return { raw: original, formatted: formatComplex(original, options) };
   }
 
   // Unknown — fall back to string

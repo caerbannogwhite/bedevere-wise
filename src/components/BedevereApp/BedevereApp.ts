@@ -241,6 +241,7 @@ export class BedevereApp implements EventHandler {
     if (this.options.statusBarVisible) {
       this.statusBar = new StatusBar(this.container, this.version);
       this.statusBar.setOnCommandCallback((command) => this.executeCommand(command));
+      this.statusBar.setSpreadsheetOptions(this.options.spreadsheetOptions ?? {});
     }
 
     // Help panel (mounted on body so it overlays the entire app)

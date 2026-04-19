@@ -1,5 +1,7 @@
 import { DuckDBService } from "./DuckDBService";
 import { quoteIdent } from "./sqlIdent";
+import { unwrapArrowValue } from "./arrowUnwrap";
+import { parseDuckDBType, TypeNode } from "./duckdbTypeParser";
 import {
   Column,
   ColumnStats,
@@ -21,10 +23,20 @@ export class DuckDBDataProvider implements DataProvider {
   private fileName: string = "";
   private description: string = "";
   private label: string = "";
+  // Cached per-column parsed type trees. Populated lazily by
+  // ensureColumnTypes(); invalidated when the table is renamed or dropped.
+  private parsedColumnTypes: Array<TypeNode | undefined> | null = null;
 
   constructor(private duckDBService: DuckDBService, name: string, fileName: string) {
     this.name = name;
     this.fileName = fileName;
+  }
+
+  private async ensureColumnTypes(): Promise<Array<TypeNode | undefined>> {
+    if (this.parsedColumnTypes) return this.parsedColumnTypes;
+    const info = await this.duckDBService.getTableInfo(this.name);
+    this.parsedColumnTypes = info.map((c: any) => parseDuckDBType(c.column_type));
+    return this.parsedColumnTypes;
   }
 
   public setName(name: string): void {
@@ -66,7 +78,13 @@ export class DuckDBDataProvider implements DataProvider {
 
   public async fetchData(startRow: number, endRow: number): Promise<any[][]> {
     const query = `SELECT * FROM ${quoteIdent(this.name)} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
-    return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
+    const [rows, types] = await Promise.all([
+      this.duckDBService.executeQuery(query),
+      this.ensureColumnTypes(),
+    ]);
+    return rows.map((row: any) =>
+      (row.toArray() as any[]).map((cell, i) => unwrapArrowValue(cell, types[i])),
+    );
   }
 
   public async fetchDataColumnRange(startRow: number, endRow: number, startCol: number, endCol: number): Promise<any[][]> {
@@ -75,7 +93,15 @@ export class DuckDBDataProvider implements DataProvider {
     const columnNamesString = columnNames.map(quoteIdent).join(", ");
 
     const query = `SELECT ${columnNamesString} FROM ${quoteIdent(this.name)} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
-    return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
+    const [rows, types] = await Promise.all([
+      this.duckDBService.executeQuery(query),
+      this.ensureColumnTypes(),
+    ]);
+    // types is full column list; we sliced columnNames the same way.
+    const sliceTypes = types.slice(startCol, endCol);
+    return rows.map((row: any) =>
+      (row.toArray() as any[]).map((cell, i) => unwrapArrowValue(cell, sliceTypes[i])),
+    );
   }
 
   public async getColumnStats(

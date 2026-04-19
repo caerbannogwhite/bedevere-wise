@@ -247,3 +247,196 @@
     max-width: none;
   }
 }
+
+// CellValuePopover — inspector for complex (STRUCT / LIST / MAP / JSON) cell
+// values. Borrows MessagePopover's positioning + dismissal pattern.
+.cell-value-popover {
+  position: fixed;
+  bottom: 32px;
+  left: 8px;
+  width: max(420px, min(640px, 55vw));
+  max-height: 55vh;
+  display: flex;
+  flex-direction: column;
+  background: #2d2d30;
+  color: #e0e0e0;
+  border: 1px solid #3c3c3c;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.25);
+  z-index: 1100;
+  font-family:
+    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
+    "Helvetica Neue", sans-serif;
+  font-size: 12px;
+  animation: messagePopoverSlideIn 0.18s ease-out;
+
+  body.theme-light & {
+    background: #ffffff;
+    color: #333333;
+    border-color: #d8dfe6;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15), 0 -2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  &__header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 12px;
+    border-bottom: 1px solid #3c3c3c;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.3px;
+
+    body.theme-light & {
+      border-bottom-color: #e2e8f0;
+    }
+  }
+
+  &__label {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: #f5b927;
+
+    body.theme-light & {
+      color: #b07a00;
+    }
+  }
+
+  &__close {
+    background: transparent;
+    border: none;
+    color: inherit;
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 6px;
+    line-height: 1;
+    opacity: 0.7;
+    transition: all 0.15s ease;
+
+    &:hover {
+      opacity: 1;
+      background: rgba(255, 255, 255, 0.12);
+    }
+
+    body.theme-light &:hover {
+      background: rgba(0, 0, 0, 0.08);
+    }
+  }
+
+  &__body {
+    overflow: auto;
+    flex: 1;
+    min-height: 0;
+    padding: 4px 0;
+  }
+
+  &__table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+
+    tr:nth-child(even) {
+      background: rgba(255, 255, 255, 0.03);
+
+      body.theme-light & {
+        background: rgba(0, 0, 0, 0.02);
+      }
+    }
+
+    tr:hover {
+      background: rgba(245, 185, 39, 0.1);
+    }
+  }
+
+  &__key {
+    padding: 4px 12px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 11.5px;
+    color: #bbb;
+    vertical-align: top;
+    white-space: nowrap;
+    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    width: 1%;
+
+    body.theme-light & {
+      color: #555;
+      border-right-color: rgba(0, 0, 0, 0.06);
+    }
+  }
+
+  &__value {
+    padding: 4px 12px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-size: 11.5px;
+    word-break: break-all;
+    user-select: text;
+  }
+
+  &__empty {
+    padding: 12px;
+    text-align: center;
+    opacity: 0.6;
+    font-style: italic;
+  }
+
+  &__footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 8px 12px;
+    border-top: 1px solid #3c3c3c;
+
+    body.theme-light & {
+      border-top-color: #e2e8f0;
+    }
+  }
+
+  &__copy-btn {
+    padding: 4px 12px;
+    border: 1px solid #4b4b4b;
+    background: transparent;
+    color: inherit;
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    font-family: inherit;
+
+    &:hover {
+      background: rgba(255, 255, 255, 0.08);
+      border-color: #666;
+    }
+
+    &--copied {
+      background: #16a34a;
+      color: #ffffff;
+      border-color: #16a34a;
+    }
+
+    body.theme-light & {
+      border-color: #cbd5e1;
+
+      &:hover {
+        background: #f1f5f9;
+        border-color: #94a3b8;
+      }
+
+      &--copied {
+        background: #16a34a;
+        color: #ffffff;
+        border-color: #16a34a;
+      }
+    }
+  }
+}
+
+@media (max-width: 640px) {
+  .cell-value-popover {
+    left: 4px;
+    right: 4px;
+    width: auto;
+    max-width: none;
+  }
+}

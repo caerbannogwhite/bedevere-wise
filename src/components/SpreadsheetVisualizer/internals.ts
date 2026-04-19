@@ -26,6 +26,7 @@ export class ColumnInternal implements Column {
   default: string | null;
   label?: string;
   dataType: DataType;
+  rawType?: string;
   length?: number;
   format?: string | Intl.NumberFormatOptions;
   widthPx: number = 0;
@@ -43,6 +44,7 @@ export class ColumnInternal implements Column {
     this.extra = column.extra;
     this.default = column.default;
     this.dataType = column.dataType;
+    this.rawType = column.rawType;
     this.label = column.label;
     this.length = column.length;
     this.format = column.format;

@@ -1,6 +1,8 @@
 import { DuckDBService } from "./DuckDBService";
 import { Column, ColumnStats, DataProvider, DatasetMetadata, normalizeDuckDBType } from "./types";
 import { ColumnFilterManager } from "./ColumnFilterManager";
+import { unwrapArrowValue } from "./arrowUnwrap";
+import { parseDuckDBType, TypeNode } from "./duckdbTypeParser";
 
 export class FilteredDuckDBDataProvider implements DataProvider {
   private name: string;
@@ -10,6 +12,14 @@ export class FilteredDuckDBDataProvider implements DataProvider {
   private duckDBService: DuckDBService;
   private filterManager: ColumnFilterManager;
   private sourceTableName: string;
+  private parsedColumnTypes: Array<TypeNode | undefined> | null = null;
+
+  private async ensureColumnTypes(): Promise<Array<TypeNode | undefined>> {
+    if (this.parsedColumnTypes) return this.parsedColumnTypes;
+    const info = await this.duckDBService.getTableInfo(this.sourceTableName);
+    this.parsedColumnTypes = info.map((c: any) => parseDuckDBType(c.column_type));
+    return this.parsedColumnTypes;
+  }
 
   constructor(
     duckDBService: DuckDBService,
@@ -70,7 +80,13 @@ export class FilteredDuckDBDataProvider implements DataProvider {
   public async fetchData(startRow: number, endRow: number): Promise<any[][]> {
     const baseQuery = this.buildBaseQuery();
     const query = `SELECT * FROM (${baseQuery}) AS _filtered LIMIT ${endRow - startRow} OFFSET ${startRow}`;
-    return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
+    const [rows, types] = await Promise.all([
+      this.duckDBService.executeQuery(query),
+      this.ensureColumnTypes(),
+    ]);
+    return rows.map((row: any) =>
+      (row.toArray() as any[]).map((cell, i) => unwrapArrowValue(cell, types[i])),
+    );
   }
 
   public async fetchDataColumnRange(
@@ -87,7 +103,14 @@ export class FilteredDuckDBDataProvider implements DataProvider {
     const orderBy = this.filterManager.buildOrderByClause(this.name);
 
     const query = `SELECT ${columnNamesString} FROM "${this.sourceTableName}" ${where} ${orderBy} LIMIT ${endRow - startRow} OFFSET ${startRow}`;
-    return (await this.duckDBService.executeQuery(query)).map((row: any) => row.toArray());
+    const [rows, types] = await Promise.all([
+      this.duckDBService.executeQuery(query),
+      this.ensureColumnTypes(),
+    ]);
+    const sliceTypes = types.slice(startCol, endCol);
+    return rows.map((row: any) =>
+      (row.toArray() as any[]).map((cell, i) => unwrapArrowValue(cell, sliceTypes[i])),
+    );
   }
 
   public async getColumnStats(column: string | Column): Promise<ColumnStats | null> {

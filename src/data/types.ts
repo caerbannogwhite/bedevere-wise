@@ -111,6 +111,20 @@ export function isComplexType(dt: DataType): boolean {
   return dt === "LIST" || dt === "STRUCT" || dt === "MAP" || dt === "UNION" || dt === "JSON";
 }
 
+export type ComplexKind = "struct" | "list" | "map" | "json" | "union";
+
+/** Map a complex DataType to a lowercase label used in popover titles / status labels. */
+export function getComplexKind(dt: DataType): ComplexKind | null {
+  switch (dt) {
+    case "STRUCT": return "struct";
+    case "LIST":   return "list";
+    case "MAP":    return "map";
+    case "JSON":   return "json";
+    case "UNION":  return "union";
+    default:       return null;
+  }
+}
+
 export function dataTypeCategory(dt: DataType): DataTypeCategory {
   if (isBooleanType(dt)) return "boolean";
   if (isNumericType(dt)) return "numeric";
@@ -134,7 +148,9 @@ export function normalizeDuckDBType(raw: string | undefined | null): DataType {
 
   // Prefix-based complex types (STRUCT(a INTEGER, ...), LIST(INTEGER), MAP(...), etc.)
   if (s.startsWith("STRUCT")) return "STRUCT";
-  if (s.startsWith("LIST") || s.endsWith("[]") || s.includes("[]")) return "LIST";
+  // Array/list suffix: matches TYPE[], TYPE[N] (fixed-size ARRAY from
+  // array_value / DuckDB ARRAY type), and nested forms like TYPE[3][4].
+  if (s.startsWith("LIST") || /\[\d*\]/.test(s)) return "LIST";
   if (s.startsWith("MAP")) return "MAP";
   if (s.startsWith("UNION")) return "UNION";
   if (s.startsWith("ENUM")) return "ENUM";
