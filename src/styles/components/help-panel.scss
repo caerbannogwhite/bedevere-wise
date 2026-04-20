@@ -322,6 +322,114 @@
       background: #252526;
       border-bottom-color: #3c3c3c;
     }
+
+    &--titleless {
+      justify-content: flex-end;
+    }
+  }
+
+  // ------- Penguins tutorial in How To -------
+
+  &__tutorial {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-top: 4px;
+  }
+
+  &__tutorial-heading {
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+    margin: 14px 0 4px;
+
+    body.theme-dark & {
+      color: #e0e0e0;
+    }
+  }
+
+  &__tutorial-prose {
+    font-size: 12.5px;
+    line-height: 1.55;
+    margin: 0 0 4px;
+    color: #555;
+
+    a {
+      color: #007acc;
+      text-decoration: none;
+
+      &:hover { text-decoration: underline; }
+
+      body.theme-dark & {
+        color: #4ea1d3;
+      }
+    }
+
+    code {
+      font-family: "Consolas", "Monaco", "Courier New", monospace;
+      font-size: 11.5px;
+      background: rgba(0, 0, 0, 0.06);
+      padding: 1px 5px;
+
+      body.theme-dark & {
+        background: rgba(255, 255, 255, 0.08);
+        color: #e0e0e0;
+      }
+    }
+
+    body.theme-dark & {
+      color: #bbb;
+    }
+  }
+
+  &__tip {
+    font-size: 12px;
+    line-height: 1.55;
+    margin: 4px 0 10px;
+    padding: 7px 10px;
+    border-left: 3px solid #f5b927;
+    background: rgba(245, 185, 39, 0.08);
+    color: #555;
+
+    strong {
+      color: #b07a00;
+      margin-right: 2px;
+    }
+
+    kbd {
+      background: rgba(0, 0, 0, 0.08);
+      border: 1px solid rgba(0, 0, 0, 0.12);
+      padding: 1px 5px;
+      font-family: "Consolas", "Monaco", monospace;
+      font-size: 11px;
+
+      body.theme-dark & {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.15);
+        color: #e0e0e0;
+      }
+    }
+
+    code {
+      font-family: "Consolas", "Monaco", "Courier New", monospace;
+      font-size: 11.5px;
+      background: rgba(0, 0, 0, 0.06);
+      padding: 1px 5px;
+
+      body.theme-dark & {
+        background: rgba(255, 255, 255, 0.08);
+        color: #e0e0e0;
+      }
+    }
+
+    body.theme-dark & {
+      background: rgba(245, 185, 39, 0.12);
+      color: #ccc;
+
+      strong {
+        color: #f5b927;
+      }
+    }
   }
 
   &__snippet-title {

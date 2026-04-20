@@ -35,40 +35,162 @@ const SCOPE_LABELS: Record<string, string> = {
 
 const SCOPE_ORDER: string[] = ["global", "spreadsheet", "sqlEditor", "commandPalette"];
 
-interface SnippetDef {
-  title: string;
-  sql: string;
-}
+type TutorialNode =
+  | { kind: "heading"; text: string }
+  | { kind: "prose"; html: string }
+  | { kind: "tip"; html: string }
+  | { kind: "snippet"; sql: string };
 
-const STATS_DUCK_SNIPPETS: SnippetDef[] = [
+const PENGUINS_TUTORIAL: TutorialNode[] = [
   {
-    title: "One-sample t-test",
-    sql: "SELECT ttest_1samp(v3) FROM measurements;",
+    kind: "prose",
+    html:
+      `DuckDB supports a rich SQL dialect \u2014 see the ` +
+      `<a href="https://duckdb.org/docs/current/sql/introduction" target="_blank" rel="noopener noreferrer">DuckDB SQL reference</a> ` +
+      `for the full syntax. The examples below assume the Palmer Penguins sample loaded via the button above.`,
+  },
+
+  { kind: "heading", text: "Parse the dataset" },
+  {
+    kind: "prose",
+    html:
+      `The raw CSV stores numeric columns as strings with <code>"NA"</code> for missing values and leaves the ` +
+      `categorical columns as free-form text. Cast the numerics with <code>TRY_CAST</code>, and tighten the ` +
+      `categoricals into <code>ENUM</code>s so they take less memory and only accept valid values.`,
   },
   {
-    title: "Two-sample t-test (Welch's)",
-    sql: "SELECT ttest_2samp(group_a, group_b) FROM experiment;",
-  },
-  {
-    title: "Paired t-test",
-    sql: "SELECT ttest_paired(before, after) FROM patients;",
-  },
-  {
-    title: "Mann-Whitney U test",
-    sql: "SELECT mann_whitney_u(group_a, group_b) FROM experiment;",
-  },
-  {
-    title: "Read SAS / SPSS / Stata files",
-    sql: "SELECT * FROM read_stat('data.sas7bdat');",
-  },
-  {
-    title: "Group-by analysis",
+    kind: "snippet",
     sql:
-      "SELECT id3,\n" +
-      "       (ttest_1samp(v3)).t_statistic,\n" +
-      "       (ttest_1samp(v3)).p_value\n" +
-      "FROM measurements\n" +
-      "GROUP BY id3;",
+      "-- Tighten categorical text into ENUMs (less memory, only valid values)\n" +
+      "-- and cast measurements to DOUBLE. TRY_CAST yields NULL on failure, so\n" +
+      "-- the string \"NA\" becomes a real NULL.\n" +
+      "SELECT\n" +
+      "    species::ENUM ('Adelie', 'Gentoo', 'Chinstrap') AS species\n" +
+      "  , island::ENUM ('Dream', 'Torgersen', 'Biscoe') AS island\n" +
+      "  , sex::ENUM ('female', 'male') AS sex\n" +
+      "  , TRY_CAST(bill_length_mm AS DOUBLE) AS bill_length_mm\n" +
+      "  , TRY_CAST(bill_depth_mm AS DOUBLE) AS bill_depth_mm\n" +
+      "  , TRY_CAST(flipper_length_mm AS DOUBLE) AS flipper_length_mm\n" +
+      "  , TRY_CAST(body_mass_g AS DOUBLE) AS body_mass_g\n" +
+      "FROM penguins\n" +
+      "WHERE sex != 'NA'             -- drop rows with unknown sex\n" +
+      "ORDER BY species, island, sex",
+  },
+  {
+    kind: "tip",
+    html:
+      `Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, run <strong>Create View</strong>, and name it ` +
+      `<code>penguins_clean</code>. The later examples reference that name.`,
+  },
+
+  { kind: "heading", text: "Basic summary" },
+  {
+    kind: "prose",
+    html: `A classic <code>GROUP BY</code> with the standard <code>AVG</code> / <code>STDDEV</code> aggregates.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- Mean and standard deviation of every measurement, broken down by\n" +
+      "-- species x island x sex. The penguins_clean view already excludes\n" +
+      "-- rows with sex = 'NA', so no WHERE clause is needed.\n" +
+      "SELECT species, island, sex\n" +
+      "  , AVG(bill_length_mm)    AS mean_bill_length\n" +
+      "  , STDDEV(bill_length_mm) AS std_bill_length\n" +
+      "  , AVG(bill_depth_mm)     AS mean_bill_depth\n" +
+      "  , STDDEV(bill_depth_mm)  AS std_bill_depth\n" +
+      "  , AVG(flipper_length_mm)    AS mean_flipper_length\n" +
+      "  , STDDEV(flipper_length_mm) AS std_flipper_length\n" +
+      "  , AVG(body_mass_g)    AS mean_body_mass\n" +
+      "  , STDDEV(body_mass_g) AS std_body_mass\n" +
+      "FROM penguins_clean\n" +
+      "GROUP BY species, island, sex\n" +
+      "ORDER BY species, island, sex",
+  },
+
+  { kind: "heading", text: "Better summary with Stats Duck" },
+  {
+    kind: "prose",
+    html:
+      `Bedevere auto-loads the ` +
+      `<a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck</a> ` +
+      `DuckDB extension. Its <code>summary_stats()</code> aggregate returns a STRUCT with count, mean, sd, quartiles, ` +
+      `min/max, skewness, and kurtosis.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- One summary_stats() call per measurement. Each result cell is a\n" +
+      "-- STRUCT holding count, mean, sd, quartiles, min/max, skewness, and\n" +
+      "-- kurtosis \u2014 click a cell to inspect it.\n" +
+      "SELECT species, island, sex\n" +
+      "  , summary_stats(bill_length_mm)    AS bill_length_summ\n" +
+      "  , summary_stats(bill_depth_mm)     AS bill_depth_summ\n" +
+      "  , summary_stats(flipper_length_mm) AS flipper_length_summ\n" +
+      "  , summary_stats(body_mass_g)       AS body_mass_summ\n" +
+      "FROM penguins_clean\n" +
+      "GROUP BY species, island, sex\n" +
+      "ORDER BY species, island, sex",
+  },
+  {
+    kind: "tip",
+    html:
+      `Each result cell is a STRUCT. Click the cell, then click the value in the status bar to open an inspector ` +
+      `with every field on its own row.`,
+  },
+
+  { kind: "heading", text: "All in one query" },
+  {
+    kind: "prose",
+    html: `Skip the intermediate view \u2014 cast inline.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- Cast and summarise in one pass, without a saved view.\n" +
+      "SELECT species, island\n" +
+      "  , summary_stats(TRY_CAST(bill_length_mm AS DOUBLE))    AS bill_length_mm\n" +
+      "  , summary_stats(TRY_CAST(bill_depth_mm AS DOUBLE))     AS bill_depth_mm\n" +
+      "  , summary_stats(TRY_CAST(flipper_length_mm AS DOUBLE)) AS flipper_length_mm\n" +
+      "  , summary_stats(TRY_CAST(body_mass_g AS DOUBLE))       AS body_mass_g\n" +
+      "FROM penguins\n" +
+      "GROUP BY species, island",
+  },
+
+  { kind: "heading", text: "Testing a hypothesis" },
+  {
+    kind: "prose",
+    html:
+      `Stats Duck ships a battery of hypothesis tests. Here's a two-sample t-test comparing body mass between Adelie and ` +
+      `Gentoo penguins. <code>CASE WHEN species = 'X'</code> selects one group per argument and NULLs out the rest; ` +
+      `Stats Duck ignores NULLs.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- Two-sample Welch's t-test on two measurements at once: is body mass\n" +
+      "-- (and flipper length) different between Adelie and Gentoo penguins?\n" +
+      "-- CASE WHEN selects one group per argument; NULLs in the other group\n" +
+      "-- are ignored by Stats Duck. Each result cell is a STRUCT with\n" +
+      "-- t_statistic, p_value, df, and the confidence interval.\n" +
+      "SELECT\n" +
+      "    ttest_2samp(\n" +
+      "      CASE WHEN species = 'Adelie' THEN body_mass_g END,\n" +
+      "      CASE WHEN species = 'Gentoo' THEN body_mass_g END\n" +
+      "    ) AS t_test_body_mass\n" +
+      "  , ttest_2samp(\n" +
+      "      CASE WHEN species = 'Adelie' THEN flipper_length_mm END,\n" +
+      "      CASE WHEN species = 'Gentoo' THEN flipper_length_mm END\n" +
+      "    ) AS t_test_flipper_length\n" +
+      "FROM penguins_clean\n" +
+      "WHERE body_mass_g IS NOT NULL\n" +
+      "  AND flipper_length_mm IS NOT NULL",
+  },
+  {
+    kind: "tip",
+    html:
+      `For a non-parametric alternative (no normality assumption), replace <code>ttest_2samp</code> with ` +
+      `<code>mann_whitney_u</code>.`,
   },
 ];
 
@@ -286,55 +408,64 @@ export class HelpPanel {
         Load sample dataset (Palmer Penguins)
       </button>
 
-      <h3 class="help-panel__section-title">Statistical examples</h3>
-      <p class="help-panel__hint">
-        Bedevere ships with the <a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck</a>
-        DuckDB extension, which adds hypothesis tests and readers for SAS, SPSS, and Stata.
-        The snippets below are <em>patterns</em> &mdash; the table names are placeholders for your own data.
-      </p>
-      <div class="help-panel__snippets" data-snippets></div>
-
-      <p class="help-panel__footer-note">
-        See the <a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck README</a>
-        for the full reference.
-      </p>
+      <h3 class="help-panel__section-title">Working with SQL</h3>
+      <div class="help-panel__tutorial" data-tutorial></div>
     `;
 
     this.sampleButton = body.querySelector<HTMLButtonElement>("[data-action='load-sample']");
     this.sampleButton?.addEventListener("click", () => this.handleLoadSample());
 
-    const snippetsHost = body.querySelector("[data-snippets]")!;
-    for (const snippet of STATS_DUCK_SNIPPETS) {
-      snippetsHost.appendChild(this.buildSnippet(snippet));
+    const tutorialHost = body.querySelector("[data-tutorial]")!;
+    for (const node of PENGUINS_TUTORIAL) {
+      tutorialHost.appendChild(this.buildTutorialNode(node));
     }
 
     return body;
   }
 
-  private buildSnippet(def: SnippetDef): HTMLElement {
+  private buildTutorialNode(node: TutorialNode): HTMLElement {
+    switch (node.kind) {
+      case "heading": {
+        const h = document.createElement("h4");
+        h.className = "help-panel__tutorial-heading";
+        h.textContent = node.text;
+        return h;
+      }
+      case "prose": {
+        const p = document.createElement("p");
+        p.className = "help-panel__tutorial-prose";
+        p.innerHTML = node.html;
+        return p;
+      }
+      case "tip": {
+        const p = document.createElement("p");
+        p.className = "help-panel__tip";
+        p.innerHTML = `<strong>Tip:</strong> ${node.html}`;
+        return p;
+      }
+      case "snippet":
+        return this.buildTutorialSnippet(node.sql);
+    }
+  }
+
+  private buildTutorialSnippet(sql: string): HTMLElement {
     const card = document.createElement("div");
-    card.className = "help-panel__snippet";
+    card.className = "help-panel__snippet help-panel__snippet--titleless";
 
     const head = document.createElement("div");
-    head.className = "help-panel__snippet-head";
-
-    const title = document.createElement("span");
-    title.className = "help-panel__snippet-title";
-    title.textContent = def.title;
+    head.className = "help-panel__snippet-head help-panel__snippet-head--titleless";
 
     const copyBtn = document.createElement("button");
     copyBtn.type = "button";
     copyBtn.className = "help-panel__copy-btn";
     copyBtn.textContent = "Copy";
-    copyBtn.addEventListener("click", () => this.handleCopy(def.sql, copyBtn));
-
-    head.appendChild(title);
+    copyBtn.addEventListener("click", () => this.handleCopy(sql, copyBtn));
     head.appendChild(copyBtn);
 
     const pre = document.createElement("pre");
     pre.className = "help-panel__snippet-code";
     const code = document.createElement("code");
-    code.textContent = def.sql;
+    code.textContent = sql;
     pre.appendChild(code);
 
     card.appendChild(head);
