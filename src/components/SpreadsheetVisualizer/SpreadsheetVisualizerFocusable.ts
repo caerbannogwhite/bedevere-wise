@@ -206,10 +206,22 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     }
 
     const action = keymapService.matchEvent(event, "spreadsheet");
-    if (!action) {
-      return false;
-    }
+    if (!action) return false;
+    event.preventDefault();
 
+    return this.dispatchKeymapAction(action);
+  }
+
+  /**
+   * Execute a spreadsheet keymap action on this instance. Shared by the
+   * direct keyboard path (handleKeyDown) and by `spreadsheet.*` registry
+   * commands, which route through {@link TabManager.getActiveDatasetTab}
+   * so shell/palette callers hit the currently-focused tab.
+   *
+   * Post-processing (redraw + selection-change notification) runs for every
+   * recognised action; returns false only when the action id is unknown.
+   */
+  public async dispatchKeymapAction(action: string): Promise<boolean> {
     const step = this.options.cellHeight * 3;
 
     switch (action) {
@@ -281,16 +293,13 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
         }
         break;
 
-      // Enter
       case "spreadsheet.enter":
         if (!this.selectedCells && this.selectedCols.length === 0 && this.selectedRows.length === 0) {
           this.selectedCells = { startRow: 1, endRow: 1, startCol: 0, endCol: 0 };
         }
         break;
 
-      // Copy
       case "spreadsheet.copy": {
-        event.preventDefault();
         const selected = await this.getSelectedFormattedValues();
         if (selected.data.length > 0) {
           const s = persistenceService.loadAppSettings();
@@ -303,7 +312,6 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
         break;
       }
 
-      // Cancel
       case "spreadsheet.cancelSelection":
         this.selectedCells = null;
         break;

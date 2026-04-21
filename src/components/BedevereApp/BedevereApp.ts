@@ -772,6 +772,43 @@ export class BedevereApp implements EventHandler {
       execute: () => this.tabManager.switchToPreviousTab(),
     });
 
+    // Spreadsheet-scope keymap actions. Registered here (not in the
+    // visualizer's constructor) so shell/palette callers hit the ACTIVE
+    // tab's instance instead of whichever visualizer registered last.
+    // The visualizer's handleKeyDown continues to call dispatchKeymapAction
+    // directly — so keyboard input skips the registry round-trip.
+    const SPREADSHEET_ACTIONS: Array<[string, string, string]> = [
+      ["spreadsheet.scrollUp",       "Scroll Up",         "Scroll the viewport up"],
+      ["spreadsheet.scrollDown",     "Scroll Down",       "Scroll the viewport down"],
+      ["spreadsheet.scrollLeft",     "Scroll Left",       "Scroll the viewport left"],
+      ["spreadsheet.scrollRight",    "Scroll Right",      "Scroll the viewport right"],
+      ["spreadsheet.moveUp",         "Move Up",           "Move the cell selection up"],
+      ["spreadsheet.moveDown",       "Move Down",         "Move the cell selection down"],
+      ["spreadsheet.moveLeft",       "Move Left",         "Move the cell selection left"],
+      ["spreadsheet.moveRight",      "Move Right",        "Move the cell selection right"],
+      ["spreadsheet.extendUp",       "Extend Up",         "Extend the selection up"],
+      ["spreadsheet.extendDown",     "Extend Down",       "Extend the selection down"],
+      ["spreadsheet.extendLeft",     "Extend Left",       "Extend the selection left"],
+      ["spreadsheet.extendRight",    "Extend Right",      "Extend the selection right"],
+      ["spreadsheet.enter",          "Enter Selection",   "Start a cell selection at A1"],
+      ["spreadsheet.copy",           "Copy Selection",    "Copy the current selection to the clipboard"],
+      ["spreadsheet.cancelSelection", "Cancel Selection", "Clear the current cell selection"],
+    ];
+    for (const [id, title, description] of SPREADSHEET_ACTIONS) {
+      commandRegistry.register({
+        id,
+        title,
+        description,
+        category: "Spreadsheet",
+        scope: "spreadsheet",
+        execute: async () => {
+          const active = this.tabManager.getActiveDatasetTab()?.spreadsheetVisualizer;
+          if (!active) return;
+          await active.dispatchKeymapAction(id);
+        },
+      });
+    }
+
     // Shell-native commands (new for 0.8 — not in palette, not bound to keys).
     this.registerShellCommands();
   }
