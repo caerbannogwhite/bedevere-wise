@@ -4,8 +4,11 @@
 
 - [Feature] Dot-command shell hosted in the always-visible bar above the spreadsheet. Lines starting with `.` dispatch through a unified CommandRegistry; anything else runs as DuckDB SQL. History walked with Up/Down.
 - [Feature] `CommandRegistry` — the single source of truth for every verb. Palette, keymap, and shell all resolve through it.
-- [Feature] Shell commands ship with `.help`, `.tables`, `.columns <name>`, `.open [name | --folder]`, `.close [name]`, `.theme light|dark|auto`, `.tab next|prev|N`, `.clear`, plus shell shortcuts for the keymap globals (`.panel`, `.sql`, `.fullscreen`, `.palette`).
+- [Feature] Shell commands: `.help`, `.tables`, `.columns <name>`, `.open [name | --folder]`, `.close [name]`, `.theme light|dark|auto`, `.tab next|prev|N`, `.settings [key=value]`, `.view save|drop <name>`, `.query save <name>`, `.export <csv|tsv|html|markdown>`, `.clear`, plus shell shortcuts for the keymap globals (`.panel`, `.sql`, `.fullscreen`, `.palette`).
+- [Feature] Dot-command autocomplete dropdown in the CommandBar: Tab completes, Up/Down navigate, Esc dismisses. Matches by shellName or alias prefix.
+- [Feature] Shell history is persisted across sessions (capped at 200 lines).
 - [Enhanced] Global-scope keymap actions (`app.togglePanel`, `app.toggleSqlEditor`, `tabs.next`, `tabs.prev`, etc.) now resolve via `commandRegistry.run(action)` instead of hand-maintained switch statements in three callers.
+- [Enhanced] Spreadsheet-scope keymap actions (`spreadsheet.moveUp`, `spreadsheet.copy`, etc.) likewise unify through the registry, routing to the active tab's `SpreadsheetVisualizer`.
 - [Enhanced] CommandBar is now always visible — reachable before the first dataset is imported so `.open` / `.help` work from a cold start.
 - [Deprecated] CommandPalette (Ctrl+P) is flagged for removal in 0.9. It keeps working in 0.8, backed by the new registry.
 - [Removed] Duplicate palette entries `view.toggleLeftPanel` and `sql.toggleEditor` (superseded by `app.togglePanel` / `app.toggleSqlEditor`).

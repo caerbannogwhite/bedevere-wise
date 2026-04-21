@@ -558,8 +558,9 @@ export class BedevereApp implements EventHandler {
 
     this.commandPalette.registerCommand({
       id: "dataset.exportSelection",
+      shellName: "export",
       title: "Export Selection",
-      description: "Export the current selection",
+      description: "Export the current selection (csv | tsv | html | markdown)",
       category: "Dataset",
       parameters: [
         {
@@ -968,6 +969,161 @@ export class BedevereApp implements EventHandler {
         throw new Error(".tab expects 'next', 'prev', or a 1-based index");
       },
     });
+
+    // ---- .settings ------------------------------------------------------
+    commandRegistry.register({
+      id: "shell.settings",
+      shellName: "settings",
+      title: "Settings",
+      description:
+        "No args: print current settings. `key=value` (one or more): set. Known keys: theme, dateFormat, datetimeFormat, numberMinDecimals, numberMaxDecimals, numberUseGrouping, minCellWidth, maxStringLength, copyDelimiter, copyIncludeHeader.",
+      category: "View",
+      execute: async (params) => {
+        await this.handleShellSettings(params ?? {});
+      },
+    });
+
+    // ---- .view save|drop <name> -----------------------------------------
+    commandRegistry.register({
+      id: "shell.view",
+      shellName: "view",
+      title: "Manage SQL Views",
+      description: "`.view save <name>` persists the editor's query as a view; `.view drop <name>` removes one.",
+      category: "View",
+      parameters: [
+        { name: "action", type: "string", required: true, options: () => ["save", "drop"] },
+        { name: "name", type: "string", required: true },
+      ],
+      execute: async (params) => {
+        const action = String(params?.action ?? "").trim();
+        const name = String(params?.name ?? "").trim();
+        if (!name) throw new Error(".view requires a name: .view save <name> or .view drop <name>");
+        if (action === "save") {
+          const editor = this.tabManager.getSqlEditor();
+          const query = editor?.getQuery().trim();
+          if (!query) throw new Error("SQL editor is empty — open it with .sql and type a query first");
+          await this.viewManager.createView(name, query);
+          this.showMessage(`View "${name}" saved`, "success");
+          return;
+        }
+        if (action === "drop") {
+          await this.viewManager.dropView(name);
+          this.showMessage(`View "${name}" dropped`, "success");
+          return;
+        }
+        throw new Error(`.view expects 'save' or 'drop' as the first argument, got '${action}'`);
+      },
+    });
+
+    // ---- .query save <name> ---------------------------------------------
+    commandRegistry.register({
+      id: "shell.query",
+      shellName: "query",
+      title: "Manage Query Bookmarks",
+      description: "`.query save <name>` bookmarks the editor's current query.",
+      category: "Query",
+      parameters: [
+        { name: "action", type: "string", required: true, options: () => ["save"] },
+        { name: "name", type: "string", required: true },
+      ],
+      execute: (params) => {
+        const action = String(params?.action ?? "").trim();
+        const name = String(params?.name ?? "").trim();
+        if (action !== "save") throw new Error(".query currently supports only 'save'");
+        if (!name) throw new Error(".query save requires a name");
+        const editor = this.tabManager.getSqlEditor();
+        const query = editor?.getQuery().trim();
+        if (!query) throw new Error("SQL editor is empty — open it with .sql and type a query first");
+        this.persistenceService.saveQueryBookmark(name, query);
+        this.showMessage(`Query "${name}" bookmarked`, "success");
+      },
+    });
+  }
+
+  /**
+   * Back-end for `.settings`. With no args, emit the current config through
+   * the shell's text/details channel (so the status-bar chip stays one line
+   * and the popover carries the full dump). With args, apply each as a
+   * setting via the same paths as the Settings tab.
+   */
+  private async handleShellSettings(params: Record<string, any>): Promise<void> {
+    const keys = Object.keys(params).filter((k) => k !== "_args");
+
+    // Print mode.
+    const positional = (params._args as string[] | undefined) ?? [];
+    if (keys.length === 0 && positional.length === 0) {
+      const s = this.persistenceService.loadAppSettings();
+      const details = [
+        `  theme              = ${s.theme ?? "auto"}`,
+        `  dateFormat         = ${s.dateFormat ?? "yyyy-MM-dd"}`,
+        `  datetimeFormat     = ${s.datetimeFormat ?? "yyyy-MM-dd HH:mm:ss"}`,
+        `  numberMinDecimals  = ${s.numberMinDecimals ?? 2}`,
+        `  numberMaxDecimals  = ${s.numberMaxDecimals ?? 2}`,
+        `  numberUseGrouping  = ${s.numberUseGrouping ?? true}`,
+        `  minCellWidth       = ${s.minCellWidth ?? 100}`,
+        `  maxStringLength    = ${s.maxStringLength ?? 100}`,
+        `  copyDelimiter      = ${s.copyDelimiter ?? "tab"}`,
+        `  copyIncludeHeader  = ${s.copyIncludeHeader ?? true}`,
+      ].join("\n");
+      this.showMessage("Settings (click to expand — override with .settings key=value)", "info", {
+        details,
+        duration: 0,
+      });
+      return;
+    }
+
+    // Apply mode.
+    const updates: string[] = [];
+    let formatChanged = false;
+    const settings = this.persistenceService.loadAppSettings();
+    for (const key of keys) {
+      const raw = params[key];
+      switch (key) {
+        case "theme": {
+          const v = String(raw);
+          if (!["light", "dark", "auto"].includes(v)) throw new Error(`theme must be light|dark|auto, got '${v}'`);
+          settings.theme = v as "light" | "dark" | "auto";
+          this.setTheme(v === "auto" ? this.detectTheme() : (v as "light" | "dark"));
+          updates.push(`theme=${v}`);
+          break;
+        }
+        case "dateFormat":      settings.dateFormat = String(raw);       formatChanged = true; updates.push(`dateFormat=${raw}`); break;
+        case "datetimeFormat":  settings.datetimeFormat = String(raw);   formatChanged = true; updates.push(`datetimeFormat=${raw}`); break;
+        case "numberMinDecimals": settings.numberMinDecimals = Number(raw); formatChanged = true; updates.push(`numberMinDecimals=${raw}`); break;
+        case "numberMaxDecimals": settings.numberMaxDecimals = Number(raw); formatChanged = true; updates.push(`numberMaxDecimals=${raw}`); break;
+        case "numberUseGrouping": settings.numberUseGrouping = raw === true || raw === "true"; formatChanged = true; updates.push(`numberUseGrouping=${settings.numberUseGrouping}`); break;
+        case "minCellWidth":    settings.minCellWidth = Number(raw);     formatChanged = true; updates.push(`minCellWidth=${raw}`); break;
+        case "maxStringLength": settings.maxStringLength = Number(raw);  formatChanged = true; updates.push(`maxStringLength=${raw}`); break;
+        case "copyDelimiter": {
+          const v = String(raw);
+          if (v !== "tab" && v !== "comma") throw new Error(`copyDelimiter must be tab|comma, got '${v}'`);
+          settings.copyDelimiter = v;
+          updates.push(`copyDelimiter=${v}`);
+          break;
+        }
+        case "copyIncludeHeader":
+          settings.copyIncludeHeader = raw === true || raw === "true";
+          updates.push(`copyIncludeHeader=${settings.copyIncludeHeader}`);
+          break;
+        default:
+          throw new Error(`Unknown setting: ${key}. Run .settings with no args to list known keys.`);
+      }
+    }
+    this.persistenceService.saveAppSettings(settings);
+
+    if (formatChanged) {
+      this.applyFormatSettings({
+        dateFormat: settings.dateFormat ?? "yyyy-MM-dd",
+        datetimeFormat: settings.datetimeFormat ?? "yyyy-MM-dd HH:mm:ss",
+        numberMinDecimals: settings.numberMinDecimals ?? 2,
+        numberMaxDecimals: settings.numberMaxDecimals ?? 2,
+        numberUseGrouping: settings.numberUseGrouping ?? true,
+        minCellWidth: settings.minCellWidth ?? 100,
+        maxStringLength: settings.maxStringLength ?? 100,
+      });
+    }
+
+    this.showMessage(`Updated: ${updates.join(", ")}`, "success");
   }
 
   private async executeCommand(command: string): Promise<void> {
