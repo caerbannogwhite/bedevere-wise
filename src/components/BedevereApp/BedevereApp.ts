@@ -597,15 +597,6 @@ export class BedevereApp implements EventHandler {
     });
 
     this.commandPalette.registerCommand({
-      id: "dataset.export",
-      title: "Export Current Dataset",
-      description: "Export the currently active dataset",
-      category: "Dataset",
-      when: () => this.tabManager.getActiveDatasetTab() !== null,
-      execute: () => this.exportCurrentDataset(),
-    });
-
-    this.commandPalette.registerCommand({
       id: "dataset.closeAll",
       title: "Close All Datasets",
       description: "Close all open datasets",
@@ -749,10 +740,6 @@ export class BedevereApp implements EventHandler {
         this.commandPalette?.show();
         break;
 
-      case "dataset.export":
-        this.exportCurrentDataset();
-        break;
-
       default:
         console.warn("Unknown command:", command);
     }
@@ -772,16 +759,6 @@ export class BedevereApp implements EventHandler {
       document.exitFullscreen();
     } else {
       document.documentElement.requestFullscreen();
-    }
-  }
-
-  private async exportCurrentDataset(): Promise<void> {
-    const activeDatasetTab = this.tabManager.getActiveDatasetTab();
-    if (activeDatasetTab) {
-      const selection = await activeDatasetTab.spreadsheetVisualizer.getSelection();
-      console.log("selection", selection);
-    } else {
-      this.showMessage("No active dataset to export", "warning");
     }
   }
 

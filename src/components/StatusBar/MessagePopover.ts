@@ -1,4 +1,5 @@
 import { BedevereAppMessageType } from "../BedevereApp/BedevereApp";
+import { escapeHtml } from "../../utils/html";
 
 const ICONS: Record<BedevereAppMessageType, string> = {
   error: "\u2716", // ✖
@@ -155,12 +156,6 @@ export class MessagePopover {
   }
 }
 
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 function formatTime(d: Date): string {
   const pad = (n: number) => n.toString().padStart(2, "0");

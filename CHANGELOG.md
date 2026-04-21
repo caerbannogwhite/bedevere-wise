@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.7-son-of-uther-pendragon
+
+- [Feature] Inspectable STRUCT / LIST / MAP / JSON / UNION cells with a key/value popover that auto-opens as the selection lands on a complex cell (respects Esc dismissal)
+- [Feature] Query execution time shown as a status-bar chip (⏱ for success / ✖ for failures) with smart unit switching (ms / s / m s)
+- [Feature] Loading feedback for file and folder imports — per-file progress messages and an aggregated success / partial / failure summary at the end of a batch
+- [Feature] Settings tab exposes date, datetime, number, and display preferences (decimal places, thousands separator, minimum column width, max chars per cell); preferences persist across reloads
+- [Feature] Configurable keymap with a rebind UI and a Reset keymap action
+- [Feature] Tab-switch keyboard shortcuts and copy-format preferences (delimiter, include-header)
+- [Feature] Help panel SQL tutorial keyed on the Penguins sample dataset
+- [Enhanced] Cells that overflow their column now render an ellipsis instead of horizontally squeezed glyphs
+- [Enhanced] Columns keep their content-derived width instead of stretching to fill the viewport
+- [Enhanced] Type-aware Arrow unwrap; DECIMAL, nested-struct, and map payloads render correctly
+- [Enhanced] Arrow keys no longer move cell selection while typing in an input
+- [Bug-fix] Date / datetime format presets now honour the literal pattern (previously all presets produced identical output because Intl.DateTimeFormat ignored property order)
+- [Bug-fix] Numeric format settings actually apply (previously the options bag was stringified to "[object Object]" and discarded)
+- [Bug-fix] Cell cache TTL was 1 minute despite a "5 minutes" comment; corrected to 5 minutes
+- [Renamed] MultiDatasetVisualizer → TabManager
+- [Chore] Consolidated `escapeHtml` into `src/utils/html.ts`; removed unused event-system types, container-size constants, and a broken export-dataset stub
+
 ## v0.6-it-is-i
 
 - [Feature] DuckDB-WASM data backend replacing the previous in-memory engine

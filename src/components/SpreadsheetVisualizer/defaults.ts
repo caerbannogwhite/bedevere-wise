@@ -1,16 +1,10 @@
 import { getThemeColors, ThemeColors } from "./utils/theme";
 
-export const DEFAULT_CONTAINER_WIDTH = 1200;
-export const DEFAULT_CONTAINER_HEIGHT = 800;
-
 export const DEFAULT_MAX_HEIGHT = Number.MAX_SAFE_INTEGER;
 export const DEFAULT_MAX_WIDTH = Number.MAX_SAFE_INTEGER;
 
 export const DEFAULT_MIN_HEIGHT = 400;
 export const DEFAULT_MIN_WIDTH = 600;
-
-export const DEFAULT_HEIGHT = DEFAULT_CONTAINER_HEIGHT;
-export const DEFAULT_WIDTH = DEFAULT_CONTAINER_WIDTH;
 
 export const DEFAULT_CELL_HEIGHT = 24;
 export const DEFAULT_MIN_CELL_WIDTH = 100;
@@ -49,7 +43,7 @@ export const DEFAULT_PERCENT_FORMAT_GUESS_FIT = 0.8;
 export const DEFAULT_INITIAL_CACHE_SIZE = 200;
 export const DEFAULT_CACHE_CHUNK_SIZE = 50;
 export const DEFAULT_MAX_CACHE_SIZE = 1000;
-export const DEFAULT_CACHE_TIME_TO_LIVE = 1000 * 60 * 1; // 5 minutes
+export const DEFAULT_CACHE_TIME_TO_LIVE = 1000 * 60 * 5; // 5 minutes
 
 /**
  * Returns the full theme-aware defaults object. This is cached inside

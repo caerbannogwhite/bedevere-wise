@@ -71,27 +71,6 @@ export interface FocusManager {
   onFocusChange(callback: (component: FocusableComponent | null, previousId: FocusableComponent | null) => void): void;
 }
 
-export enum EventPriority {
-  LOW = 0,
-  NORMAL = 1,
-  HIGH = 2,
-  CRITICAL = 3,
-}
-
-export interface EventListenerOptions {
-  priority?: EventPriority;
-  capture?: boolean;
-  once?: boolean;
-  passive?: boolean;
-}
-
-export interface ComponentEventBinding {
-  component: FocusableComponent;
-  eventTypes: string[];
-  priority: EventPriority;
-  options?: EventListenerOptions;
-}
-
 // Event dispatch result
 export interface EventDispatchResult {
   handled: boolean;

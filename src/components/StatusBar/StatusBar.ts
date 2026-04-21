@@ -3,6 +3,7 @@ import { ICellSelection, SpreadsheetOptions } from "../SpreadsheetVisualizer/typ
 import { MessagePopover } from "./MessagePopover";
 import { CellValuePopover } from "./CellValuePopover";
 import { ComplexKind, getComplexKind, isComplexType } from "../../data/types";
+import { escapeHtml } from "../../utils/html";
 
 export interface MessageOptions {
   /** Duration in ms; 0 means persistent until dismissed. Defaults per type. */
@@ -265,7 +266,7 @@ export class StatusBar {
           kind: getComplexKind(columnDataType!),
         };
 
-        const escapedFormatted = this.escapeHtml(formatted);
+        const escapedFormatted = escapeHtml(formatted);
         // Only show the "\u2026" expand hint when the compact preview had to
         // drop fields or collapse nested values. For a small flat struct /
         // list that fits entirely in the preview, the hint is noise.
@@ -304,9 +305,9 @@ export class StatusBar {
       const hasRaw = raw != null && String(raw) !== formatted;
       const plainText = hasRaw ? `${formatted} [${raw}]` : formatted;
 
-      const escapedFormatted = this.escapeHtml(formatted);
+      const escapedFormatted = escapeHtml(formatted);
       const formattedSpan = `<span class="cell-value__formatted cell-value__formatted--${dataType}">${escapedFormatted}</span>`;
-      const rawSpan = hasRaw ? ` <span class="cell-value__raw">[${this.escapeHtml(String(raw))}]</span>` : "";
+      const rawSpan = hasRaw ? ` <span class="cell-value__raw">[${escapeHtml(String(raw))}]</span>` : "";
 
       this.updateItem("cell-value", {
         text: plainText,
@@ -339,10 +340,6 @@ export class StatusBar {
         options: this.spreadsheetOptions,
       });
     }
-  }
-
-  private escapeHtml(s: string): string {
-    return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
 
   public showMessage(
@@ -458,24 +455,6 @@ export class StatusBar {
       tooltip: "Last query execution time",
       visible: false,
     });
-
-    // this.addItem({
-    //   id: "column-stats",
-    //   text: "Stats",
-    //   priority: 90,
-    //   alignment: "right",
-    //   tooltip: "Toggle Column Statistics",
-    //   command: "view.toggleColumnStats",
-    // });
-
-    // this.addItem({
-    //   id: "export-data",
-    //   text: "Export",
-    //   priority: 80,
-    //   alignment: "right",
-    //   tooltip: "Export current dataset",
-    //   command: "dataset.export",
-    // });
   }
 
   private render(): void {
@@ -590,13 +569,6 @@ export class StatusBar {
     this.cellValuePopover.destroy();
     this.container.remove();
   }
-}
-
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
 }
 
 /**

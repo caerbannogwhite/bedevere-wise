@@ -17,7 +17,7 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     super(container, dataProvider, options, statsVisualizer, componentId ?? "spreadsheet-visualizer");
 
     // Use provided stats visualizer or create a new one
-    this.statsVisualizer = statsVisualizer ?? new ColumnStatsVisualizer(this.container, this, 350);
+    this.statsVisualizer = statsVisualizer ?? new ColumnStatsVisualizer(this.container, this);
     this.statsVisualizer.setSpreadsheetVisualizer(this).catch(console.error);
 
     // Setup theme change listener

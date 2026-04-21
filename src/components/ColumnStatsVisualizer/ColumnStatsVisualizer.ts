@@ -15,6 +15,7 @@ import { ColumnFilterManager, ColumnFilter } from "../../data/ColumnFilterManage
 import { ColumnInternal } from "../SpreadsheetVisualizer/internals";
 import { formatValue } from "../SpreadsheetVisualizer/utils/formatting";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
+import { escapeHtml } from "../../utils/html";
 
 export class ColumnStatsVisualizer {
   private container: HTMLElement;
@@ -25,7 +26,7 @@ export class ColumnStatsVisualizer {
   public onFilterChangeCallback?: () => void;
   private onShowStatsCallback?: () => void;
 
-  constructor(parent: HTMLElement, spreadsheetVisualizer: SpreadsheetVisualizer | null, _statsPanelWidth: number) {
+  constructor(parent: HTMLElement, spreadsheetVisualizer: SpreadsheetVisualizer | null) {
     this.container = document.createElement("div");
     this.spreadsheetVisualizer = spreadsheetVisualizer;
 
@@ -538,14 +539,6 @@ export class ColumnStatsVisualizer {
   }
 }
 
-// ---------- helpers ----------
-
-function escapeHtml(s: string): string {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;");
-}
 
 function escapeAttr(s: string): string {
   return escapeHtml(s).replace(/"/g, "&quot;");

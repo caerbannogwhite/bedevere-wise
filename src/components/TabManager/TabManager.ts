@@ -79,7 +79,7 @@ export class TabManager {
     this.container.offsetHeight;
 
     // Create shared stats visualizer
-    this.sharedStatsVisualizer = new ColumnStatsVisualizerFocusable(this.container, null, 350);
+    this.sharedStatsVisualizer = new ColumnStatsVisualizerFocusable(this.container, null);
 
     // Setup resize handling
     this.setupResizeHandling();

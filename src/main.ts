@@ -13,7 +13,7 @@ import {
 // Initialize the Bedevere Wise application
 async function initApplication() {
   const debugMode = true;
-  const appVersion = "0.6-it-is-i";
+  const appVersion = "0.7-son-of-uther-pendragon";
 
   // Initialize DuckDB first
   try {

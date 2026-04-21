@@ -7,8 +7,8 @@ export class ColumnStatsVisualizerFocusable extends ColumnStatsVisualizer implem
   public readonly canReceiveFocus: boolean = true;
   public readonly focusableElement: HTMLElement;
 
-  constructor(parent: HTMLElement, spreadsheetVisualizer: SpreadsheetVisualizer | null, statsPanelWidth: number) {
-    super(parent, spreadsheetVisualizer, statsPanelWidth);
+  constructor(parent: HTMLElement, spreadsheetVisualizer: SpreadsheetVisualizer | null) {
+    super(parent, spreadsheetVisualizer);
 
     this.focusableElement = this.getContainer();
     this.componentId = "column-stats-visualizer";
