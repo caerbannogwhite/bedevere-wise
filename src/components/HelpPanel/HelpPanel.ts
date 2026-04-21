@@ -1149,6 +1149,15 @@ export class HelpPanel {
       <p class="help-panel__about-version">v${this.options.version}</p>
       <p class="help-panel__about-description">A local-first data viewer powered by DuckDB.</p>
       <div class="help-panel__about-section">
+        <h3 class="help-panel__about-section-title">Shell</h3>
+        <p class="help-panel__about-shell-intro">
+          Above the spreadsheet sits a command bar. Lines starting with <code>.</code> run as shell
+          commands (type <code>.help</code> for the full list); anything else is executed as
+          DuckDB SQL. The shell shares a single command registry with the command palette —
+          the palette is deprecated and will be removed in 0.9.
+        </p>
+      </div>
+      <div class="help-panel__about-section">
         <h3 class="help-panel__about-section-title">Dependencies</h3>
         <ul class="help-panel__about-deps">
           <li><a href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener noreferrer">DuckDB-WASM</a></li>

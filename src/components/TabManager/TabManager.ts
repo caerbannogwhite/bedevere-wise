@@ -9,6 +9,7 @@ import { ColumnFilterManager } from "../../data/ColumnFilterManager";
 import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvider";
 import { EventDispatcher } from "../BedevereApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
+import { parseShellLine, runShellLine, ShellResult } from "../../data/Shell";
 
 interface DatasetTab {
   metadata: DatasetMetadata;
@@ -39,6 +40,7 @@ export class TabManager {
   private onSelectCallback?: (dataset: DataProvider) => void;
   private onQueryErrorCallback?: (error: Error) => void;
   private onQueryCompletedCallback?: (result: { elapsedMs: number; error?: Error }) => void;
+  private onShellMessageCallback?: (text: string, details?: string) => void;
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
@@ -80,6 +82,12 @@ export class TabManager {
 
     // Create shared stats visualizer
     this.sharedStatsVisualizer = new ColumnStatsVisualizerFocusable(this.container, null);
+
+    // Command bar is always visible — it hosts the shell input and needs to
+    // be usable before any dataset exists (.open, .help etc.). Previously
+    // created lazily on the first dataset; gating moved here.
+    this.commandBar = new CommandBar({ container: this.commandBarContainer });
+    this.commandBar.setOnToggleSqlEditorCallback(() => this.toggleSqlEditor());
 
     // Setup resize handling
     this.setupResizeHandling();
@@ -175,9 +183,8 @@ export class TabManager {
     // Initialize the spreadsheet
     await spreadsheetVisualizer.initialize();
 
-    // If this is the first tab, activate it and hide empty state
+    // If this is the first tab, activate it.
     if (this.tabs.length === 1) {
-      this.showCommandBar();
       await this.activateTab(metadata.name);
     }
   }
@@ -239,10 +246,9 @@ export class TabManager {
       } else {
         this.activeTabId = null;
         this.contentContainer.innerHTML = "";
-        // Hide stats visualizer when no datasets are active
+        // Hide stats visualizer when no datasets are active. The command bar
+        // stays visible so the user can run `.open` etc. to get a new dataset.
         this.sharedStatsVisualizer.hide();
-        // Hide cell value bar when no datasets remain
-        this.hideCommandBar();
       }
     }
 
@@ -455,11 +461,16 @@ export class TabManager {
       }
     });
 
-    // Resize spreadsheet when editor toggles
-    this.sqlEditor.setOnToggleCallback(() => {
-      // Give the CSS transition time to apply, then resize
+    // Sync the CommandBar's SQL-toggle state + resize on editor toggle.
+    this.sqlEditor.setOnToggleCallback((isExpanded) => {
+      this.commandBar?.setSqlEditorExpanded(isExpanded);
       setTimeout(() => this.handleResize(), 260);
     });
+
+    // CommandBar shell submit is wired here because dispatch to SQL needs
+    // duckDBService; dot-only commands (.help etc.) would work earlier but
+    // this keeps the wiring in one place.
+    this.commandBar?.setOnSubmitCallback((input) => this.handleCommandBarSubmit(input));
   }
 
   public toggleSqlEditor(): void {
@@ -547,31 +558,52 @@ export class TabManager {
     }
   }
 
-  private showCommandBar(): void {
-    if (this.commandBar) return;
-
-    this.commandBar = new CommandBar({
-      container: this.commandBarContainer,
-    });
-
-    // Wire up SQL editor toggle from cell value bar
-    this.commandBar.setOnToggleSqlEditorCallback(() => {
-      this.toggleSqlEditor();
-    });
-
-    // Sync toggle button state when SQL editor toggles
-    if (this.sqlEditor) {
-      this.sqlEditor.setOnToggleCallback((isExpanded) => {
-        this.commandBar?.setSqlEditorExpanded(isExpanded);
-        setTimeout(() => this.handleResize(), 260);
-      });
+  /**
+   * Dispatch a CommandBar submission: dot-command → Shell; anything else → SQL.
+   * Routed through the same code path as the SqlEditor's Ctrl+Enter, so the
+   * 0.7 query-time chip and error toast behave identically.
+   */
+  private async handleCommandBarSubmit(input: string): Promise<void> {
+    const parsed = parseShellLine(input);
+    if (parsed) {
+      const result = await runShellLine(input);
+      this.handleShellResult(result);
+      return;
+    }
+    if (!this.duckDBService) {
+      this.onQueryErrorCallback?.(new Error("Database not initialized"));
+      return;
+    }
+    try {
+      await this.addQueryResult(input, this.duckDBService);
+    } catch (err) {
+      this.onQueryErrorCallback?.(err instanceof Error ? err : new Error(String(err)));
     }
   }
 
-  private hideCommandBar(): void {
-    if (this.commandBar) {
-      this.commandBar.destroy();
-      this.commandBar = null;
+  /**
+   * Render a {@link ShellResult}. Errors flow to `onQueryErrorCallback` so the
+   * status-bar error toast fires via the same path SQL uses; text output is
+   * emitted through the message popover so long `.help` / `.settings` dumps
+   * remain readable.
+   */
+  private handleShellResult(result: ShellResult): void {
+    if (result.kind === "error") {
+      this.onQueryErrorCallback?.(result.error ?? new Error(result.text ?? "Shell error"));
+      return;
     }
+    if (result.kind === "text" && result.text && result.text.length > 0) {
+      this.onShellMessageCallback?.(result.text, result.details);
+    }
+    // kind === "table" handling lands with Phase 6 dot-commands (.tables / .columns).
+  }
+
+  /**
+   * Route shell text output (multi-line `.help`, `.settings`, etc.) to a
+   * surface chosen by the host (usually StatusBar.showMessage with details
+   * for click-to-expand). BedevereApp wires this during setup.
+   */
+  public setOnShellMessageCallback(callback: (text: string, details?: string) => void): void {
+    this.onShellMessageCallback = callback;
   }
 }

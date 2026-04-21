@@ -22,6 +22,8 @@ import { DuckDBService } from "@/data/DuckDBService";
 import { ViewManager } from "@/data/ViewManager";
 import { PersistenceService, persistenceService } from "@/data/PersistenceService";
 import { keymapService } from "@/data/KeymapService";
+import { commandRegistry } from "@/data/CommandRegistry";
+import { quoteIdent } from "@/data/sqlIdent";
 import { FileImportService } from "@/data/FileImportService";
 import { DuckDBExtensionLoader } from "@/data/DuckDBExtensionLoader";
 import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
@@ -203,20 +205,12 @@ export class BedevereApp implements EventHandler {
     }
 
     const action = keymapService.matchEvent(e, "global");
-    if (action) {
-      e.preventDefault();
-      switch (action) {
-        case "app.togglePanel":      this.toggleControlPanel(); break;
-        case "app.commandPalette":   this.commandPalette?.show(); break;
-        case "app.toggleSqlEditor":  this.toggleSqlEditor(); break;
-        case "app.toggleFullscreen": this.toggleFullscreen(); break;
-        case "tabs.next":            this.tabManager.switchToNextTab(); break;
-        case "tabs.prev":            this.tabManager.switchToPreviousTab(); break;
-      }
-      return true;
+    if (!action) return false;
+    e.preventDefault();
+    if (commandRegistry.has(action)) {
+      commandRegistry.run(action).catch((err) => console.error(`command ${action} failed:`, err));
     }
-
-    return false;
+    return true;
   }
 
   public async handleResize(_e: Event): Promise<boolean> {
@@ -340,6 +334,12 @@ export class BedevereApp implements EventHandler {
     // Show query elapsed time on the right side of the status bar.
     this.tabManager.setOnQueryCompletedCallback(({ elapsedMs, error }) => {
       this.statusBar?.updateQueryTime(elapsedMs, !error);
+    });
+
+    // Shell text output (.help, .settings, etc.) → status bar info toast with
+    // click-to-expand for long content.
+    this.tabManager.setOnShellMessageCallback((text, details) => {
+      this.showMessage(text, "info", { details, duration: 0 });
     });
 
     // Dataset panel
@@ -515,14 +515,6 @@ export class BedevereApp implements EventHandler {
     });
 
     this.commandPalette.registerCommand({
-      id: "view.toggleLeftPanel",
-      title: "Toggle Left Panel",
-      description: "Show or hide the left panel",
-      category: "View",
-      execute: () => this.toggleControlPanel(),
-    });
-
-    this.commandPalette.registerCommand({
       id: "view.toggleTheme",
       title: "Toggle Theme",
       description: "Switch between light and dark themes",
@@ -607,15 +599,6 @@ export class BedevereApp implements EventHandler {
 
     // SQL Editor commands
     this.commandPalette.registerCommand({
-      id: "sql.toggleEditor",
-      title: "Toggle SQL Editor",
-      description: "Show or hide the SQL editor panel",
-      category: "SQL",
-      keybinding: "Ctrl+E",
-      execute: () => this.toggleSqlEditor(),
-    });
-
-    this.commandPalette.registerCommand({
       id: "sql.executeQuery",
       title: "Execute SQL Query",
       description: "Execute the current query in the SQL editor",
@@ -627,6 +610,7 @@ export class BedevereApp implements EventHandler {
 
     this.commandPalette.registerCommand({
       id: "sql.clearEditor",
+      shellName: "clear",
       title: "Clear SQL Editor",
       description: "Clear the SQL editor content",
       category: "SQL",
@@ -732,6 +716,221 @@ export class BedevereApp implements EventHandler {
       },
     });
 
+    // Global-scope keymap actions. Registered here so handleKeyDown can
+    // dispatch via commandRegistry.run(action) instead of a local switch,
+    // and so the palette / shell / .help all see the same verbs.
+    commandRegistry.register({
+      id: "app.togglePanel",
+      shellName: "panel",
+      title: "Toggle Left Panel",
+      description: "Show or hide the left panel",
+      category: "View",
+      scope: "global",
+      execute: () => this.toggleControlPanel(),
+    });
+    commandRegistry.register({
+      id: "app.commandPalette",
+      shellName: "palette",
+      title: "Command Palette",
+      description: "Open the command palette (deprecated in 0.9 — the shell will be the canonical surface)",
+      category: "View",
+      scope: "global",
+      execute: () => this.commandPalette?.show(),
+    });
+    commandRegistry.register({
+      id: "app.toggleSqlEditor",
+      shellName: "sql",
+      title: "Toggle SQL Editor",
+      description: "Show or hide the SQL editor panel",
+      category: "SQL",
+      scope: "global",
+      execute: () => this.toggleSqlEditor(),
+    });
+    commandRegistry.register({
+      id: "app.toggleFullscreen",
+      shellName: "fullscreen",
+      title: "Toggle Fullscreen",
+      description: "Toggle fullscreen mode",
+      category: "View",
+      scope: "global",
+      execute: () => this.toggleFullscreen(),
+    });
+    commandRegistry.register({
+      id: "tabs.next",
+      title: "Next Tab",
+      description: "Switch to the next dataset tab",
+      category: "Navigation",
+      scope: "global",
+      execute: () => this.tabManager.switchToNextTab(),
+    });
+    commandRegistry.register({
+      id: "tabs.prev",
+      title: "Previous Tab",
+      description: "Switch to the previous dataset tab",
+      category: "Navigation",
+      scope: "global",
+      execute: () => this.tabManager.switchToPreviousTab(),
+    });
+
+    // Shell-native commands (new for 0.8 — not in palette, not bound to keys).
+    this.registerShellCommands();
+  }
+
+  /**
+   * Commands that are introduced by the shell: `.theme`, `.tables`, `.columns`,
+   * `.open`, `.close`, `.tab`. They live alongside the palette/keymap commands
+   * in the registry and are reachable from `.help`.
+   */
+  private registerShellCommands(): void {
+    commandRegistry.register({
+      id: "view.setTheme",
+      shellName: "theme",
+      title: "Set Theme",
+      description: "Set light / dark / auto",
+      category: "View",
+      parameters: [
+        {
+          name: "theme",
+          type: "string",
+          required: true,
+          description: "light | dark | auto",
+          options: () => ["light", "dark", "auto"],
+        },
+      ],
+      execute: (params) => {
+        const choice = params?.theme as "light" | "dark" | "auto" | undefined;
+        if (!choice || !["light", "dark", "auto"].includes(choice)) {
+          throw new Error(".theme requires one of: light, dark, auto");
+        }
+        const resolved = choice === "auto" ? this.detectTheme() : choice;
+        this.setTheme(resolved);
+        const s = this.persistenceService.loadAppSettings();
+        s.theme = choice;
+        this.persistenceService.saveAppSettings(s);
+      },
+    });
+
+    commandRegistry.register({
+      id: "shell.tables",
+      shellName: "tables",
+      title: "List Tables",
+      description: "Open a new tab listing every table in the current database",
+      category: "Dataset",
+      execute: async () => {
+        if (!this.duckDBService) throw new Error("Database not initialized");
+        await this.tabManager.addQueryResult(
+          "SELECT table_name, table_type FROM information_schema.tables WHERE table_schema = 'main' ORDER BY table_name",
+          this.duckDBService,
+        );
+      },
+    });
+
+    commandRegistry.register({
+      id: "shell.columns",
+      shellName: "columns",
+      title: "Describe Table",
+      description: "Open a new tab with the columns of a table",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "table",
+          type: "string",
+          required: true,
+          description: "Table name",
+          options: () => this.tabManager.getDatasetIds(),
+        },
+      ],
+      execute: async (params) => {
+        const table = params?.table;
+        if (!table) throw new Error(".columns requires a table name (e.g. .columns penguins)");
+        if (!this.duckDBService) throw new Error("Database not initialized");
+        await this.tabManager.addQueryResult(`DESCRIBE ${quoteIdent(String(table))}`, this.duckDBService);
+      },
+    });
+
+    commandRegistry.register({
+      id: "shell.open",
+      shellName: "open",
+      title: "Open Dataset / File / Folder",
+      description: "No args → file picker. `--folder` / `-d` → folder picker. <name> → switch to an already-imported dataset.",
+      category: "Dataset",
+      execute: async (params) => {
+        // Folder form.
+        if (params?.folder || params?.d) {
+          this.leftPanel?.openFolderPicker();
+          return;
+        }
+        // Dataset-name form.
+        const arg = (params?._args as string[] | undefined)?.[0];
+        if (arg && this.tabManager.getDatasetIds().includes(arg)) {
+          await this.tabManager.switchToDataset(arg);
+          return;
+        }
+        if (arg) {
+          // Arg supplied but doesn't match an imported dataset — error out so
+          // the user knows, rather than silently opening a file picker.
+          throw new Error(`No dataset named '${arg}'. Drop a file or run .open to pick one.`);
+        }
+        // No-arg form → native file picker. Reuses the ControlPanel drop path.
+        const picker = document.createElement("input");
+        picker.type = "file";
+        picker.multiple = true;
+        const exts = this.fileImportService.getSupportedExtensions();
+        picker.accept = exts.map((e) => (e.startsWith(".") ? e : "." + e)).join(",");
+        picker.addEventListener("change", async () => {
+          if (picker.files && picker.files.length > 0) {
+            await this.leftPanel?.addFilesFromDrop(Array.from(picker.files), true);
+          }
+        });
+        picker.click();
+      },
+    });
+
+    commandRegistry.register({
+      id: "shell.close",
+      shellName: "close",
+      title: "Close Dataset Tab",
+      description: "Close the named dataset, or the active tab if no name is given",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "dataset",
+          type: "string",
+          required: false,
+          description: "Dataset name (defaults to active tab)",
+          options: () => this.tabManager.getDatasetIds(),
+        },
+      ],
+      execute: (params) => {
+        const name = (params?.dataset as string | undefined) ?? this.tabManager.getActiveDatasetTab()?.metadata.name;
+        if (!name) throw new Error("No active dataset to close");
+        this.tabManager.closeDataset(name);
+      },
+    });
+
+    commandRegistry.register({
+      id: "shell.tab",
+      shellName: "tab",
+      title: "Switch Tab",
+      description: "next | prev | <1-based index>",
+      category: "Navigation",
+      parameters: [
+        {
+          name: "target",
+          type: "string",
+          required: true,
+          description: "next | prev | N (1-based)",
+          options: () => ["next", "prev"],
+        },
+      ],
+      execute: (params) => {
+        const arg = String(params?.target ?? "").trim();
+        if (arg === "next") { this.tabManager.switchToNextTab(); return; }
+        if (arg === "prev") { this.tabManager.switchToPreviousTab(); return; }
+        if (/^\d+$/.test(arg)) { this.tabManager.switchToTabByIndex(Number(arg) - 1); return; }
+        throw new Error(".tab expects 'next', 'prev', or a 1-based index");
+      },
+    });
   }
 
   private async executeCommand(command: string): Promise<void> {

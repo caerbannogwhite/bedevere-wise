@@ -1,26 +1,9 @@
 import { EventDispatcher, FocusableComponent } from "../BedevereApp/types";
 import { ParameterForm } from "./ParameterForm";
+import { Command, CommandParameter, commandRegistry } from "../../data/CommandRegistry";
 
-export interface CommandParameter {
-  name: string;
-  type: string;
-  description?: string;
-  required?: boolean;
-  default?: string;
-  options?: () => string[];
-}
-
-export interface Command {
-  id: string;
-  title: string;
-  parameters?: CommandParameter[];
-  description?: string;
-  category?: string;
-  keybinding?: string;
-  icon?: string;
-  when?: () => boolean;
-  execute: (params?: Record<string, any>) => void | Promise<void>;
-}
+// Re-export so existing importers of CommandPalette keep working.
+export type { Command, CommandParameter };
 
 export class CommandPalette implements FocusableComponent {
   public readonly componentId: string;
@@ -31,8 +14,8 @@ export class CommandPalette implements FocusableComponent {
   private overlay!: HTMLElement;
   private input!: HTMLInputElement;
   private commandList!: HTMLElement;
-  private commands: Map<string, Command> = new Map();
   private filteredCommands: Command[] = [];
+  private registryUnsubscribe?: () => void;
   private selectedIndex: number = 0;
   private isVisible: boolean = false;
   private showingParameterForm: boolean = false;
@@ -154,17 +137,11 @@ export class CommandPalette implements FocusableComponent {
   }
 
   public registerCommand(command: Command): void {
-    this.commands.set(command.id, command);
-    if (this.isVisible) {
-      this.filterCommands();
-    }
+    commandRegistry.register(command);
   }
 
   public unregisterCommand(id: string): void {
-    this.commands.delete(id);
-    if (this.isVisible) {
-      this.filterCommands();
-    }
+    commandRegistry.unregister(id);
   }
 
   public show(): void {
@@ -180,6 +157,11 @@ export class CommandPalette implements FocusableComponent {
     this.selectedIndex = 0;
     this.updateSelection();
 
+    // Keep the rendered list in sync if commands are registered while open.
+    this.registryUnsubscribe = commandRegistry.onChange(() => {
+      if (this.isVisible) this.filterCommands();
+    });
+
     this.eventDispatcher?.setFocus(this.componentId);
   }
 
@@ -188,6 +170,9 @@ export class CommandPalette implements FocusableComponent {
     this.container.style.display = "none";
     this.overlay.style.display = "none";
     this.input.blur();
+
+    this.registryUnsubscribe?.();
+    this.registryUnsubscribe = undefined;
 
     if (this.onHideCallback) {
       this.onHideCallback();
@@ -253,7 +238,13 @@ export class CommandPalette implements FocusableComponent {
     if (e?.target !== this.input) return false;
 
     const query = this.input.value.toLowerCase();
-    this.filteredCommands = Array.from(this.commands.values())
+    // Pull from the registry every filter pass so commands registered after
+    // the palette was shown (or removed) are reflected without extra plumbing.
+    // Scope-specific commands (spreadsheet navigation etc.) are excluded —
+    // they belong to the shell/keymap, not the palette.
+    this.filteredCommands = commandRegistry
+      .list()
+      .filter((command) => command.scope === undefined || command.scope === "global")
       .filter((command) => {
         // Check if command should be shown (when condition)
         if (command.when && !command.when()) {

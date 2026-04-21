@@ -7,6 +7,7 @@ import { oneDark } from "@codemirror/theme-one-dark";
 import { FocusableComponent } from "../BedevereApp/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { keymapService } from "../../data/KeymapService";
+import { commandRegistry } from "../../data/CommandRegistry";
 import { SqlAutoComplete } from "./SqlAutoComplete";
 import { detectCurrentTheme, listenForThemeChanges } from "../SpreadsheetVisualizer/utils/theme";
 
@@ -72,6 +73,25 @@ export class SqlEditor implements FocusableComponent {
     this.themeCleanup = listenForThemeChanges(() => {
       this.rebuildEditor();
     });
+
+    // Keymap-scope commands. Registered here because `this.execute` and
+    // `this.collapse` are private and need the editor instance's closure.
+    commandRegistry.register({
+      id: "sqlEditor.execute",
+      title: "Execute SQL Query",
+      description: "Run the query currently in the SQL editor",
+      category: "SQL",
+      scope: "sqlEditor",
+      execute: async () => { await this.execute(); },
+    });
+    commandRegistry.register({
+      id: "sqlEditor.collapse",
+      title: "Collapse SQL Editor",
+      description: "Close the SQL editor panel",
+      category: "SQL",
+      scope: "sqlEditor",
+      execute: () => this.collapse(),
+    });
   }
 
   // FocusableComponent interface
@@ -92,11 +112,10 @@ export class SqlEditor implements FocusableComponent {
   public async handleKeyDown(event: KeyboardEvent): Promise<boolean> {
     const action = keymapService.matchEvent(event, "sqlEditor");
     if (!action) return false;
-
     event.preventDefault();
-    switch (action) {
-      case "sqlEditor.execute":  await this.execute(); break;
-      case "sqlEditor.collapse": this.collapse(); break;
+    if (commandRegistry.has(action)) {
+      try { await commandRegistry.run(action); }
+      catch (err) { console.error(`command ${action} failed:`, err); }
     }
     return true;
   }
