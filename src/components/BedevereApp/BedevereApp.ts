@@ -2,6 +2,13 @@ import { TabManager } from "../TabManager";
 import { ControlPanel } from "../ControlPanel";
 import { StatusBar } from "../StatusBar";
 import { HelpPanel } from "../HelpPanel";
+import {
+  DEFAULT_DATE_FORMAT,
+  DEFAULT_DATETIME_FORMAT,
+  DEFAULT_MIN_CELL_WIDTH,
+  DEFAULT_MAX_STRING_LENGTH,
+  DEFAULT_NUMBER_FORMAT,
+} from "../SpreadsheetVisualizer/defaults";
 import { CommandPalette } from "../CommandPalette/CommandPalette";
 import penguinsCsv from "@/assets/samples/penguins.csv?raw";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
@@ -276,6 +283,30 @@ export class BedevereApp implements EventHandler {
         s.copyDelimiter = opts.delimiter;
         s.copyIncludeHeader = opts.includeHeader;
         this.persistenceService.saveAppSettings(s);
+      },
+      getFormatOptions: () => {
+        const s = this.persistenceService.loadAppSettings();
+        return {
+          dateFormat: s.dateFormat ?? DEFAULT_DATE_FORMAT,
+          datetimeFormat: s.datetimeFormat ?? DEFAULT_DATETIME_FORMAT,
+          numberMinDecimals: s.numberMinDecimals ?? DEFAULT_NUMBER_FORMAT.minimumFractionDigits,
+          numberMaxDecimals: s.numberMaxDecimals ?? DEFAULT_NUMBER_FORMAT.maximumFractionDigits,
+          numberUseGrouping: s.numberUseGrouping ?? true,
+          minCellWidth: s.minCellWidth ?? DEFAULT_MIN_CELL_WIDTH,
+          maxStringLength: s.maxStringLength ?? DEFAULT_MAX_STRING_LENGTH,
+        };
+      },
+      setFormatOptions: (opts) => {
+        const s = this.persistenceService.loadAppSettings();
+        s.dateFormat = opts.dateFormat;
+        s.datetimeFormat = opts.datetimeFormat;
+        s.numberMinDecimals = opts.numberMinDecimals;
+        s.numberMaxDecimals = opts.numberMaxDecimals;
+        s.numberUseGrouping = opts.numberUseGrouping;
+        s.minCellWidth = opts.minCellWidth;
+        s.maxStringLength = opts.maxStringLength;
+        this.persistenceService.saveAppSettings(s);
+        this.applyFormatSettings(opts);
       },
     });
     this.statusBar?.setOnHelpClickCallback(() => this.helpPanel.show("howto"));
@@ -884,6 +915,36 @@ export class BedevereApp implements EventHandler {
       this.statusBar.updateSelection(cellSelection);
       this.statusBar.updatePosition(cellSelection);
       this.statusBar.updateCellValue(cellSelection);
+    });
+  }
+
+  /**
+   * Apply freshly-saved format preferences to every open tab and the status
+   * bar. The numberFormat receives a new object reference so reference-keyed
+   * caches (preview/popover number formatters) invalidate correctly.
+   */
+  private applyFormatSettings(opts: {
+    dateFormat: string;
+    datetimeFormat: string;
+    numberMinDecimals: number;
+    numberMaxDecimals: number;
+    numberUseGrouping: boolean;
+    minCellWidth: number;
+    maxStringLength: number;
+  }): void {
+    const so = this.options.spreadsheetOptions ?? (this.options.spreadsheetOptions = {});
+    so.dateFormat = opts.dateFormat;
+    so.datetimeFormat = opts.datetimeFormat;
+    so.numberFormat = {
+      minimumFractionDigits: opts.numberMinDecimals,
+      maximumFractionDigits: opts.numberMaxDecimals,
+      useGrouping: opts.numberUseGrouping,
+    };
+    so.minCellWidth = opts.minCellWidth;
+    so.maxStringLength = opts.maxStringLength;
+    this.statusBar?.setSpreadsheetOptions(so);
+    this.tabManager?.applyFormatChange(so).catch((err) => {
+      console.error("applyFormatChange failed:", err);
     });
   }
 }

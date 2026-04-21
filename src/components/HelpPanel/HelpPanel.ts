@@ -22,7 +22,37 @@ export interface HelpPanelOptions {
   onClearAllData?: () => Promise<void> | void;
   getCopyOptions?: () => { delimiter: "tab" | "comma"; includeHeader: boolean };
   setCopyOptions?: (opts: { delimiter: "tab" | "comma"; includeHeader: boolean }) => void;
+  getFormatOptions?: () => FormatPrefs;
+  setFormatOptions?: (opts: FormatPrefs) => void;
 }
+
+export interface FormatPrefs {
+  dateFormat: string;
+  datetimeFormat: string;
+  numberMinDecimals: number;
+  numberMaxDecimals: number;
+  numberUseGrouping: boolean;
+  minCellWidth: number;
+  maxStringLength: number;
+}
+
+export const DATE_FORMAT_PRESETS: string[] = [
+  "yyyy-MM-dd",
+  "dd/MM/yyyy",
+  "MM/dd/yyyy",
+  "yyyy/MM/dd",
+  "yyyyMMdd",
+];
+
+export const DATETIME_FORMAT_PRESETS: string[] = [
+  "yyyy-MM-dd HH:mm:ss",
+  "dd/MM/yyyy HH:mm:ss",
+];
+
+export const DECIMAL_PRESETS: number[] = [0, 1, 2, 3, 4];
+export const MIN_CELL_WIDTH_PRESETS: number[] = [50, 75, 100, 150, 200];
+/** 0 means "no cap" — the dropdown labels it as "None". */
+export const MAX_STRING_LENGTH_PRESETS: number[] = [50, 100, 200, 500, 0];
 
 const TAB_ORDER: HelpPanelTab[] = ["howto", "import", "shortcuts", "settings", "about"];
 
@@ -933,6 +963,66 @@ export class HelpPanel {
       section.appendChild(headerRow);
     }));
 
+    // Mutate a single field on the persisted FormatPrefs via the get/set pair.
+    const updateFormat = <K extends keyof FormatPrefs>(key: K, value: FormatPrefs[K]) => {
+      const latest = this.options.getFormatOptions?.();
+      if (!latest) return;
+      this.options.setFormatOptions?.({ ...latest, [key]: value });
+    };
+
+    // --- Date format ---
+    body.appendChild(this.buildSettingsSection("Date format", (section) => {
+      const active = this.options.getFormatOptions?.().dateFormat ?? DATE_FORMAT_PRESETS[0];
+      section.appendChild(this.buildSegmented(DATE_FORMAT_PRESETS, active, (v) => v, (v) => updateFormat("dateFormat", v)));
+    }));
+
+    // --- Datetime format ---
+    body.appendChild(this.buildSettingsSection("Datetime format", (section) => {
+      const active = this.options.getFormatOptions?.().datetimeFormat ?? DATETIME_FORMAT_PRESETS[0];
+      section.appendChild(this.buildSegmented(DATETIME_FORMAT_PRESETS, active, (v) => v, (v) => updateFormat("datetimeFormat", v)));
+    }));
+
+    // --- Numbers ---
+    body.appendChild(this.buildSettingsSection("Numbers", (section) => {
+      const current = this.options.getFormatOptions?.();
+      const initialMax = current?.numberMaxDecimals ?? 2;
+      const initialGrouping = current?.numberUseGrouping ?? true;
+
+      section.appendChild(this.buildLabeledRow("Decimal places",
+        this.buildSegmented(DECIMAL_PRESETS, initialMax, (n) => String(n), (n) => {
+          const latest = this.options.getFormatOptions?.();
+          if (!latest) return;
+          this.options.setFormatOptions?.({ ...latest, numberMinDecimals: n, numberMaxDecimals: n });
+        }),
+      ));
+
+      const groupingRow = document.createElement("label");
+      groupingRow.className = "help-panel__settings-row help-panel__settings-row--checkbox";
+      const cb = document.createElement("input");
+      cb.type = "checkbox";
+      cb.checked = initialGrouping;
+      cb.addEventListener("change", () => updateFormat("numberUseGrouping", cb.checked));
+      const cbLabel = document.createElement("span");
+      cbLabel.textContent = "Use thousands separators";
+      groupingRow.appendChild(cb);
+      groupingRow.appendChild(cbLabel);
+      section.appendChild(groupingRow);
+    }));
+
+    // --- Display ---
+    body.appendChild(this.buildSettingsSection("Display", (section) => {
+      const current = this.options.getFormatOptions?.();
+      const initialMinWidth = current?.minCellWidth ?? 100;
+      const initialMaxLen = current?.maxStringLength ?? 100;
+
+      section.appendChild(this.buildLabeledRow("Min column width (px)",
+        this.buildSegmented(MIN_CELL_WIDTH_PRESETS, initialMinWidth, (n) => String(n), (n) => updateFormat("minCellWidth", n)),
+      ));
+      section.appendChild(this.buildLabeledRow("Max chars per cell",
+        this.buildSegmented(MAX_STRING_LENGTH_PRESETS, initialMaxLen, (n) => (n === 0 ? "None" : String(n)), (n) => updateFormat("maxStringLength", n)),
+      ));
+    }));
+
     // --- Reset keymap ---
     body.appendChild(this.buildSettingsSection("Reset keymap", (section) => {
       const hint = document.createElement("p");
@@ -1010,6 +1100,44 @@ export class HelpPanel {
 
     fill(section);
     return section;
+  }
+
+  /** Wrap a control in a settings row with a leading label. */
+  private buildLabeledRow(label: string, control: HTMLElement): HTMLElement {
+    const row = document.createElement("div");
+    row.className = "help-panel__settings-row";
+    const lbl = document.createElement("span");
+    lbl.className = "help-panel__settings-label";
+    lbl.textContent = label;
+    row.appendChild(lbl);
+    row.appendChild(control);
+    return row;
+  }
+
+  /**
+   * Build a segmented-control row. The button whose value equals `active`
+   * gets the --active class; clicking any other button updates the active
+   * class in place and invokes `onChange` with the new value.
+   */
+  private buildSegmented<T>(values: T[], active: T, label: (v: T) => string, onChange: (value: T) => void): HTMLElement {
+    const seg = document.createElement("div");
+    seg.className = "help-panel__segmented";
+    for (const value of values) {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "help-panel__segmented-btn";
+      btn.textContent = label(value);
+      if (value === active) btn.classList.add("help-panel__segmented-btn--active");
+      btn.addEventListener("click", () => {
+        for (const sibling of seg.querySelectorAll("button")) {
+          sibling.classList.remove("help-panel__segmented-btn--active");
+        }
+        btn.classList.add("help-panel__segmented-btn--active");
+        onChange(value);
+      });
+      seg.appendChild(btn);
+    }
+    return seg;
   }
 
   private buildAboutBody(): HTMLElement {

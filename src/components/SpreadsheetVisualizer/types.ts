@@ -13,6 +13,7 @@ export interface SpreadsheetOptions {
   cellHeight?: number;
   minCellWidth?: number;
   maxCellWidth?: number;
+  maxStringLength?: number;
   cellPadding?: number;
   rowHeaderWidth?: number;
 

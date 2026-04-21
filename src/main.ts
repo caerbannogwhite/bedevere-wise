@@ -1,6 +1,14 @@
 import "./styles/main.scss";
 import { BedevereApp } from "./components/BedevereApp";
 import { duckDBService } from "./data/DuckDBService.ts";
+import { persistenceService } from "./data/PersistenceService.ts";
+import {
+  DEFAULT_DATE_FORMAT,
+  DEFAULT_DATETIME_FORMAT,
+  DEFAULT_MIN_CELL_WIDTH,
+  DEFAULT_MAX_STRING_LENGTH,
+  DEFAULT_NUMBER_FORMAT,
+} from "./components/SpreadsheetVisualizer/defaults.ts";
 
 // Initialize the Bedevere Wise application
 async function initApplication() {
@@ -21,6 +29,8 @@ async function initApplication() {
   // Clear existing content
   appContainer.innerHTML = "";
 
+  const persistedSettings = persistenceService.loadAppSettings();
+
   // Create the Bedevere Wise application
   const app = new BedevereApp(appContainer, duckDBService, appVersion, {
     theme: "auto", // Automatically detect user's preferred theme
@@ -31,9 +41,15 @@ async function initApplication() {
     spreadsheetOptions: {
       minHeight: 400,
       minWidth: 600,
-      dateFormat: "yyyy-MM-dd",
-      datetimeFormat: "yyyy-MM-dd HH:mm:ss",
-      numberFormat: { minimumFractionDigits: 2, maximumFractionDigits: 2 },
+      minCellWidth: persistedSettings.minCellWidth ?? DEFAULT_MIN_CELL_WIDTH,
+      maxStringLength: persistedSettings.maxStringLength ?? DEFAULT_MAX_STRING_LENGTH,
+      dateFormat: persistedSettings.dateFormat ?? DEFAULT_DATE_FORMAT,
+      datetimeFormat: persistedSettings.datetimeFormat ?? DEFAULT_DATETIME_FORMAT,
+      numberFormat: {
+        minimumFractionDigits: persistedSettings.numberMinDecimals ?? DEFAULT_NUMBER_FORMAT.minimumFractionDigits,
+        maximumFractionDigits: persistedSettings.numberMaxDecimals ?? DEFAULT_NUMBER_FORMAT.maximumFractionDigits,
+        useGrouping: persistedSettings.numberUseGrouping ?? true,
+      },
     },
     debugMode: false,
   });

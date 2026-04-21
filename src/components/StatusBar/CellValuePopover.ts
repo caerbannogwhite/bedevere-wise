@@ -26,12 +26,14 @@ export class CellValuePopover {
   private element: HTMLDivElement;
   private isVisible = false;
   private currentArgs: CellValuePopoverArgs | null = null;
+  private onUserDismiss?: () => void;
 
   private readonly onDocumentClick: (e: MouseEvent) => void;
   private readonly onKeyDown: (e: KeyboardEvent) => void;
 
-  constructor(parent: HTMLElement) {
+  constructor(parent: HTMLElement, onUserDismiss?: () => void) {
     this.container = parent;
+    this.onUserDismiss = onUserDismiss;
     this.element = document.createElement("div");
     this.element.className = "cell-value-popover";
     this.element.style.display = "none";
@@ -45,15 +47,20 @@ export class CellValuePopover {
       // click handler calls hide() explicitly so we don't double-toggle.
       const target = e.target as HTMLElement;
       if (target.closest?.(".status-bar__item")) return;
-      this.hide();
+      this.dismissByUser();
     };
 
     this.onKeyDown = (e: KeyboardEvent) => {
       if (this.isVisible && e.key === "Escape") {
         e.stopPropagation();
-        this.hide();
+        this.dismissByUser();
       }
     };
+  }
+
+  private dismissByUser(): void {
+    this.onUserDismiss?.();
+    this.hide();
   }
 
   public isOpen(): boolean {
@@ -104,7 +111,7 @@ export class CellValuePopover {
     close.title = "Close (Esc)";
     close.setAttribute("aria-label", "Close");
     close.textContent = "\u2715";
-    close.addEventListener("click", () => this.hide());
+    close.addEventListener("click", () => this.dismissByUser());
     header.appendChild(close);
 
     this.element.appendChild(header);

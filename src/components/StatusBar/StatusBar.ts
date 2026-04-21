@@ -70,6 +70,10 @@ export class StatusBar {
   // Latest complex-cell state for the cell-value inspector popover.
   private lastComplexCell: { raw: any; columnName: string; kind: ComplexKind | null } | null = null;
   private spreadsheetOptions: SpreadsheetOptions = {};
+  // Suppresses auto-pop while the user is navigating through a run of complex
+  // cells after explicitly dismissing the popover (Esc / outside / close /
+  // chip-close). Reset whenever selection leaves complex cells.
+  private autoPopDisabled = false;
 
   constructor(parent: HTMLElement, version: string) {
     this.container = document.createElement("div");
@@ -88,7 +92,7 @@ export class StatusBar {
     this.version = version;
 
     this.popover = new MessagePopover(document.body);
-    this.cellValuePopover = new CellValuePopover(document.body);
+    this.cellValuePopover = new CellValuePopover(document.body, () => { this.autoPopDisabled = true; });
 
     this.initializeDefaultItems();
   }
@@ -202,6 +206,7 @@ export class StatusBar {
   public updateCellValue(cellSelection?: ICellSelection): void {
     if (!cellSelection || cellSelection.rows.length === 0) {
       this.lastComplexCell = null;
+      this.autoPopDisabled = false;
       if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
       this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
       return;
@@ -240,8 +245,10 @@ export class StatusBar {
           expandable: true,
         });
 
-        // Refresh the popover content if the user left it open across cells.
-        if (this.cellValuePopover.isOpen() && this.lastComplexCell.kind) {
+        // Auto-open the inspector on every complex cell unless the user has
+        // dismissed it during this streak. Also refreshes content in place
+        // when the popover is already open across cells.
+        if ((!this.autoPopDisabled || this.cellValuePopover.isOpen()) && this.lastComplexCell.kind) {
           this.cellValuePopover.show({
             columnName: this.lastComplexCell.columnName,
             kind: this.lastComplexCell.kind,
@@ -254,6 +261,7 @@ export class StatusBar {
 
       // Non-complex: preserve the legacy formatted + raw inline rendering.
       this.lastComplexCell = null;
+      this.autoPopDisabled = false;
       if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
 
       const hasRaw = raw != null && String(raw) !== formatted;
@@ -274,6 +282,7 @@ export class StatusBar {
     }
 
     this.lastComplexCell = null;
+    this.autoPopDisabled = false;
     if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
     this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
   }
@@ -282,8 +291,10 @@ export class StatusBar {
   private toggleCellValuePopover(): void {
     if (!this.lastComplexCell || !this.lastComplexCell.kind) return;
     if (this.cellValuePopover.isOpen()) {
+      this.autoPopDisabled = true;
       this.cellValuePopover.hide();
     } else {
+      this.autoPopDisabled = false;
       this.cellValuePopover.show({
         columnName: this.lastComplexCell.columnName,
         kind: this.lastComplexCell.kind,

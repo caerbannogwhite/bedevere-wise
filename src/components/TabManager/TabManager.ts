@@ -275,6 +275,21 @@ export class TabManager {
     }
   }
 
+  /**
+   * Propagate runtime format changes to every open tab so cell rendering and
+   * column widths update without recreating tabs. Fire-and-forget — errors
+   * per-tab are logged but do not abort the others.
+   */
+  public async applyFormatChange(partial: Partial<SpreadsheetOptions>): Promise<void> {
+    await Promise.all(
+      this.tabs.map((tab) =>
+        tab.spreadsheetVisualizer.refreshFormat(partial).catch((err: unknown) => {
+          console.error(`refreshFormat failed for tab ${tab.metadata.name}:`, err);
+        }),
+      ),
+    );
+  }
+
   public setOnSelectCallback(callback: (dataset: DataProvider) => void): void {
     this.onSelectCallback = callback;
   }

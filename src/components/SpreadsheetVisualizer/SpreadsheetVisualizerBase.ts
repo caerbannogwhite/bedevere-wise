@@ -7,6 +7,7 @@ import {
   DEFAULT_CELL_PADDING,
   DEFAULT_ROW_HEADER_WIDTH,
   DEFAULT_MIN_CELL_WIDTH,
+  DEFAULT_MAX_STRING_LENGTH,
   DEFAULT_FONT_FAMILY,
   DEFAULT_HEADER_FONT_SIZE,
   DEFAULT_FONT_SIZE,
@@ -36,8 +37,8 @@ import { getThemeColors } from "./utils/theme";
 import { SpreadsheetOptions } from "./types";
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { ColumnInternal } from "./internals";
-import { minMax } from "./utils/drawing";
-import { getFormattedValueAndStyle } from "./utils/formatting";
+import { minMax, truncateWithEllipsis } from "./utils/drawing";
+import { getFormattedValueAndStyle, getFormatOptions } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
 
@@ -182,6 +183,7 @@ export class SpreadsheetVisualizerBase {
       cellHeight: options.cellHeight ?? DEFAULT_CELL_HEIGHT,
       minCellWidth: options.minCellWidth ?? DEFAULT_MIN_CELL_WIDTH,
       maxCellWidth: options.maxCellWidth ?? DEFAULT_MAX_CELL_WIDTH,
+      maxStringLength: options.maxStringLength ?? DEFAULT_MAX_STRING_LENGTH,
       cellPadding: options.cellPadding ?? DEFAULT_CELL_PADDING,
       rowHeaderWidth: options.rowHeaderWidth ?? DEFAULT_ROW_HEADER_WIDTH,
 
@@ -299,13 +301,40 @@ export class SpreadsheetVisualizerBase {
     this.datasetName = datasetName;
   }
 
+  /**
+   * Re-apply display preferences (dateFormat, datetimeFormat, datetimeLocale,
+   * numberFormat, minCellWidth, maxStringLength) at runtime. Clears each
+   * column's cached Intl formatter, re-seeds guessedFormat, recomputes
+   * column widths (formatted-value widths depend on decimals / grouping /
+   * string cap) and redraws.
+   */
+  public async refreshFormat(partial: Partial<SpreadsheetOptions>): Promise<void> {
+    if (partial.dateFormat !== undefined) this.options.dateFormat = partial.dateFormat;
+    if (partial.datetimeFormat !== undefined) this.options.datetimeFormat = partial.datetimeFormat;
+    if (partial.datetimeLocale !== undefined) this.options.datetimeLocale = partial.datetimeLocale;
+    if (partial.numberFormat !== undefined) this.options.numberFormat = partial.numberFormat;
+    if (partial.minCellWidth !== undefined) this.options.minCellWidth = partial.minCellWidth;
+    if (partial.maxStringLength !== undefined) this.options.maxStringLength = partial.maxStringLength;
+
+    for (const col of this.columns) {
+      col.cachedFormatter = null;
+      col.guessedFormat = getFormatOptions(col, this.options);
+    }
+
+    await this.calculateColumnWidths();
+    this.updateToDraw(ToDraw.Cells);
+    await this.draw();
+  }
+
   private guessColumnWidths(values: any[][], col: ColumnInternal, colIndex: number): number {
+    const cap = this.options.maxStringLength;
     const widths = [this.ctx.measureText(col.name).width + this.options.cellPadding * 2];
 
     for (const row of values) {
       const { formatted, style } = getFormattedValueAndStyle(row[colIndex], this.columns[colIndex], this.options);
       this.ctx.textAlign = style.textAlign || this.options.textAlign;
-      const width = this.ctx.measureText(formatted).width + this.options.cellPadding * 2;
+      const measured = cap > 0 && formatted.length > cap ? formatted.slice(0, cap) : formatted;
+      const width = this.ctx.measureText(measured).width + this.options.cellPadding * 2;
       widths.push(width);
     }
 
@@ -345,14 +374,6 @@ export class SpreadsheetVisualizerBase {
 
       return col.widthPx;
     });
-
-    // Distribute remaining viewport space equally among columns
-    const viewportWidth = this.canvas.width - this.options.rowHeaderWidth;
-    const contentTotal = this.colWidths.reduce((sum, w) => sum + w, 0);
-    if (contentTotal < viewportWidth && this.colWidths.length > 0) {
-      const extra = (viewportWidth - contentTotal) / this.colWidths.length;
-      this.colWidths = this.colWidths.map((w) => Math.min(w + extra, this.options.maxCellWidth));
-    }
 
     // Calculate column offsets
     this.colOffsets = [this.options.rowHeaderWidth];
@@ -508,17 +529,15 @@ export class SpreadsheetVisualizerBase {
         if (isFiltered) indicatorSpace += 10;
       }
 
-      const textWidth = ctx.measureText(this.columns[col].name).width;
       const availableWidth = Math.max(0, this.colWidths[col] - this.options.cellPadding * 2 - indicatorSpace);
-      const availableTextLength = textWidth > 0 ? Math.floor((availableWidth / textWidth) * this.columns[col].name.length) : 0;
-      const text = this.columns[col].name.slice(0, availableTextLength);
+      const text = truncateWithEllipsis(ctx, this.columns[col].name, availableWidth);
 
       const textX = x + this.options.cellPadding;
       const textY = this.options.cellHeight >> 1;
 
       if (availableWidth > 0 && text.length > 0) {
-        ctx.strokeText(text, textX, textY, availableWidth);
-        ctx.fillText(text, textX, textY, availableWidth);
+        ctx.strokeText(text, textX, textY);
+        ctx.fillText(text, textX, textY);
       }
 
       // Draw sort/filter indicators (right-aligned)
@@ -587,8 +606,11 @@ export class SpreadsheetVisualizerBase {
 
         ctx.fillStyle = style.textColor || this.options.cellTextColor;
         ctx.textAlign = style.textAlign || this.options.textAlign;
+        const cap = this.options.maxStringLength;
+        const capped = cap > 0 && formatted.length > cap ? formatted.slice(0, cap) + "\u2026" : formatted;
         const maxTextWidth = cellWidth - this.options.cellPadding * 2;
-        ctx.fillText(formatted, textX, textY, maxTextWidth);
+        const truncated = truncateWithEllipsis(ctx, capped, maxTextWidth);
+        if (truncated.length > 0) ctx.fillText(truncated, textX, textY);
 
         // Draw cell border
         ctx.strokeStyle = this.options.borderColor;

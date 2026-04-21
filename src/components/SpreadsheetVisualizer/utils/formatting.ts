@@ -76,7 +76,10 @@ export function getFormatOptions(column: ColumnInternal, options: SpreadsheetOpt
   }
 
   if (isNumericType(column.dataType)) {
-    return parseFormat(options.numberFormat?.toString(), column.dataType);
+    // `numberFormat` is typed as Intl.NumberFormatOptions (an object). Feeding
+    // it through parseFormat() would stringify it to "[object Object]" and
+    // throw away the user's settings, so pass the object through directly.
+    return options.numberFormat;
   }
   if (isDateType(column.dataType)) {
     return parseFormat(options.dateFormat?.toString(), column.dataType);
@@ -108,6 +111,49 @@ function getColumnFormatter(column: ColumnInternal, options: SpreadsheetOptions)
     return column.cachedFormatter;
   }
   return null;
+}
+
+/**
+ * Expand date/time pattern tokens against a {@link Date}'s local-time fields.
+ * Intl.DateTimeFormat ignores property order in its options bag (the visual
+ * order is locale-driven), so we format literally when the user has picked a
+ * pattern string — otherwise switching between "yyyy-MM-dd" and "dd/MM/yyyy"
+ * in Settings would produce identical output.
+ */
+function formatByPattern(value: Date, pattern: string): string {
+  const pad = (n: number, w = 2) => String(n).padStart(w, "0");
+  return pattern.replace(/yyyy|MM|dd|HH|mm|ss/g, (tok) => {
+    switch (tok) {
+      case "yyyy": return String(value.getFullYear());
+      case "MM": return pad(value.getMonth() + 1);
+      case "dd": return pad(value.getDate());
+      case "HH": return pad(value.getHours());
+      case "mm": return pad(value.getMinutes());
+      case "ss": return pad(value.getSeconds());
+      default: return tok;
+    }
+  });
+}
+
+/**
+ * Return the effective pattern string for a date / timestamp column, or null
+ * to defer to the Intl-based fallback. A column-level `format` string wins
+ * over the global setting unless it parses as JSON (in which case the caller
+ * should treat it as {@link Intl.DateTimeFormatOptions} via `parseFormat`).
+ */
+function getDatePattern(
+  column: ColumnInternal,
+  options: SpreadsheetOptions,
+  kind: "date" | "datetime",
+): string | null {
+  if (typeof column.format === "string") {
+    const trimmed = column.format.trim();
+    if (trimmed.length > 0 && trimmed[0] !== "{" && trimmed[0] !== "[") {
+      return trimmed;
+    }
+  }
+  const fallback = kind === "date" ? options.dateFormat : options.datetimeFormat;
+  return typeof fallback === "string" ? fallback : null;
 }
 
 /**
@@ -278,6 +324,8 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
 
   // DATE
   if (isDateType(dt)) {
+    const pattern = getDatePattern(column, options, "date");
+    if (pattern) return { raw: value, formatted: formatByPattern(value as Date, pattern) };
     const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
     return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: (value as Date).toLocaleDateString() };
   }
@@ -289,6 +337,8 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
 
   // TIMESTAMP variants
   if (isTimestampType(dt)) {
+    const pattern = getDatePattern(column, options, "datetime");
+    if (pattern) return { raw: value, formatted: formatByPattern(value as Date, pattern) };
     const formatter = getColumnFormatter(column, options) as Intl.DateTimeFormat | null;
     return formatter ? { raw: value, formatted: formatter.format(value) } : { raw: value, formatted: (value as Date).toLocaleString() };
   }

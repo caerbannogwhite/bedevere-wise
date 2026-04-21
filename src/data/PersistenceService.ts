@@ -17,6 +17,13 @@ export interface AppSettings {
   hasSeenOnboarding?: boolean;
   copyDelimiter?: "tab" | "comma";
   copyIncludeHeader?: boolean;
+  dateFormat?: string;
+  datetimeFormat?: string;
+  numberMinDecimals?: number;
+  numberMaxDecimals?: number;
+  numberUseGrouping?: boolean;
+  minCellWidth?: number;
+  maxStringLength?: number;
 }
 
 const STORAGE_KEYS = {
