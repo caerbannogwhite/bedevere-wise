@@ -38,6 +38,7 @@ export class TabManager {
   private onCloseTabCallback?: () => void;
   private onSelectCallback?: (dataset: DataProvider) => void;
   private onQueryErrorCallback?: (error: Error) => void;
+  private onQueryCompletedCallback?: (result: { elapsedMs: number; error?: Error }) => void;
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
@@ -302,6 +303,10 @@ export class TabManager {
     this.onQueryErrorCallback = callback;
   }
 
+  public setOnQueryCompletedCallback(callback: (result: { elapsedMs: number; error?: Error }) => void): void {
+    this.onQueryCompletedCallback = callback;
+  }
+
   private createTabElement(tab: DatasetTab): void {
     const tabElement = document.createElement("div");
     tabElement.setAttribute("data-tab-id", tab.metadata.name);
@@ -502,13 +507,17 @@ export class TabManager {
   }
 
   public async addQueryResult(query: string, duckDBService: DuckDBService): Promise<void> {
+    const start = performance.now();
     try {
       const dataProvider = await duckDBService.executeQueryAsDataProvider(query);
       const metadata = await dataProvider.getMetadata();
       await this.addDataset(metadata, dataProvider);
       await this.switchToDataset(metadata.name);
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start });
     } catch (error) {
       console.error("Query execution failed:", error);
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start, error: err });
       throw error;
     }
   }

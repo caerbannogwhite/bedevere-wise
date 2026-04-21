@@ -337,6 +337,11 @@ export class BedevereApp implements EventHandler {
       this.showMessage(error.message, "error");
     });
 
+    // Show query elapsed time on the right side of the status bar.
+    this.tabManager.setOnQueryCompletedCallback(({ elapsedMs, error }) => {
+      this.statusBar?.updateQueryTime(elapsedMs, !error);
+    });
+
     // Dataset panel
     if (this.options.showLeftPanel) {
       this.leftPanel = new ControlPanel(this.leftPanelContainer, this.tabManager);

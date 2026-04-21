@@ -13,6 +13,19 @@ export interface MessageOptions {
   title?: string;
 }
 
+/**
+ * Render an elapsed duration with a unit that fits its magnitude:
+ * sub-second → "150 ms", under a minute → "1.2 s", longer → "1m 23s".
+ */
+function formatElapsed(ms: number): string {
+  if (ms < 1000) return `${Math.round(ms)} ms`;
+  if (ms < 60_000) return `${(ms / 1000).toFixed(ms < 10_000 ? 2 : 1)} s`;
+  const totalSeconds = Math.round(ms / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
 const DEFAULT_DURATIONS: Record<BedevereAppMessageType, number> = {
   error: 10_000,
   warning: 6_000,
@@ -104,6 +117,30 @@ export class StatusBar {
    */
   public setSpreadsheetOptions(options: SpreadsheetOptions): void {
     this.spreadsheetOptions = options;
+  }
+
+  /**
+   * Show the elapsed time of the most recent user-submitted query on the
+   * right side of the status bar. Persists until the next query replaces
+   * it, so the user always sees what the last query cost. Reuses the
+   * `status-bar__msg-icon` / `status-bar__msg-text` markup + messageType
+   * modifier so the existing severity styling applies (green for success,
+   * red for failure).
+   */
+  public updateQueryTime(elapsedMs: number, success: boolean): void {
+    const formatted = formatElapsed(elapsedMs);
+    const icon = success ? "\u23F1" : "\u2716"; // ⏱ / ✖
+    const label = success ? `Query ${formatted}` : `Failed after ${formatted}`;
+    const html =
+      `<span class="status-bar__msg-icon">${icon}</span>` +
+      `<span class="status-bar__msg-text">${escapeHtml(label)}</span>`;
+    this.updateItem("query-time", {
+      text: label,
+      html,
+      tooltip: success ? "Last query execution time" : "Last query failed",
+      visible: true,
+      messageType: success ? "success" : "error",
+    });
   }
 
   public addItem(item: StatusBarItem): void {
@@ -410,6 +447,15 @@ export class StatusBar {
       priority: 80,
       alignment: "left",
       tooltip: "Current cell value",
+      visible: false,
+    });
+
+    this.addItem({
+      id: "query-time",
+      text: "",
+      priority: 85,
+      alignment: "right",
+      tooltip: "Last query execution time",
       visible: false,
     });
 

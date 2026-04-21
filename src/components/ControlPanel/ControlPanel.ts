@@ -420,10 +420,55 @@ export class ControlPanel {
 
     // Auto-import non-Excel files so dropping a CSV/Parquet still opens it
     // straight away. Excel files stay collapsed until the user picks a sheet.
-    for (const node of newNodes) {
-      if (node.fileType === "xlsx" || node.fileType === "xls") continue;
-      await this.handleTreeNodeClick(node);
+    const importable = newNodes.filter((n) => n.fileType !== "xlsx" && n.fileType !== "xls");
+    if (importable.length === 0) return;
+
+    const errors: Array<{ name: string; message: string; details?: string }> = [];
+    for (let i = 0; i < importable.length; i++) {
+      const node = importable[i];
+      const label = importable.length === 1
+        ? `Loading ${node.name}\u2026`
+        : `Loading ${i + 1}/${importable.length}: ${node.name}\u2026`;
+      // Persistent progress line; each call replaces the previous one in the
+      // status bar's single transient-message slot.
+      this.onShowMessageCallback?.(label, "info", { duration: 0 });
+      const result = await this.importNode(node);
+      if (!result.ok) errors.push({ name: node.name, ...result.error });
     }
+
+    this.emitBatchSummary(importable, errors);
+  }
+
+  /**
+   * Emit the final toast for a completed batch import, replacing the last
+   * in-progress "Loading i/N…" message. Success → 3 s auto-dismiss,
+   * partial failure → 6 s warning with click-to-expand details, total
+   * failure → 10 s error with details.
+   */
+  private emitBatchSummary(
+    importable: FileTreeNode[],
+    errors: Array<{ name: string; message: string; details?: string }>,
+  ): void {
+    if (!this.onShowMessageCallback) return;
+    const total = importable.length;
+    const failed = errors.length;
+    const ok = total - failed;
+
+    if (failed === 0) {
+      const msg = total === 1 ? `Loaded ${importable[0].name}` : `Loaded ${total} files`;
+      this.onShowMessageCallback(msg, "success");
+      return;
+    }
+
+    const details = errors.map((e) => `${e.name}: ${e.message}${e.details ? "\n" + e.details : ""}`).join("\n\n");
+
+    if (ok === 0) {
+      const msg = total === 1 ? `Failed to load ${importable[0].name}: ${errors[0].message}` : `Failed to load ${total} files`;
+      this.onShowMessageCallback(msg, "error", { details });
+      return;
+    }
+
+    this.onShowMessageCallback(`Loaded ${ok}/${total} files \u2014 ${failed} failed`, "warning", { details });
   }
 
   private renderTree(): void {
@@ -477,7 +522,32 @@ export class ControlPanel {
       }
     }
 
-    if (!this.fileImportService) return;
+    // Show a persistent "Loading…" line immediately; it's replaced by the
+    // success confirmation or the error toast below. This is the path taken
+    // when a user clicks a dataset in the left-panel tree (including after
+    // a folder scan), so the feedback covers folder-browsed imports too.
+    this.onShowMessageCallback?.(`Loading ${node.name}\u2026`, "info", { duration: 0 });
+    const result = await this.importNode(node);
+    if (!result.ok) {
+      this.onShowMessageCallback?.(
+        `Failed to import ${node.name}: ${result.error.message}`,
+        "error",
+        { details: result.error.details },
+      );
+    } else {
+      this.onShowMessageCallback?.(`Loaded ${node.name}`, "success");
+    }
+  }
+
+  /**
+   * Import a single file-tree node and open it as a tab. Returns success or
+   * a structured error instead of firing a toast directly, so batch callers
+   * can aggregate errors into a single summary. Caller is responsible for
+   * short-circuiting folders / excel files / unavailable nodes / already-
+   * imported nodes before calling this.
+   */
+  private async importNode(node: FileTreeNode): Promise<{ ok: true } | { ok: false; error: { message: string; details?: string } }> {
+    if (!this.fileImportService) return { ok: false, error: { message: "File import service unavailable" } };
 
     try {
       let file: File;
@@ -486,7 +556,7 @@ export class ControlPanel {
       } else if (node.fileHandle && "getFile" in node.fileHandle) {
         file = await (node.fileHandle as FileSystemFileHandle).getFile();
       } else {
-        return;
+        return { ok: false, error: { message: "Node has no accessible file handle" } };
       }
 
       const baseName =
@@ -507,14 +577,10 @@ export class ControlPanel {
       await this.tabManager.addDataset(metadata, provider);
       await this.tabManager.switchToDataset(metadata.name);
       this.onSelectCallback?.(provider);
+      return { ok: true };
     } catch (error) {
       console.error(`Failed to import ${node.name}:`, error);
-      const { message, details } = formatError(error);
-      this.onShowMessageCallback?.(
-        `Failed to import ${node.name}: ${message}`,
-        "error",
-        { details },
-      );
+      return { ok: false, error: formatError(error) };
     }
   }
 

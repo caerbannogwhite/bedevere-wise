@@ -87,10 +87,11 @@
       color: #89d185;
     }
 
-    // Transient message item (id="temp-message") — richer styling per severity.
-    // Only applies when the item also has a message-type modifier (set in
-    // StatusBar.renderItem).
-    &[data-id="temp-message"] {
+    // Transient message item (id="temp-message") and persistent query-time
+    // chip — richer styling per severity. Only applies when the item also
+    // has a message-type modifier (set in StatusBar.renderItem).
+    &[data-id="temp-message"],
+    &[data-id="query-time"] {
       gap: 6px;
       font-weight: 600;
       padding: 0 10px;
