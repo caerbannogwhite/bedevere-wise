@@ -87,6 +87,74 @@
     }
   }
 
+  &__suggestions {
+    position: absolute;
+    top: 100%;
+    left: 14px; // tuck under the input, past the '>' prompt
+    right: 60px; // leave room for the SQL button
+    max-height: 260px;
+    overflow-y: auto;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-top: none;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.08);
+    z-index: 100;
+
+    &--hidden {
+      display: none;
+    }
+
+    body.theme-dark & {
+      background: #1e1e1e;
+      border-color: #4b5563;
+      box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+    }
+  }
+
+  &__suggestion {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 4px 10px;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover,
+    &--active {
+      background: #eff6ff;
+    }
+
+    body.theme-dark & {
+      &:hover,
+      &--active {
+        background: #37373d;
+      }
+    }
+  }
+
+  &__suggestion-name {
+    flex-shrink: 0;
+    min-width: 100px;
+    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-weight: 600;
+    color: #1f2937;
+
+    body.theme-dark & {
+      color: #e5e7eb;
+    }
+  }
+
+  &__suggestion-desc {
+    color: #6b7280;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+
+    body.theme-dark & {
+      color: #9ca3af;
+    }
+  }
+
   &__sql-toggle {
     flex-shrink: 0;
     padding: 2px 8px;
