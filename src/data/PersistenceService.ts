@@ -24,6 +24,8 @@ export interface AppSettings {
   numberUseGrouping?: boolean;
   minCellWidth?: number;
   maxStringLength?: number;
+  /** Most-recent-last ring of command-bar lines. Capped at ~200 entries. */
+  shellHistory?: string[];
 }
 
 const STORAGE_KEYS = {

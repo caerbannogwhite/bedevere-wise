@@ -1,5 +1,8 @@
 import { Column } from "../../data/types";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
+import { persistenceService } from "../../data/PersistenceService";
+
+const HISTORY_MAX = 200;
 
 export interface CommandBarOptions {
   container: HTMLElement;
@@ -27,7 +30,8 @@ export class CommandBar {
   private onSubmitCallback?: (input: string) => void | Promise<void>;
   private sqlEditorExpanded: boolean = false;
 
-  // Session history ring. Cleared on page reload — durable history is 0.9.
+  // Persistent history ring. Loaded from localStorage via PersistenceService
+  // on construction and written back on every push. Cap is HISTORY_MAX.
   private history: string[] = [];
   private historyIndex: number = -1; // -1 = editing new line, otherwise points into history
   private pendingDraft: string = ""; // stores the unsubmitted line when user starts walking history
@@ -38,6 +42,20 @@ export class CommandBar {
     this.element.className = "command-bar";
     this.setupHTML();
     this.container.appendChild(this.element);
+    this.loadHistory();
+  }
+
+  private loadHistory(): void {
+    const stored = persistenceService.loadAppSettings().shellHistory;
+    if (Array.isArray(stored)) {
+      this.history = stored.slice(-HISTORY_MAX);
+    }
+  }
+
+  private persistHistory(): void {
+    const settings = persistenceService.loadAppSettings();
+    settings.shellHistory = this.history.slice(-HISTORY_MAX);
+    persistenceService.saveAppSettings(settings);
   }
 
   private setupHTML(): void {
@@ -118,10 +136,11 @@ export class CommandBar {
   }
 
   private pushHistory(value: string): void {
-    // De-dup consecutive identical lines; cap to 200 entries.
+    // De-dup consecutive identical lines; cap to HISTORY_MAX entries.
     if (this.history.length > 0 && this.history[this.history.length - 1] === value) return;
     this.history.push(value);
-    if (this.history.length > 200) this.history.shift();
+    if (this.history.length > HISTORY_MAX) this.history.shift();
+    this.persistHistory();
   }
 
   /**
