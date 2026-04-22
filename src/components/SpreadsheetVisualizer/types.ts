@@ -32,6 +32,7 @@ export interface SpreadsheetOptions {
   headerTextColor?: string;
   cellBackgroundColor?: string;
   cellTextColor?: string;
+  stripeBackgroundColor?: string;
   borderColor?: string;
   selectionColor?: string;
   selectionBorderColor?: string;

@@ -16,8 +16,15 @@ export const DEFAULT_ROW_HEADER_WIDTH = 60;
 
 // Rendering options
 export const DEFAULT_TEXT_RENDERING = "geometricPrecision";
-export const DEFAULT_LETTER_SPACING = "1px";
-export const DEFAULT_IMAGE_SMOOTHING_ENABLED = true;
+// 0px lets the font's native kerning land on integer pixels. The previous
+// 1px polish accumulated half-pixel misalignment over long strings on
+// non-integer-dpr displays.
+export const DEFAULT_LETTER_SPACING = "0px";
+// Disabled because the canvas is text-heavy: bilinear interpolation blurs
+// 1px gridlines and softens letter-forms when the backing store is dpr-
+// scaled (which it always is now). Re-enable only if we ever paint bitmap
+// images into cells.
+export const DEFAULT_IMAGE_SMOOTHING_ENABLED = false;
 export const DEFAULT_IMAGE_SMOOTHING_QUALITY = "high";
 
 export const DEFAULT_BORDER_WIDTH = 1;

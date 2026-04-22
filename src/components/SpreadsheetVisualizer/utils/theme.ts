@@ -6,6 +6,9 @@ export interface ThemeColors {
   // Cell colors
   cellBackgroundColor: string;
   cellTextColor: string;
+  // Subtle alternate-row stripe colour. Layered over the cellBackgroundColor
+  // on every other body row to reduce eye-tracking fatigue.
+  stripeBackgroundColor: string;
 
   // Border and UI colors
   borderColor: string;
@@ -95,6 +98,7 @@ export function getThemeColors(theme?: "light" | "dark"): ThemeColors {
 
           cellBackgroundColor: "#1a1b26",
           cellTextColor: "#c0caf5",
+          stripeBackgroundColor: "#1d1f2c",
 
           borderColor: "#292e42",
           selectionColor: "rgba(122, 162, 247, 0.22)",
@@ -121,6 +125,7 @@ export function getThemeColors(theme?: "light" | "dark"): ThemeColors {
 
           cellBackgroundColor: "#e1e2e7",
           cellTextColor: "#3760bf",
+          stripeBackgroundColor: "#dadce4",
 
           borderColor: "#b4b5b9",
           selectionColor: "rgba(46, 125, 233, 0.18)",

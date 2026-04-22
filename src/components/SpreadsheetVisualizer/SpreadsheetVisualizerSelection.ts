@@ -9,7 +9,7 @@ import {
   DEFAULT_LETTER_SPACING,
   DEFAULT_TEXT_RENDERING,
 } from "./defaults";
-import { minMax } from "./utils/drawing";
+import { getDpr, minMax } from "./utils/drawing";
 
 export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   // State variables for selection and hovering
@@ -60,12 +60,30 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
     // Stats panel logic is handled by derived classes
 
-    // Size all three canvases to the viewport
-    for (const cvs of [this.canvas, this.selectionCanvas, this.hoverCanvas]) {
-      cvs.width = width;
-      cvs.height = height;
+    // Size all three canvases to the viewport. Backing store is dpr-scaled
+    // for crisp rendering on retina; CSS size stays in CSS pixels. After the
+    // backing-store assignment the context state (font, transform, etc.)
+    // resets — drawCells / calculateColumnWidths reapply them.
+    const dpr = getDpr();
+    this.dpr = dpr;
+    this.viewportWidth = width;
+    this.viewportHeight = height;
+    const bw = Math.round(width * dpr);
+    const bh = Math.round(height * dpr);
+    const canvases: Array<[HTMLCanvasElement, CanvasRenderingContext2D]> = [
+      [this.canvas, this.ctx],
+      [this.selectionCanvas, this.selectionCtx],
+      [this.hoverCanvas, this.hoverCtx],
+    ];
+    for (const [cvs, c2d] of canvases) {
+      cvs.width = bw;
+      cvs.height = bh;
       cvs.style.width = `${width}px`;
       cvs.style.height = `${height}px`;
+      // Switch the context to CSS-pixel coordinates so all subsequent draw
+      // calls (in drawCells / drawSelection / drawHover) work as if the
+      // canvas were 1× — the dpr lift is invisible to drawing code.
+      c2d.setTransform(dpr, 0, 0, dpr, 0, 0);
     }
 
     // The canvas group needs explicit size so sticky positioning works
@@ -175,7 +193,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   private drawCellHover(visibleStartRow: number) {
     // Clear the hover canvas
-    this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
+    this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
 
     this.hoverCtx.fillStyle = this.options.hoverColor;
     this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
@@ -210,7 +228,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   private drawColHover() {
     // Clear the hover canvas
-    this.hoverCtx.clearRect(0, 0, this.hoverCanvas.width, this.hoverCanvas.height);
+    this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
 
     this.hoverCtx.fillStyle = this.options.hoverColor;
     this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
@@ -262,7 +280,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   private drawSelection(visibleStartRow: number) {
     // Clear the selection canvas
-    this.selectionCtx.clearRect(0, 0, this.selectionCanvas.width, this.selectionCanvas.height);
+    this.selectionCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
 
     this.drawCellSelection(visibleStartRow);
     this.drawColSelection();
@@ -294,7 +312,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
             width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
           }
 
-          if (x + width > 0 && x < this.canvas.width && y + height > 0 && y < this.canvas.height) {
+          if (x + width > 0 && x < this.viewportWidth && y + height > 0 && y < this.viewportHeight) {
             this.selectionCtx.fillRect(x, y, width, height);
 
             // Track the bounds for the selection border and handle

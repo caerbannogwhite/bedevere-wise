@@ -97,6 +97,13 @@ export class SpreadsheetVisualizerBase {
   protected totalScrollY = 0;
   protected totalScrollX = 0;
 
+  // Viewport size in CSS pixels. Distinct from `canvas.width`/`canvas.height`
+  // which now hold the dpr-scaled backing-store dimensions. All layout math
+  // (scroll, hit-testing, scrollIntoView) reads these instead.
+  protected viewportWidth = 0;
+  protected viewportHeight = 0;
+  protected dpr = 1;
+
   // Filter/sort state for header indicators
   protected filterManager: ColumnFilterManager | null = null;
   protected datasetName: string = "";
@@ -202,6 +209,7 @@ export class SpreadsheetVisualizerBase {
       headerTextColor: options.headerTextColor ?? t.headerTextColor,
       cellBackgroundColor: options.cellBackgroundColor ?? t.cellBackgroundColor,
       cellTextColor: options.cellTextColor ?? t.cellTextColor,
+      stripeBackgroundColor: options.stripeBackgroundColor ?? t.stripeBackgroundColor,
       borderColor: options.borderColor ?? t.borderColor,
       selectionColor: options.selectionColor ?? t.selectionColor,
       selectionBorderColor: options.selectionBorderColor ?? t.selectionBorderColor,
@@ -240,6 +248,91 @@ export class SpreadsheetVisualizerBase {
     // Apply constraints
     this.options.height = minMax(this.options.height, this.options.minHeight, this.options.maxHeight);
     this.options.width = minMax(this.options.width, this.options.minWidth, this.options.maxWidth);
+
+    this.installContainerObservers();
+  }
+
+  // ResizeObserver for the spreadsheet container so the canvas reflows when
+  // the dataset container changes size (left panel toggled, SQL editor
+  // expanded, theme tab opened, etc.). The TabManager already has a coarser
+  // observer for window resize; this one is per-instance and finer-grained.
+  private resizeObserver: ResizeObserver | null = null;
+  // Media query that flips when devicePixelRatio changes (laptop docking,
+  // browser zoom, OS scaling). On change we re-allocate the canvas backing
+  // store so retina sharpness survives the change.
+  private dprMediaQuery: MediaQueryList | null = null;
+  private dprChangeHandler: (() => void) | null = null;
+
+  private installContainerObservers(): void {
+    if (typeof window === "undefined") return;
+
+    if (typeof ResizeObserver !== "undefined") {
+      this.resizeObserver = new ResizeObserver(() => {
+        // Defensive: only react if dimensions actually changed. ResizeObserver
+        // fires on layout passes that may produce identical sizes.
+        if (
+          this.container.clientWidth !== this.viewportWidth ||
+          this.container.clientHeight !== this.viewportHeight
+        ) {
+          this.requestRelayout();
+        }
+      });
+      this.resizeObserver.observe(this.container);
+    }
+
+    this.armDprListener();
+  }
+
+  private armDprListener(): void {
+    this.disarmDprListener();
+    const current = this.dpr || 1;
+    try {
+      this.dprMediaQuery = window.matchMedia(`(resolution: ${current}dppx)`);
+      this.dprChangeHandler = () => {
+        // dpr changed → re-arm the listener at the new ratio and force
+        // the canvas to re-allocate.
+        this.armDprListener();
+        this.requestRelayout();
+      };
+      this.dprMediaQuery.addEventListener("change", this.dprChangeHandler);
+    } catch {
+      // matchMedia with a `dppx` argument is supported broadly but guard
+      // against engines that don't accept the resolution syntax.
+      this.dprMediaQuery = null;
+      this.dprChangeHandler = null;
+    }
+  }
+
+  private disarmDprListener(): void {
+    if (this.dprMediaQuery && this.dprChangeHandler) {
+      this.dprMediaQuery.removeEventListener("change", this.dprChangeHandler);
+    }
+    this.dprMediaQuery = null;
+    this.dprChangeHandler = null;
+  }
+
+  /**
+   * Trigger the subclass's resize handling. Defined as a stub here; the
+   * Focusable subclass overrides `handleResize()` and that's what runs at
+   * runtime. Routing through a single method keeps Base ignorant of the
+   * subclass surface while still letting the observers above drive a
+   * relayout.
+   */
+  private requestRelayout(): void {
+    const handler = (this as unknown as { handleResize?: () => Promise<unknown> }).handleResize;
+    if (handler) handler.call(this).catch((err) => console.error("handleResize failed:", err));
+  }
+
+  /**
+   * Tear down per-instance observers. Visualizer.destroy() is the chained
+   * caller; subclasses without their own destroy inherit nothing extra.
+   */
+  protected destroyBase(): void {
+    if (this.resizeObserver) {
+      this.resizeObserver.disconnect();
+      this.resizeObserver = null;
+    }
+    this.disarmDprListener();
   }
 
   // Overridden by SpreadsheetVisualizerSelection — stubs needed for scroll listener
@@ -266,16 +359,16 @@ export class SpreadsheetVisualizerBase {
     // Vertical: keep cell within viewport (below header)
     if (cellY < this.scrollY + headerH) {
       newScrollY = cellY - headerH;
-    } else if (cellY + cellH > this.scrollY + this.canvas.height) {
-      newScrollY = cellY + cellH - this.canvas.height;
+    } else if (cellY + cellH > this.scrollY + this.viewportHeight) {
+      newScrollY = cellY + cellH - this.viewportHeight;
     }
 
     // Horizontal: keep cell within viewport (past row header)
     const rowHeaderW = this.options.rowHeaderWidth;
     if (cellX < this.scrollX + rowHeaderW) {
       newScrollX = cellX - rowHeaderW;
-    } else if (cellX + cellW > this.scrollX + this.canvas.width) {
-      newScrollX = cellX + cellW - this.canvas.width;
+    } else if (cellX + cellW > this.scrollX + this.viewportWidth) {
+      newScrollX = cellX + cellW - this.viewportWidth;
     }
 
     if (newScrollX !== this.scrollX || newScrollY !== this.scrollY) {
@@ -383,25 +476,25 @@ export class SpreadsheetVisualizerBase {
 
     // Calculate total width
     this.totalWidth = this.colOffsets[this.colOffsets.length - 1] + this.colWidths[this.colWidths.length - 1];
-    this.totalScrollX = Math.max(0, this.totalWidth - this.canvas.width);
+    this.totalScrollX = Math.max(0, this.totalWidth - this.viewportWidth);
 
     // Update spacer width for native scrollbar
-    this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.canvas.width)}px`;
+    this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.viewportWidth)}px`;
   }
 
   protected calculateRowHeight() {
     // +1 row for the header
     this.totalHeight = (this.totalRows + 1) * this.options.cellHeight;
-    this.totalScrollY = Math.max(0, this.totalHeight - this.canvas.height);
+    this.totalScrollY = Math.max(0, this.totalHeight - this.viewportHeight);
 
     // Update spacer height for native scrollbar
-    this.scrollSpacer.style.height = `${Math.max(this.totalHeight, this.canvas.height)}px`;
+    this.scrollSpacer.style.height = `${Math.max(this.totalHeight, this.viewportHeight)}px`;
   }
 
   protected async preloadDataForScroll(scrollY: number): Promise<void> {
     // Calculate which rows will be visible after scrolling
     const visibleStartRow = Math.floor(scrollY / this.options.cellHeight);
-    const visibleEndRow = Math.min(visibleStartRow + Math.ceil(this.canvas.height / this.options.cellHeight), this.totalRows);
+    const visibleEndRow = Math.min(visibleStartRow + Math.ceil(this.viewportHeight / this.options.cellHeight), this.totalRows);
 
     // Preload data for visible rows plus buffer
     const bufferSize = this.options.cacheChunkSize;
@@ -440,7 +533,7 @@ export class SpreadsheetVisualizerBase {
   protected getLastVisibleColumnIndex(): number {
     if (this.colOffsets.length === 0) return 0;
 
-    const rightEdge = this.scrollX + this.canvas.width;
+    const rightEdge = this.scrollX + this.viewportWidth;
 
     // Binary search: find the leftmost column whose offset > rightEdge
     let lo = 0;
@@ -491,162 +584,207 @@ export class SpreadsheetVisualizerBase {
   protected async drawCells(startRow: number, endRow: number) {
     const dataPromise = this.cache.getData(startRow, endRow);
 
-    const { ctx, canvas } = this;
-    const { width, height } = canvas;
+    const ctx = this.ctx;
+    const o = this.options;
+    // Logical viewport in CSS pixels — the dpr scale on the context makes
+    // these coordinates land on the correct physical pixels.
+    const width = this.viewportWidth;
+    const height = this.viewportHeight;
+    const ch = o.cellHeight;
+    const rhw = o.rowHeaderWidth;
+    const pad = o.cellPadding;
+    const fvc = this.getFirstVisibleColumnIndex();
+    const lvc = this.getLastVisibleColumnIndex();
 
-    const firstVisibleColumnIndex = this.getFirstVisibleColumnIndex();
-    const lastVisibleColumnIndex = this.getLastVisibleColumnIndex();
-
-    // Clear the canvas
+    // ---- 1. Clear ----
     ctx.clearRect(0, 0, width, height);
 
-    // Draw headers
-    ctx.fillStyle = this.options.headerBackgroundColor;
-    ctx.fillRect(0, 0, width, this.options.cellHeight);
-    ctx.fillRect(0, 0, this.options.rowHeaderWidth, height);
+    // ---- 2. Solid backgrounds (cells, header strip, row gutter) ----
+    // Cell area gets the default cell colour; type-coloured cells overdraw
+    // below in pass 4 if their style differs.
+    ctx.fillStyle = o.cellBackgroundColor;
+    ctx.fillRect(rhw, ch, width - rhw, height - ch);
+    ctx.fillStyle = o.headerBackgroundColor;
+    ctx.fillRect(0, 0, width, ch);
+    ctx.fillRect(0, 0, rhw, height);
 
-    // Common settings for text
-    ctx.font = `${this.options.headerFontSize}px ${this.options.fontFamily}`;
-    ctx.fillStyle = this.options.headerTextColor;
-    ctx.textBaseline = "middle";
-
-    // Draw column headers
-    ctx.textAlign = "left";
-    ctx.strokeStyle = this.options.borderColor;
-
-    let x = this.colOffsets[firstVisibleColumnIndex] - this.scrollX;
-    for (let col = firstVisibleColumnIndex; col <= lastVisibleColumnIndex; col++) {
-      ctx.strokeRect(x, 0, this.colWidths[col], this.options.cellHeight);
-
-      // Determine sort/filter state for indicator space reservation
-      let indicatorSpace = 0;
-      let sortDir: "asc" | "desc" | null = null;
-      let isFiltered = false;
-      if (this.filterManager) {
-        sortDir = this.filterManager.isColumnSorted(this.datasetName, this.columns[col].name);
-        isFiltered = this.filterManager.isColumnFiltered(this.datasetName, this.columns[col].name);
-        if (sortDir) indicatorSpace += 16;
-        if (isFiltered) indicatorSpace += 10;
+    // ---- 3. Alternating row stripes ----
+    // Drawn before per-cell backgrounds so that type-coloured cells overdraw
+    // the stripe and stay visually distinct.
+    const stripe = o.stripeBackgroundColor;
+    if (stripe && stripe !== o.cellBackgroundColor) {
+      ctx.fillStyle = stripe;
+      let sy = ch;
+      for (let row = startRow; row < endRow; row++) {
+        if ((row & 1) === 1) ctx.fillRect(rhw, sy, width - rhw, ch);
+        sy += ch;
       }
-
-      const availableWidth = Math.max(0, this.colWidths[col] - this.options.cellPadding * 2 - indicatorSpace);
-      const text = truncateWithEllipsis(ctx, this.columns[col].name, availableWidth);
-
-      const textX = x + this.options.cellPadding;
-      const textY = this.options.cellHeight >> 1;
-
-      if (availableWidth > 0 && text.length > 0) {
-        ctx.strokeText(text, textX, textY);
-        ctx.fillText(text, textX, textY);
-      }
-
-      // Draw sort/filter indicators (right-aligned)
-      if (sortDir || isFiltered) {
-        const indicatorBaseX = x + this.colWidths[col] - this.options.cellPadding;
-        const arrowSize = 5;
-
-        if (sortDir) {
-          ctx.fillStyle = this.options.headerTextColor;
-          ctx.beginPath();
-          const arrowX = indicatorBaseX - arrowSize;
-          if (sortDir === "asc") {
-            ctx.moveTo(arrowX - arrowSize, textY + arrowSize / 2);
-            ctx.lineTo(arrowX, textY - arrowSize / 2);
-            ctx.lineTo(arrowX + arrowSize, textY + arrowSize / 2);
-          } else {
-            ctx.moveTo(arrowX - arrowSize, textY - arrowSize / 2);
-            ctx.lineTo(arrowX, textY + arrowSize / 2);
-            ctx.lineTo(arrowX + arrowSize, textY - arrowSize / 2);
-          }
-          ctx.closePath();
-          ctx.fill();
-        }
-
-        if (isFiltered) {
-          const dotX = sortDir ? indicatorBaseX - 22 : indicatorBaseX - 4;
-          ctx.fillStyle = this.options.selectionBorderColor;
-          ctx.beginPath();
-          ctx.arc(dotX, textY, 3, 0, 2 * Math.PI);
-          ctx.fill();
-        }
-
-        // Restore text styles
-        ctx.fillStyle = this.options.headerTextColor;
-        ctx.textAlign = "left";
-      }
-
-      x += this.colWidths[col];
     }
 
-    // Draw cells — iterate raw data rows directly instead of slicing per row
+    // ---- 4. Cell text + per-cell type-coloured backgrounds ----
     const data = await dataPromise;
-    let y = this.options.cellHeight; // Keep the header at the top
+    ctx.font = `${o.fontSize}px ${o.fontFamily}`;
+    ctx.textBaseline = "middle";
+
+    let y = ch;
     for (let row = 0; row < data.length; row++) {
-      x = this.colOffsets[firstVisibleColumnIndex] - this.scrollX;
-      for (let col = firstVisibleColumnIndex; col <= lastVisibleColumnIndex; col++) {
+      let x = this.colOffsets[fvc] - this.scrollX;
+      for (let col = fvc; col <= lvc; col++) {
         const cellWidth = this.colWidths[col];
         const column = this.columns[col];
+        const { formatted, style } = getFormattedValueAndStyle(data[row][col], column, o);
 
-        // Draw cell background
-        ctx.fillStyle = this.options.cellBackgroundColor;
-        ctx.fillRect(x, y, cellWidth, this.options.cellHeight);
-
-        // Draw cell text
-        const { formatted, style } = getFormattedValueAndStyle(data[row][col], column, this.options);
-        const textY = y + this.options.cellHeight / 2;
-
-        let textX = x + this.options.cellPadding;
-        switch (style.textAlign) {
-          case "center":
-            textX = x + cellWidth / 2;
-            break;
-          case "right":
-            textX = x + cellWidth - this.options.cellPadding;
+        // Type-coloured cells overdraw the stripe / default cell bg.
+        if (style.backgroundColor && style.backgroundColor !== o.cellBackgroundColor) {
+          ctx.fillStyle = style.backgroundColor;
+          ctx.fillRect(x, y, cellWidth, ch);
         }
 
-        ctx.fillStyle = style.textColor || this.options.cellTextColor;
-        ctx.textAlign = style.textAlign || this.options.textAlign;
-        const cap = this.options.maxStringLength;
-        const capped = cap > 0 && formatted.length > cap ? formatted.slice(0, cap) + "\u2026" : formatted;
-        const maxTextWidth = cellWidth - this.options.cellPadding * 2;
-        const truncated = truncateWithEllipsis(ctx, capped, maxTextWidth);
-        if (truncated.length > 0) ctx.fillText(truncated, textX, textY);
+        // Text
+        const align = (style.textAlign || o.textAlign) as CanvasTextAlign;
+        ctx.textAlign = align;
+        ctx.fillStyle = style.textColor || o.cellTextColor;
 
-        // Draw cell border
-        ctx.strokeStyle = this.options.borderColor;
-        ctx.strokeRect(x, y, cellWidth, this.options.cellHeight);
+        let textX = x + pad;
+        if (align === "center") textX = x + cellWidth / 2;
+        else if (align === "right") textX = x + cellWidth - pad;
+        const textY = y + ch / 2;
+
+        const cap = o.maxStringLength;
+        const capped =
+          cap > 0 && formatted.length > cap ? formatted.slice(0, cap) + "\u2026" : formatted;
+        const maxTextWidth = cellWidth - pad * 2;
+        const truncated = truncateWithEllipsis(ctx, capped, maxTextWidth);
+        if (truncated.length > 0) {
+          ctx.fillText(truncated, Math.round(textX), Math.round(textY));
+        }
 
         x += cellWidth;
       }
-      y += this.options.cellHeight;
+      y += ch;
     }
 
-    // Draw row indices
-    ctx.strokeStyle = this.options.borderColor;
+    // ---- 5. Column headers (text + indicators + null-count badge) ----
+    ctx.font = `${o.headerFontSize}px ${o.fontFamily}`;
+    ctx.textBaseline = "middle";
+    ctx.textAlign = "left";
 
+    const headerY = ch / 2;
+    let hx = this.colOffsets[fvc] - this.scrollX;
+    for (let col = fvc; col <= lvc; col++) {
+      const column = this.columns[col];
+      const colWidth = this.colWidths[col];
+
+      // Reserve right-side space for sort arrow + filter dot + null-count
+      // badge so the header text truncates BEFORE running into them.
+      let sortDir: "asc" | "desc" | null = null;
+      let isFiltered = false;
+      if (this.filterManager) {
+        sortDir = this.filterManager.isColumnSorted(this.datasetName, column.name);
+        isFiltered = this.filterManager.isColumnFiltered(this.datasetName, column.name);
+      }
+      const hasNullBadge = column.hasNulls === true;
+      let indicatorSpace = 0;
+      if (sortDir) indicatorSpace += 16;
+      if (isFiltered) indicatorSpace += 10;
+      if (hasNullBadge) indicatorSpace += 10;
+
+      const availableWidth = Math.max(0, colWidth - pad * 2 - indicatorSpace);
+      const headerText = truncateWithEllipsis(ctx, column.name, availableWidth);
+      if (availableWidth > 0 && headerText.length > 0) {
+        ctx.fillStyle = o.headerTextColor;
+        ctx.fillText(headerText, Math.round(hx + pad), Math.round(headerY));
+      }
+
+      // Right-aligned indicator stack: sort arrow → filter dot → null badge.
+      // Each consumes a fixed slot from the right edge.
+      let indicatorRight = hx + colWidth - pad;
+      const arrowSize = 5;
+
+      if (sortDir) {
+        ctx.fillStyle = o.headerTextColor;
+        ctx.beginPath();
+        const arrowX = indicatorRight - arrowSize;
+        if (sortDir === "asc") {
+          ctx.moveTo(arrowX - arrowSize, headerY + arrowSize / 2);
+          ctx.lineTo(arrowX, headerY - arrowSize / 2);
+          ctx.lineTo(arrowX + arrowSize, headerY + arrowSize / 2);
+        } else {
+          ctx.moveTo(arrowX - arrowSize, headerY - arrowSize / 2);
+          ctx.lineTo(arrowX, headerY + arrowSize / 2);
+          ctx.lineTo(arrowX + arrowSize, headerY - arrowSize / 2);
+        }
+        ctx.closePath();
+        ctx.fill();
+        indicatorRight -= 16;
+      }
+
+      if (isFiltered) {
+        ctx.fillStyle = o.selectionBorderColor;
+        ctx.beginPath();
+        ctx.arc(indicatorRight - 4, headerY, 3, 0, 2 * Math.PI);
+        ctx.fill();
+        indicatorRight -= 10;
+      }
+
+      if (hasNullBadge) {
+        // Tiny middle-dot glyph muted with globalAlpha so it doesn't compete
+        // with sort/filter indicators. column.hasNulls is set by the data
+        // provider (`types.ts`) but went unrendered until now.
+        ctx.fillStyle = o.headerTextColor;
+        ctx.textAlign = "right";
+        ctx.globalAlpha = 0.55;
+        ctx.fillText("\u00B7", Math.round(indicatorRight), Math.round(headerY));
+        ctx.globalAlpha = 1;
+        ctx.textAlign = "left";
+      }
+
+      hx += colWidth;
+    }
+
+    // ---- 6. Row indices (right-aligned numbers in the gutter) ----
+    ctx.fillStyle = o.headerTextColor;
     ctx.textAlign = "right";
-    const textX = this.options.rowHeaderWidth - this.options.cellPadding;
-
-    // Top left corner
-    ctx.fillStyle = this.options.headerBackgroundColor;
-    ctx.fillRect(0, 0, this.options.rowHeaderWidth, this.options.cellHeight);
-    ctx.strokeRect(0, 0, this.options.rowHeaderWidth, this.options.cellHeight);
-
-    y = this.options.cellHeight; // Keep the header at the top
+    const indexX = rhw - pad;
+    let iy = ch;
     for (let row = startRow; row < endRow; row++) {
-      ctx.fillStyle = this.options.headerBackgroundColor;
-      ctx.fillRect(0, y, this.options.rowHeaderWidth, this.options.cellHeight);
-
-      ctx.strokeRect(0, y, this.options.rowHeaderWidth, this.options.cellHeight);
-
-      const textY = y + this.options.cellHeight / 2;
-      ctx.fillStyle = this.options.headerTextColor;
-
-      ctx.strokeText((row + 1).toString(), textX, textY);
-      ctx.fillText((row + 1).toString(), textX, textY);
-
-      y += this.options.cellHeight;
+      ctx.fillText((row + 1).toString(), Math.round(indexX), Math.round(iy + ch / 2));
+      iy += ch;
     }
-  }
 
+    // ---- 7. Single-pass crisp gridlines ----
+    // One Path2D, one stroke. Lines at integer + 0.5 offsets so 1px lines
+    // hit a single physical pixel row. Eliminates the double-border fuzz
+    // from the per-cell strokeRect calls in the previous revision.
+    ctx.strokeStyle = o.borderColor;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+
+    // Header bottom (full width)
+    ctx.moveTo(0, ch + 0.5);
+    ctx.lineTo(width, ch + 0.5);
+
+    // Row separators (under each body row, across the full width including
+    // the row-index gutter so the gutter rows match the cell rows visually).
+    let gy = ch * 2;
+    for (let row = startRow; row < endRow; row++) {
+      ctx.moveTo(0, gy + 0.5);
+      ctx.lineTo(width, gy + 0.5);
+      gy += ch;
+    }
+
+    // Row gutter right edge (full height)
+    ctx.moveTo(rhw + 0.5, 0);
+    ctx.lineTo(rhw + 0.5, height);
+
+    // Column separators (right edge of each visible column)
+    let gx = this.colOffsets[fvc] - this.scrollX;
+    for (let col = fvc; col <= lvc; col++) {
+      gx += this.colWidths[col];
+      ctx.moveTo(gx + 0.5, 0);
+      ctx.lineTo(gx + 0.5, height);
+    }
+
+    ctx.stroke();
+  }
 }

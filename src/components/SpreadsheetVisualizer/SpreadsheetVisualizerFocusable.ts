@@ -49,7 +49,7 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     const y = event.clientY - rect.top;
 
     // Ignore clicks outside the canvas area (e.g. control panel, stats buttons)
-    if (x < 0 || y < 0 || x > this.canvas.width || y > this.canvas.height) {
+    if (x < 0 || y < 0 || x > this.viewportWidth || y > this.viewportHeight) {
       return false;
     }
 
@@ -272,7 +272,7 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
           this.selectedCols = [col];
           this.selectedCells = null;
           await this.statsVisualizer?.showStats(this.columns[col]);
-          this.scrollTo(this.colOffsets[col] - this.canvas.width / 2, this.scrollY);
+          this.scrollTo(this.colOffsets[col] - this.viewportWidth / 2, this.scrollY);
         } else if (this.selectedCells) {
           const newCol = Math.max(0, this.selectedCells.startCol - 1);
           this.selectedCells = { startRow: this.selectedCells.startRow, endRow: this.selectedCells.startRow, startCol: newCol, endCol: newCol };
@@ -285,7 +285,7 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
           this.selectedCols = [col];
           this.selectedCells = null;
           await this.statsVisualizer?.showStats(this.columns[col]);
-          this.scrollTo(this.colOffsets[col] - this.canvas.width / 2, this.scrollY);
+          this.scrollTo(this.colOffsets[col] - this.viewportWidth / 2, this.scrollY);
         } else if (this.selectedCells) {
           const newCol = Math.min(this.totalCols - 1, this.selectedCells.startCol + 1);
           this.selectedCells = { startRow: this.selectedCells.startRow, endRow: this.selectedCells.startRow, startCol: newCol, endCol: newCol };

@@ -29,6 +29,7 @@ export class ColumnInternal implements Column {
   rawType?: string;
   length?: number;
   format?: string | Intl.NumberFormatOptions;
+  hasNulls?: boolean;
   widthPx: number = 0;
   guessedFormat: any = undefined;
   /**
@@ -48,6 +49,7 @@ export class ColumnInternal implements Column {
     this.label = column.label;
     this.length = column.length;
     this.format = column.format;
+    this.hasNulls = column.hasNulls;
     this.widthPx = 0;
     this.guessedFormat = getFormatOptions(this, options);
   }

@@ -23,8 +23,13 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     // Setup theme change listener
     this.themeCleanup = listenForThemeChanges(() => {
       this.updateThemeColors();
-      // Redraw to apply new colors
-      this.draw().catch(console.error);
+      // Recompute column widths before redrawing — the cached metrics in
+      // ColumnInternal.widthPx were measured against the previous theme's
+      // font/letter-spacing; a theme flip can change the resolved
+      // monospace fallback and produce stale widths.
+      this.calculateColumnWidths()
+        .then(() => this.draw())
+        .catch(console.error);
     });
   }
 
@@ -68,6 +73,9 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
       this.themeCleanup = null;
     }
 
+    // ResizeObserver + dpr media-query listener installed by the Base.
+    this.destroyBase();
+
     this.statsVisualizer?.hide();
 
     // Clear the data cache
@@ -80,6 +88,7 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     this.options.headerTextColor = t.headerTextColor;
     this.options.cellBackgroundColor = t.cellBackgroundColor;
     this.options.cellTextColor = t.cellTextColor;
+    this.options.stripeBackgroundColor = t.stripeBackgroundColor;
     this.options.borderColor = t.borderColor;
     this.options.selectionColor = t.selectionColor;
     this.options.selectionBorderColor = t.selectionBorderColor;

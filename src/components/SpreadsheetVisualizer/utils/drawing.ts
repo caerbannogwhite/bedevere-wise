@@ -2,6 +2,17 @@ export function minMax(value: number, min: number, max: number): number {
   return value < min ? min : value > max ? max : value;
 }
 
+/**
+ * Effective device pixel ratio. Returned as a finite >= 1 number so callers
+ * can multiply CSS-pixel dimensions to get the canvas backing-store size
+ * without guarding for SSR or pathological values.
+ */
+export function getDpr(): number {
+  if (typeof window === "undefined") return 1;
+  const dpr = window.devicePixelRatio;
+  return Number.isFinite(dpr) && dpr > 0 ? dpr : 1;
+}
+
 const ELLIPSIS = "\u2026";
 
 /**
