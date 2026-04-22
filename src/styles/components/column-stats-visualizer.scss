@@ -1,39 +1,28 @@
-// ColumnStatsVisualizer Component Styles
+// ColumnStatsVisualizer — tokyonight palette via tokens.
 
 .column-stats {
   display: flex;
   flex-direction: column;
-  background: #ffffff;
+  background: var(--bg-dark);
   overflow-y: auto;
-
-  body.theme-dark & {
-    background: #1e1e1e;
-  }
+  font-family: var(--font-mono);
 
   &__header {
     display: flex;
     align-items: flex-start;
     justify-content: space-between;
-    padding: 0.75rem;
-    border-bottom: 1px solid #e1e5e9;
-    background: #f8f9fa;
+    padding: 0.6rem 0.75rem;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg-dark);
     gap: 8px;
-
-    body.theme-dark & {
-      background: #2d2d30;
-      border-bottom-color: #3c3c3c;
-    }
 
     h3 {
       margin: 0;
-      font-size: 0.95rem;
-      color: #2c3e50;
+      font-size: 0.9rem;
+      color: var(--fg);
       font-weight: 600;
       word-break: break-word;
-
-      body.theme-dark & {
-        color: #ffffff;
-      }
+      font-family: var(--font-mono);
     }
   }
 
@@ -43,30 +32,22 @@
   }
 
   &__label {
-    font-size: 0.8rem;
-    color: #6c757d;
+    font-size: 0.75rem;
+    color: var(--fg-muted);
     margin-top: 0.2rem;
     font-style: italic;
-
-    body.theme-dark & {
-      color: #999999;
-    }
   }
 
   &__type {
     font-size: 0.7rem;
-    color: #8b949e;
+    color: var(--cyan);
     text-transform: uppercase;
     margin-top: 0.2rem;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.5px;
-
-    body.theme-dark & {
-      color: #8b949e;
-    }
   }
 
-  // Sort buttons — stacked vertically on the right
+  // Sort buttons (vertical stack)
   &__sort-stack {
     display: flex;
     flex-direction: column;
@@ -80,117 +61,73 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     border-radius: 0;
     background: transparent;
-    color: #9ca3af;
+    color: var(--fg-muted);
     font-size: 9px;
     cursor: pointer;
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
     padding: 0;
     line-height: 1;
 
     &:hover {
-      background: #e9ecef;
-      color: #374151;
+      background: var(--bg-highlight);
+      color: var(--fg);
     }
 
     &--active {
-      background: #0078d4;
-      color: #ffffff;
-      border-color: #0078d4;
+      background: var(--blue);
+      color: var(--bg-dark);
+      border-color: var(--blue);
 
-      &:hover {
-        background: #006abc;
-      }
+      &:hover { background: var(--cyan); border-color: var(--cyan); }
     }
 
     &--clear {
-      color: #dc3545;
-      border-color: #dc3545;
+      color: var(--red);
+      border-color: var(--red);
       font-size: 8px;
 
       &:hover {
-        background: #dc3545;
-        color: #ffffff;
-      }
-    }
-
-    body.theme-dark & {
-      color: #6b7280;
-      border-color: #4b5563;
-
-      &:hover {
-        background: #37373d;
-        color: #d1d5db;
-      }
-    }
-
-    body.theme-dark &--active {
-      background: #0078d4;
-      color: #ffffff;
-      border-color: #0078d4;
-    }
-
-    body.theme-dark &--clear {
-      color: #f87171;
-      border-color: #f87171;
-
-      &:hover {
-        background: #dc3545;
-        color: #ffffff;
+        background: var(--red);
+        color: var(--bg-dark);
       }
     }
   }
 
   // Stats table
   &__container {
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #e1e5e9;
-
-    body.theme-dark & {
-      border-bottom-color: #3c3c3c;
-    }
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
   }
 
   &__table {
     width: 100%;
     border-collapse: collapse;
-    font-size: 0.8rem;
+    font-size: 0.75rem;
   }
 
   &__table-label {
-    color: #6c757d;
+    color: var(--fg-muted);
     padding: 3px 8px 3px 0;
     font-weight: 500;
     white-space: nowrap;
-
-    body.theme-dark & {
-      color: #8b949e;
-    }
   }
 
   &__table-value {
-    color: #2c3e50;
+    color: var(--fg);
     padding: 3px 0;
     font-weight: 600;
     text-align: right;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
-    font-size: 0.78rem;
-
-    body.theme-dark & {
-      color: #e5e7eb;
-    }
+    font-family: var(--font-mono);
+    font-size: 0.75rem;
   }
 
   // Filter section
   &__filter {
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid #e1e5e9;
-
-    body.theme-dark & {
-      border-bottom-color: #3c3c3c;
-    }
+    padding: 0.4rem 0.75rem;
+    border-bottom: 1px solid var(--border);
   }
 
   &__filter-header {
@@ -201,29 +138,26 @@
   }
 
   &__filter-title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #495057;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--fg-dark);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-
-    body.theme-dark & {
-      color: #cccccc;
-    }
   }
 
   &__filter-clear {
     padding: 1px 5px;
-    border: 1px solid #dc3545;
+    border: 1px solid var(--red);
     border-radius: 0;
     background: transparent;
-    color: #dc3545;
+    color: var(--red);
     font-size: 10px;
     cursor: pointer;
+    font-family: var(--font-mono);
 
     &:hover {
-      background: #dc3545;
-      color: #ffffff;
+      background: var(--red);
+      color: var(--bg-dark);
     }
   }
 
@@ -242,20 +176,10 @@
     padding: 2px 4px;
     border-radius: 0;
     font-size: 11px;
-    color: #374151;
+    color: var(--fg-dark);
     cursor: pointer;
 
-    &:hover {
-      background: #f1f3f4;
-    }
-
-    body.theme-dark & {
-      color: #d1d5db;
-
-      &:hover {
-        background: #2a2a2a;
-      }
-    }
+    &:hover { background: var(--bg-highlight); }
 
     input[type="checkbox"] {
       margin: 0;
@@ -274,11 +198,7 @@
       flex-direction: column;
       gap: 2px;
       font-size: 11px;
-      color: #6b7280;
-
-      body.theme-dark & {
-        color: #9ca3af;
-      }
+      color: var(--fg-muted);
     }
 
     &--stacked {
@@ -288,7 +208,7 @@
   }
 
   &__filter-count {
-    color: #8b949e;
+    color: var(--fg-muted);
     font-size: 10px;
     margin-left: 4px;
   }
@@ -296,39 +216,37 @@
   &__filter-input {
     width: 100%;
     padding: 3px 6px;
-    border: 1px solid #cbd5e1;
+    border: 1px solid var(--border-strong);
     border-radius: 0;
     font-size: 12px;
-    background: #ffffff;
-    color: #1f2937;
+    background: var(--bg);
+    color: var(--fg);
+    font-family: var(--font-mono);
 
-    body.theme-dark & {
-      background: #2a2a2a;
-      border-color: #4b5563;
-      color: #e5e7eb;
+    &:focus {
+      outline: none;
+      border-color: var(--blue);
     }
   }
 
   &__filter-apply {
     width: 100%;
     padding: 4px 10px;
-    border: 1px solid #0078d4;
+    border: 1px solid var(--blue);
     border-radius: 0;
-    background: #0078d4;
-    color: #ffffff;
+    background: var(--blue);
+    color: var(--bg-dark);
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
     cursor: pointer;
     margin-top: 0.4rem;
+    font-family: var(--font-mono);
 
     &:hover {
-      background: #006abc;
-    }
-
-    body.theme-dark & {
-      &:hover {
-        background: #1a8ae8;
-      }
+      background: var(--cyan);
+      border-color: var(--cyan);
     }
   }
 }
@@ -340,21 +258,18 @@
   }
 
   &__title {
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #495057;
+    font-size: 0.7rem;
+    font-weight: 700;
+    color: var(--fg-dark);
     margin-bottom: 0.5rem;
     text-transform: uppercase;
-    letter-spacing: 0.3px;
-
-    body.theme-dark & {
-      color: #8b949e;
-    }
+    letter-spacing: 0.5px;
+    font-family: var(--font-mono);
   }
 
   &__footer {
     font-size: 0.7rem;
-    color: #8b949e;
+    color: var(--fg-muted);
     margin-top: 0.4rem;
     text-align: center;
     font-style: italic;
@@ -378,57 +293,42 @@
     width: 70px;
     flex-shrink: 0;
     font-size: 0.7rem;
-    color: #6c757d;
+    color: var(--fg-muted);
     text-align: right;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-
-    body.theme-dark & {
-      color: #8b949e;
-    }
+    font-family: var(--font-mono);
   }
 
   &__bar-track {
     flex: 1;
     height: 14px;
-    background: #eef0f2;
+    background: var(--bg);
     border-radius: 0;
     overflow: hidden;
     min-width: 0;
-
-    body.theme-dark & {
-      background: #2a2d30;
-    }
   }
 
   &__bar-fill {
     height: 100%;
-    background: linear-gradient(90deg, #0078d4, #00a4ef);
+    background: var(--blue);
     border-radius: 0;
     min-width: 2px;
-
-    body.theme-dark & {
-      background: linear-gradient(90deg, #0078d4, #4fc3f7);
-    }
   }
 
   &__count {
     flex-shrink: 0;
     min-width: 50px;
     font-size: 0.7rem;
-    color: #495057;
+    color: var(--fg-dark);
     text-align: right;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-weight: 500;
-
-    body.theme-dark & {
-      color: #d1d5db;
-    }
   }
 
   &__pct {
-    color: #8b949e;
+    color: var(--fg-muted);
     font-weight: 400;
     font-size: 0.65rem;
   }
@@ -440,14 +340,9 @@
     gap: 1px;
     height: 100px;
     padding: 6px 4px;
-    background: #f8f9fa;
-    border: 1px solid #e1e5e9;
+    background: var(--bg);
+    border: 1px solid var(--border);
     border-radius: 0;
-
-    body.theme-dark & {
-      background: #1e2024;
-      border-color: #3c3c3c;
-    }
   }
 
   &__numerical-bar {
@@ -460,22 +355,18 @@
 
   &__numerical-bar-fill {
     width: 100%;
-    background: linear-gradient(180deg, #00a4ef, #0078d4);
+    background: var(--cyan);
     border-radius: 0;
     min-height: 1px;
-
-    body.theme-dark & {
-      background: linear-gradient(180deg, #4fc3f7, #0078d4);
-    }
   }
 
   &__axis {
     display: flex;
     justify-content: space-between;
     font-size: 0.65rem;
-    color: #8b949e;
+    color: var(--fg-muted);
     margin-top: 2px;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     padding: 0 4px;
   }
 }

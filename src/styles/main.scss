@@ -1,4 +1,7 @@
-// Main SASS file - imports all component styles
+// Tokens FIRST so every component @use sees the CSS custom properties.
+@use "tokens";
+
+// Component styles.
 @use "components/tab-manager";
 @use "components/spreadsheet-visualizer";
 @use "components/column-stats-visualizer";
@@ -16,71 +19,47 @@
 * {
   box-sizing: border-box;
 
-  // Consistent scrollbars matching SpreadsheetVisualizer canvas scrollbars (Firefox)
+  // Firefox scrollbars match the canvas-rendered ones in SpreadsheetVisualizer.
   scrollbar-width: thin;
-  scrollbar-color: #d1d5db #f3f3f3;
+  scrollbar-color: var(--gutter) var(--bg-dark);
 }
 
-body.theme-dark * {
-  scrollbar-color: #4b5563 #2d2d30;
-}
-
-// Webkit scrollbar styling (Chrome, Edge, Safari)
-// Colors match the SpreadsheetVisualizer canvas scrollbar theme exactly
+// Webkit scrollbar styling (Chrome, Edge, Safari).
 ::-webkit-scrollbar {
   width: 12px;
   height: 12px;
 }
 
 ::-webkit-scrollbar-track {
-  background: #f3f3f3;
+  background: var(--bg-dark);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #d1d5db;
+  background: var(--gutter);
   border-radius: 0;
 
   &:hover {
-    background: #9ca3af;
+    background: var(--border-strong);
   }
 }
 
-// Hide scrollbar arrows/buttons (match canvas scrollbars which have none)
+// Hide scrollbar arrows/buttons (match canvas scrollbars which have none).
 ::-webkit-scrollbar-button {
   display: none;
   width: 0;
   height: 0;
 }
 
-// Corner where horizontal and vertical scrollbars meet
 ::-webkit-scrollbar-corner {
-  background: #f3f3f3;
-}
-
-body.theme-dark {
-  ::-webkit-scrollbar-track {
-    background: #2d2d30;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    background: #4b5563;
-
-    &:hover {
-      background: #6b7280;
-    }
-  }
-
-  ::-webkit-scrollbar-corner {
-    background: #2d2d30;
-  }
+  background: var(--bg-dark);
 }
 
 body {
   margin: 0;
   padding: 0;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

@@ -1,0 +1,107 @@
+// Tokyonight palette — Storm (dark) and Day (light) variants.
+// https://github.com/folke/tokyonight.nvim
+//
+// Tokens are exposed as CSS custom properties on the body so the entire
+// stylesheet tree can pick them up via var(--bg) etc. — switching themes is
+// a body-class flip; no SCSS recompile needed at runtime.
+//
+// Palette names mirror the upstream theme (bg, fg, comment, blue, …) so
+// component SCSS reads naturally to anyone familiar with neovim themes.
+
+// ----------------------------------------------------------------------
+// Tokyonight Day (light) — default theme
+// ----------------------------------------------------------------------
+body,
+body.theme-light {
+  // Surfaces
+  --bg:              #e1e2e7;
+  --bg-dark:         #d6d8e0;
+  --bg-highlight:    #c4c8da;
+  --bg-float:        #ebecf2;
+
+  // Text
+  --fg:              #3760bf;
+  --fg-dark:         #6172b0;
+  --fg-muted:        #848cb5;
+
+  // Structural
+  --border:          #b4b5b9;
+  --border-strong:   #a8aecb;
+  --gutter:          #a8aecb;
+
+  // Accents (used sparingly for selection / chips / highlights)
+  --blue:            #2e7de9;
+  --cyan:            #007197;
+  --green:           #587539;
+  --yellow:          #8c6c3e;
+  --orange:          #b15c00;
+  --red:             #f52a65;
+  --magenta:         #9854f1;
+  --purple:          #7847bd;
+
+  // Semantic
+  --selection:       rgba(46, 125, 233, 0.15);
+  --selection-bg:    rgba(46, 125, 233, 0.18);
+  --selection-fg:    var(--fg);
+  --hover:           rgba(46, 125, 233, 0.08);
+  --error-bg:        rgba(245, 42, 101, 0.15);
+  --warning-bg:      rgba(176, 92, 0, 0.18);
+  --success-bg:      rgba(88, 117, 57, 0.18);
+  --info-bg:         rgba(46, 125, 233, 0.12);
+}
+
+// ----------------------------------------------------------------------
+// Tokyonight Storm (dark)
+// ----------------------------------------------------------------------
+body.theme-dark {
+  // Surfaces
+  --bg:              #1a1b26;
+  --bg-dark:         #16161e;
+  --bg-highlight:    #292e42;
+  --bg-float:        #1f2335;
+
+  // Text
+  --fg:              #c0caf5;
+  --fg-dark:         #a9b1d6;
+  --fg-muted:        #565f89;
+
+  // Structural
+  --border:          #292e42;
+  --border-strong:   #3b4261;
+  --gutter:          #3b4261;
+
+  // Accents
+  --blue:            #7aa2f7;
+  --cyan:            #7dcfff;
+  --green:           #9ece6a;
+  --yellow:          #e0af68;
+  --orange:          #ff9e64;
+  --red:             #f7768e;
+  --magenta:         #bb9af7;
+  --purple:          #9d7cd8;
+
+  // Semantic
+  --selection:       rgba(122, 162, 247, 0.18);
+  --selection-bg:    rgba(122, 162, 247, 0.22);
+  --selection-fg:    var(--fg);
+  --hover:           rgba(122, 162, 247, 0.10);
+  --error-bg:        rgba(247, 118, 142, 0.20);
+  --warning-bg:      rgba(224, 175, 104, 0.22);
+  --success-bg:      rgba(158, 206, 106, 0.18);
+  --info-bg:         rgba(125, 207, 255, 0.18);
+}
+
+// ----------------------------------------------------------------------
+// Font stacks
+// ----------------------------------------------------------------------
+:root {
+  // Programming font for chrome and tabular data. Falls back through the
+  // common bundled-with-OS stack — no Nerd Font dependency.
+  --font-mono: "JetBrains Mono", "Fira Code", "Cascadia Code", "Source Code Pro",
+               "SF Mono", "Consolas", "Monaco", "Menlo", "Courier New", monospace;
+
+  // Sans-serif kept for prose blocks (HelpPanel tutorial body) where dense
+  // monospace would feel cramped.
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Inter",
+               "Helvetica Neue", sans-serif;
+}

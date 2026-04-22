@@ -82,65 +82,62 @@ export function getThemeColors(theme?: "light" | "dark"): ThemeColors {
 
   const currentTheme = theme || detectCurrentTheme();
 
+  // Tokyonight palette — keep these in sync with src/styles/_tokens.scss.
+  // The canvas can't read CSS custom properties from JS without an extra
+  // getComputedStyle call per cell, so the palette is mirrored here as
+  // literals. Updating one place requires updating the other.
   const colors: ThemeColors =
     currentTheme === "dark"
       ? {
-          // Header colors - match app dark theme
-          headerBackgroundColor: "#2d2d30",
-          headerTextColor: "#e5e7eb",
+          // Storm — dark variant
+          headerBackgroundColor: "#1f2335",
+          headerTextColor: "#c0caf5",
 
-          // Cell colors - darker but readable
-          cellBackgroundColor: "#1e1e1e",
-          cellTextColor: "#e5e7eb",
+          cellBackgroundColor: "#1a1b26",
+          cellTextColor: "#c0caf5",
 
-          // Border and UI colors
-          borderColor: "#404040",
-          selectionColor: "rgba(59, 130, 246, 0.25)",
-          selectionBorderColor: "#3b82f6",
-          hoverColor: "rgba(59, 130, 246, 0.12)",
-          hoverBorderColor: "rgba(59, 130, 246, 0.6)",
+          borderColor: "#292e42",
+          selectionColor: "rgba(122, 162, 247, 0.22)",
+          selectionBorderColor: "#7aa2f7",
+          hoverColor: "rgba(122, 162, 247, 0.10)",
+          hoverBorderColor: "rgba(122, 162, 247, 0.5)",
 
-          // Scrollbar colors
-          scrollbarColor: "#2d2d30",
-          scrollbarThumbColor: "#4b5563",
-          scrollbarHoverColor: "#6b7280",
+          scrollbarColor: "#16161e",
+          scrollbarThumbColor: "#3b4261",
+          scrollbarHoverColor: "#565f89",
 
-          // Data type specific colors - subtle variations
-          booleanStyle: { backgroundColor: "#1e293b", textColor: "#60a5fa" },
-          numericStyle: { backgroundColor: "#14532d", textColor: "#34d399" },
-          stringStyle: { backgroundColor: "#1e1e1e", textColor: "#e5e7eb" },
-          dateStyle: { backgroundColor: "#451a03", textColor: "#fbbf24" },
-          datetimeStyle: { backgroundColor: "#7c2d12", textColor: "#fb923c" },
-          nullStyle: { backgroundColor: "#1e1e1e", textColor: "#9ca3af" },
+          // Type-coloured cells — soft tinted backgrounds with fg accents.
+          booleanStyle:  { backgroundColor: "#1a1b26", textColor: "#7aa2f7" },
+          numericStyle:  { backgroundColor: "#1a1b26", textColor: "#9ece6a" },
+          stringStyle:   { backgroundColor: "#1a1b26", textColor: "#c0caf5" },
+          dateStyle:     { backgroundColor: "#1a1b26", textColor: "#e0af68" },
+          datetimeStyle: { backgroundColor: "#1a1b26", textColor: "#ff9e64" },
+          nullStyle:     { backgroundColor: "#1a1b26", textColor: "#565f89" },
         }
       : {
-          // Header colors - match dataset panel header
-          headerBackgroundColor: "#f8f9fa",
-          headerTextColor: "#1f2937",
+          // Day — light variant
+          headerBackgroundColor: "#d6d8e0",
+          headerTextColor: "#3760bf",
 
-          // Cell colors - clean and bright
-          cellBackgroundColor: "#ffffff",
-          cellTextColor: "#1f2937",
+          cellBackgroundColor: "#e1e2e7",
+          cellTextColor: "#3760bf",
 
-          // Border and UI colors - match app borders
-          borderColor: "#e5e7eb",
-          selectionColor: "rgba(59, 130, 246, 0.15)",
-          selectionBorderColor: "#3b82f6",
-          hoverColor: "rgba(59, 130, 246, 0.08)",
-          hoverBorderColor: "rgba(59, 130, 246, 0.4)",
+          borderColor: "#b4b5b9",
+          selectionColor: "rgba(46, 125, 233, 0.18)",
+          selectionBorderColor: "#2e7de9",
+          hoverColor: "rgba(46, 125, 233, 0.10)",
+          hoverBorderColor: "rgba(46, 125, 233, 0.45)",
 
-          // Scrollbar colors
-          scrollbarColor: "#f3f3f3",
-          scrollbarThumbColor: "#d1d5db",
-          scrollbarHoverColor: "#9ca3af",
+          scrollbarColor: "#d6d8e0",
+          scrollbarThumbColor: "#a8aecb",
+          scrollbarHoverColor: "#848cb5",
 
-          // Data type specific colors - subtle but distinct
-          booleanStyle: { backgroundColor: "#eff6ff", textColor: "#2563eb" },
-          numericStyle: { backgroundColor: "#f0fdf4", textColor: "#059669" },
-          stringStyle: { backgroundColor: "#ffffff", textColor: "#1f2937" },
-          dateStyle: { backgroundColor: "#fef3c7", textColor: "#d97706" },
-          datetimeStyle: { backgroundColor: "#fed7aa", textColor: "#ea580c" },
-          nullStyle: { backgroundColor: "#f9fafb", textColor: "#6b7280" },
+          booleanStyle:  { backgroundColor: "#e1e2e7", textColor: "#2e7de9" },
+          numericStyle:  { backgroundColor: "#e1e2e7", textColor: "#587539" },
+          stringStyle:   { backgroundColor: "#e1e2e7", textColor: "#3760bf" },
+          dateStyle:     { backgroundColor: "#e1e2e7", textColor: "#8c6c3e" },
+          datetimeStyle: { backgroundColor: "#e1e2e7", textColor: "#b15c00" },
+          nullStyle:     { backgroundColor: "#e1e2e7", textColor: "#848cb5" },
         };
 
   // Cache only the default (no-override) result

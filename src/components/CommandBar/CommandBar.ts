@@ -71,7 +71,7 @@ export class CommandBar {
     // Shell prompt marker
     this.prompt = document.createElement("span");
     this.prompt.className = "command-bar__shell-prompt";
-    this.prompt.textContent = ">";
+    this.prompt.textContent = ":";
     this.element.appendChild(this.prompt);
 
     // Shell input — accepts dot-commands and single-line SQL.

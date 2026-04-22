@@ -1,17 +1,14 @@
-// Command Palette - VS Code inspired styling
+// CommandPalette — tokyonight palette via tokens. (Slated for removal in
+// 0.9; styling kept until then so the fallback surface looks coherent.)
+
 .command-palette-overlay {
   position: fixed;
   top: 0;
   left: 0;
   width: 100%;
   height: 100%;
-  background-color: rgba(0, 0, 0, 0.6) !important;
+  background-color: rgba(0, 0, 0, 0.6);
   z-index: 9998;
-
-  // Light theme overlay
-  body.theme-light & {
-    background-color: rgba(0, 0, 0, 0.2) !important;
-  }
 }
 
 .command-palette {
@@ -22,46 +19,30 @@
   width: 600px;
   max-width: 90vw;
   max-height: 60vh;
-  background-color: #3c3c3c;
-  border: 1px solid #666666;
+  background-color: var(--bg-float);
+  border: 1px solid var(--border-strong);
   border-radius: 0;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
   z-index: 9999;
   overflow: hidden;
   animation: commandPaletteSlideIn 0.2s ease-out;
-
-  // Light theme - higher specificity and brighter colors
-  body.theme-light & {
-    background-color: #ffffff !important;
-    border-color: #e5e5e5 !important;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.15) !important;
-  }
+  font-family: var(--font-mono);
 
   &__input {
     width: 100%;
     height: 40px;
-    background-color: transparent;
+    background-color: var(--bg-dark);
     border: none;
     outline: none;
     font-size: 14px;
-    color: #ffffff;
+    color: var(--fg);
     padding: 0 16px;
-    border-bottom: 1px solid #666666;
-    font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+    border-bottom: 1px solid var(--border);
+    font-family: var(--font-mono);
 
     &::placeholder {
-      color: #cccccc;
-    }
-
-    // Light theme
-    body.theme-light & {
-      color: #2c3e50 !important;
-      border-bottom-color: #e1e5e9 !important;
-      background-color: #f8f9fa !important;
-
-      &::placeholder {
-        color: #6c757d !important;
-      }
+      color: var(--fg-muted);
+      font-style: italic;
     }
   }
 
@@ -69,63 +50,38 @@
     max-height: 400px;
     overflow-y: auto;
     padding: 4px 0;
-
   }
 
   &__item {
     display: flex;
     flex-direction: column;
-    padding: 8px 16px;
+    padding: 6px 16px;
     cursor: pointer;
     transition: background-color 0.1s ease;
     border-radius: 0;
-    min-height: 40px;
+    min-height: 38px;
     justify-content: center;
 
     &:hover {
-      background-color: #4a4a4a;
+      background-color: var(--bg-highlight);
     }
 
     &--selected {
-      background-color: #0078d4;
+      background-color: var(--blue);
 
-      &:hover {
-        background-color: #1084e4;
-      }
-    }
+      &:hover { background-color: var(--cyan); }
 
-    // Light theme
-    body.theme-light & {
-      &:hover {
-        background-color: #f8f9fa !important;
-      }
-
-      &--selected {
-        background-color: #0078d4 !important;
-        color: #ffffff !important;
-
-        &:hover {
-          background-color: #106ebe !important;
-        }
-      }
+      .command-palette__item-title       { color: var(--bg-dark); }
+      .command-palette__item-details     { color: rgba(0, 0, 0, 0.65); }
+      .command-palette__item-keybinding  { background-color: rgba(0, 0, 0, 0.2); color: var(--bg-dark); border-color: transparent; }
     }
 
     &-title {
-      font-size: 13px;
-      font-weight: 500;
-      color: #ffffff;
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--fg);
       margin-bottom: 2px;
-
-      // Light theme
-      body.theme-light & {
-        color: #2c3e50 !important;
-        font-weight: 600 !important;
-      }
-
-      // Selected state
-      .command-palette__item--selected & {
-        color: #ffffff;
-      }
+      font-family: var(--font-mono);
     }
 
     &-details {
@@ -133,17 +89,7 @@
       align-items: center;
       gap: 12px;
       font-size: 11px;
-      color: #dddddd;
-
-      // Light theme
-      body.theme-light & {
-        color: #6c757d !important;
-      }
-
-      // Selected state
-      .command-palette__item--selected & {
-        color: rgba(255, 255, 255, 0.9);
-      }
+      color: var(--fg-muted);
     }
 
     &-description {
@@ -154,57 +100,30 @@
     }
 
     &-keybinding {
-      background-color: #666666;
-      color: #ffffff;
+      background-color: var(--bg-dark);
+      color: var(--fg-dark);
       padding: 2px 6px;
       border-radius: 0;
       font-size: 10px;
-      font-family: "Consolas", "Monaco", monospace;
-      border: 1px solid #777777;
-
-      // Light theme
-      body.theme-light & {
-        background-color: #f1f3f4 !important;
-        color: #495057 !important;
-        border: 1px solid #e1e5e9 !important;
-      }
-
-      // Selected state
-      .command-palette__item--selected & {
-        background-color: rgba(255, 255, 255, 0.25);
-        color: #ffffff;
-        border-color: rgba(255, 255, 255, 0.3);
-      }
+      font-family: var(--font-mono);
+      border: 1px solid var(--border);
     }
   }
 
   &__no-results {
     padding: 16px;
     text-align: center;
-    color: #dddddd;
+    color: var(--fg-muted);
     font-size: 12px;
     font-style: italic;
-
-    // Light theme
-    body.theme-light & {
-      color: #6c757d !important;
-    }
   }
 }
 
-// Animations
 @keyframes commandPaletteSlideIn {
-  from {
-    opacity: 0;
-    transform: translateX(-50%) translateY(-20px);
-  }
-  to {
-    opacity: 1;
-    transform: translateX(-50%) translateY(0);
-  }
+  from { opacity: 0; transform: translateX(-50%) translateY(-20px); }
+  to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
 
-// Responsive adjustments
 @media (max-width: 768px) {
   .command-palette {
     top: 5%;
@@ -212,7 +131,7 @@
     max-height: 70vh;
 
     &__input {
-      font-size: 16px; // Prevent zoom on iOS
+      font-size: 16px;
       height: 44px;
     }
 
@@ -220,33 +139,26 @@
       padding: 12px 16px;
       min-height: 44px;
 
-      &-title {
-        font-size: 14px;
-      }
-
-      &-details {
-        font-size: 12px;
-      }
+      &-title   { font-size: 14px; }
+      &-details { font-size: 12px; }
     }
   }
 }
 
-// High contrast mode support
 @media (prefers-contrast: high) {
   .command-palette {
     border-width: 2px;
 
-    &__item {
-      &--selected {
-        background-color: #0078d4;
-        outline: 2px solid #ffffff;
-        outline-offset: -2px;
-      }
+    &__item--selected {
+      background-color: var(--blue);
+      outline: 2px solid var(--fg);
+      outline-offset: -2px;
     }
   }
 }
 
-// Parameter form styles
+// ----- Parameter form (sub-view shown after selecting a parameterised cmd)
+
 .command-palette__parameter-line {
   align-items: center;
   padding: 8px 16px;
@@ -256,53 +168,36 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px;
-  border-bottom: 1px solid #666666;
-
-  body.theme-light & {
-    border-bottom-color: #e5e5e5 !important;
-  }
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
 }
 
 .command-palette__parameter-title {
-  font-size: 14px;
-  font-weight: 600;
-  color: #ffffff;
-
-  body.theme-light & {
-    color: #333333 !important;
-  }
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--fg);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 .command-palette__parameter-execute-button {
-  width: 32px;
-  height: 32px;
-  background-color: #007acc;
+  width: 30px;
+  height: 30px;
+  background-color: var(--blue);
   border: none;
   border-radius: 0;
-  color: #ffffff;
+  color: var(--bg-dark);
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
-  transition: background-color 0.15s ease-in-out;
+  transition: background-color 0.12s ease;
 
-  &:hover {
-    background-color: #106ebe;
-  }
+  &:hover  { background-color: var(--cyan); }
+  &:active { background-color: var(--blue); }
+  &:focus  { outline: none; box-shadow: 0 0 0 2px var(--info-bg); }
 
-  &:active {
-    background-color: #005a9e;
-  }
-
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 2px rgba(0, 122, 204, 0.3);
-  }
-
-  svg {
-    flex-shrink: 0;
-  }
+  svg { flex-shrink: 0; }
 }
 
 .command-palette__parameters {
@@ -314,45 +209,26 @@
 .command-palette__parameter-row {
   display: flex;
   align-items: center;
-  padding: 8px 16px;
+  padding: 6px 16px;
   border-bottom: 1px solid transparent;
-  transition:
-    background-color 0.1s ease,
-    border-color 0.1s ease;
+  transition: background-color 0.1s ease, border-color 0.1s ease;
   min-height: 32px;
 
-  &:hover {
-    background-color: rgba(255, 255, 255, 0.05);
-  }
+  &:hover { background-color: var(--bg-highlight); }
 
   &.focused {
-    background-color: rgba(0, 122, 204, 0.1);
-    border-bottom-color: #007acc;
-  }
-
-  body.theme-light & {
-    &:hover {
-      background-color: rgba(0, 0, 0, 0.05) !important;
-    }
-
-    &.focused {
-      background-color: rgba(0, 122, 204, 0.1) !important;
-      border-bottom-color: #007acc !important;
-    }
+    background-color: var(--info-bg);
+    border-bottom-color: var(--blue);
   }
 }
 
 .command-palette__parameter-name {
-  font-size: 13px;
+  font-size: 12px;
   font-weight: 500;
-  color: #cccccc;
+  color: var(--fg-muted);
   min-width: 120px;
   margin-right: 16px;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-
-  body.theme-light & {
-    color: #666666 !important;
-  }
+  font-family: var(--font-mono);
 }
 
 .command-palette__parameter-input-container {
@@ -362,142 +238,72 @@
 }
 
 .command-palette__parameter-prompt {
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
-  color: #ffffff;
+  color: var(--fg);
   margin-bottom: 8px;
+  font-family: var(--font-mono);
 }
 
 .command-palette__parameter-input {
   width: 100%;
-  background-color: #2d2d30;
-  border: none;
+  background-color: var(--bg-dark);
   outline: none;
-  font-size: 14px;
-  border: 2px solid #666666;
+  font-size: 13px;
+  border: 2px solid var(--border-strong);
   border-radius: 0;
-  padding: 10px;
-  color: #ffffff;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
-  transition: none;
+  padding: 8px 10px;
+  color: var(--fg);
+  font-family: var(--font-mono);
+  transition: border-color 0.12s ease;
 
   &::placeholder {
-    color: #666666;
+    color: var(--fg-muted);
     font-style: italic;
   }
 
-  &:focus {
-    border-color: #007acc;
-    outline: none;
-  }
+  &:focus { border-color: var(--blue); }
 
-  // When dropdown is open, modify the input appearance
   &.has-dropdown {
-    border-bottom-left-radius: 0;
-    border-bottom-right-radius: 0;
     border-bottom-color: transparent;
-  }
-
-  body.theme-light & {
-    background-color: transparent !important;
-    color: #333333 !important;
-
-    &::placeholder {
-      color: #999999 !important;
-    }
-
-    &:focus {
-      outline: none;
-    }
-
-    &.has-dropdown {
-      border-bottom-color: transparent !important;
-    }
   }
 }
 
-// Parameter dropdown styles
 .command-palette__parameter-dropdown {
-  // position: absolute;
   top: calc(100% - 1px);
   left: 0;
   right: 0;
-  background-color: #2d2d30;
-  border: 2px solid #007acc;
+  background-color: var(--bg-float);
+  border: 2px solid var(--blue);
   border-top: none;
   border-radius: 0;
   z-index: 100000;
-  box-shadow: 0 4px 12px rgba(0, 122, 204, 0.2);
-
-  body.theme-light & {
-    background-color: #ffffff !important;
-    border-color: #007acc !important;
-    box-shadow: 0 4px 12px rgba(0, 122, 204, 0.15) !important;
-  }
-
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
 }
 
 .command-palette__parameter-dropdown-item {
-  padding: 8px 12px;
+  padding: 6px 12px;
   cursor: pointer;
-  color: #ffffff;
-  font-size: 14px;
-  border-bottom: 1px solid #3c3c3c;
+  color: var(--fg);
+  font-size: 13px;
+  border-bottom: 1px solid var(--border);
   transition: background-color 0.1s ease;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  font-family: var(--font-mono);
 
-  &:first-child {
-    padding-top: 10px;
-  }
+  &:last-child { border-bottom: none; }
 
-  &:last-child {
-    border-bottom: none;
-    border-radius: 0;
-  }
-
-  &:hover {
-    background-color: #3c3c3c;
-  }
+  &:hover { background-color: var(--bg-highlight); }
 
   &--selected {
-    background-color: #0078d4;
-    color: #ffffff;
+    background-color: var(--blue);
+    color: var(--bg-dark);
 
-    &:hover {
-      background-color: #106ebe;
-    }
-  }
-
-  body.theme-light & {
-    color: #333333 !important;
-    border-bottom-color: #f0f0f0 !important;
-
-    &:hover {
-      background-color: #f8f9fa !important;
-    }
-
-    &--selected {
-      background-color: #0078d4 !important;
-      color: #ffffff !important;
-
-      &:hover {
-        background-color: #106ebe !important;
-      }
-    }
+    &:hover { background-color: var(--cyan); }
   }
 }
 
-// Reduced motion support
 @media (prefers-reduced-motion: reduce) {
-  .command-palette {
-    animation: none;
-  }
-
-  .command-palette__item {
-    transition: none;
-  }
-
-  .command-palette__parameter-input {
-    transition: none;
-  }
+  .command-palette,
+  .command-palette__item,
+  .command-palette__parameter-input { transition: none; animation: none; }
 }

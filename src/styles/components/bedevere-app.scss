@@ -1,25 +1,13 @@
-// BedevereApp - Main application layout with VS Code-like styling
+// BedevereApp — root layout, tokyonight palette via CSS custom properties.
 .bedevere-app {
   display: flex;
   flex-direction: column;
   height: 100vh;
   width: 100vw;
-  background-color: #1e1e1e;
-  color: #cccccc;
-  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-mono);
   overflow: hidden;
-
-  // Light theme
-  body.theme-light & {
-    background-color: #ffffff;
-    color: #333333;
-  }
-
-  // Dark theme (default)
-  body.theme-dark & {
-    background-color: #1e1e1e;
-    color: #cccccc;
-  }
 
   &__main {
     display: flex;
@@ -33,18 +21,11 @@
     flex-direction: column;
     width: 320px;
     min-width: 300px;
-    background-color: #252526;
-    border-right: 1px solid #3c3c3c;
+    background-color: var(--bg-dark);
+    border-right: 1px solid var(--border);
     overflow: hidden;
     transition: width 0.3s ease;
 
-    // Light theme
-    body.theme-light & {
-      background-color: #f3f3f3;
-      border-right-color: #e5e5e5;
-    }
-
-    // Minimized state
     .bedevere-app--panel-minimized & {
       width: 48px;
       min-width: 48px;
@@ -56,28 +37,20 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    background-color: #1e1e1e;
+    background-color: var(--bg);
     position: relative;
-
-    // Light theme
-    body.theme-light & {
-      background-color: #ffffff;
-    }
   }
 }
 
-// Global theme body classes
-body.theme-light {
-  background-color: #ffffff;
-  color: #333333;
-}
-
+// Body theme classes — tokens already define bg/fg via _tokens.scss; just
+// keep the html-level surface in sync so any element without an explicit
+// background inherits the right colour.
+body.theme-light,
 body.theme-dark {
-  background-color: #1e1e1e;
-  color: #cccccc;
+  background-color: var(--bg);
+  color: var(--fg);
 }
 
-// Responsive design
 @media (max-width: 768px) {
   .bedevere-app {
     &__control-panel {
@@ -95,7 +68,6 @@ body.theme-dark {
         transform: translateX(0);
       }
 
-      // When minimized on mobile, hide completely
       .bedevere-app--panel-minimized & {
         transform: translateX(-100%);
       }
@@ -108,57 +80,20 @@ body.theme-dark {
 }
 
 @media (max-width: 480px) {
-  .bedevere-app {
-    &__control-panel {
-      width: 100%;
-      max-width: none;
-    }
+  .bedevere-app__control-panel {
+    width: 100%;
+    max-width: none;
   }
 }
 
-// Focus management
-.bedevere-app {
-  &:focus-within {
-    .status-bar {
-      border-top-color: #007acc;
-    }
-  }
+.bedevere-app:focus-within .status-bar {
+  border-top-color: var(--blue);
 }
 
-// High contrast mode
 @media (prefers-contrast: high) {
-  .bedevere-app {
-    &__control-panel {
-      border-right-width: 2px;
-    }
-
-    &--light {
-      .status-bar {
-        border-top-color: #000000;
-      }
-
-      .bedevere-app__control-panel {
-        border-right-color: #000000;
-      }
-    }
-
-    &--dark {
-      .status-bar {
-        border-top-color: #ffffff;
-      }
-
-      .bedevere-app__control-panel {
-        border-right-color: #ffffff;
-      }
-    }
-  }
+  .bedevere-app__control-panel { border-right-width: 2px; }
 }
 
-// Reduced motion
 @media (prefers-reduced-motion: reduce) {
-  .bedevere-app {
-    &__control-panel {
-      transition: none;
-    }
-  }
+  .bedevere-app__control-panel { transition: none; }
 }

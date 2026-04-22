@@ -4,47 +4,26 @@
   left: 0;
   height: 100vh;
   z-index: 1000;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans", "Helvetica Neue",
-    sans-serif;
+  font-family: var(--font-mono);
 
   &__panel {
     width: 320px;
     height: 100%;
-    background: linear-gradient(180deg, #ffffff 0%, #fafbfc 100%);
-    border-right: 1px solid #e8ecf0;
+    background: var(--bg-dark);
+    border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     overflow: hidden;
     position: relative;
 
-    body.theme-dark & {
-      background: linear-gradient(180deg, #252526 0%, #1f1f1f 100%);
-      border-right-color: #404040;
-    }
-
     &--minimized {
       width: 48px;
 
-      .control-panel__content {
-        opacity: 0;
-        visibility: hidden;
-        pointer-events: none;
-      }
-
-      .control-panel__header {
-        justify-content: center;
-        padding: 6px 8px;
-      }
-
-      .control-panel__toggle {
-        margin: 0;
-      }
-
-      .control-panel__resize-handle {
-        display: none;
-      }
+      .control-panel__content { opacity: 0; visibility: hidden; pointer-events: none; }
+      .control-panel__header  { justify-content: center; padding: 6px 8px; }
+      .control-panel__toggle  { margin: 0; }
+      .control-panel__resize-handle { display: none; }
     }
   }
 
@@ -52,23 +31,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 6px 8px;
-    background: linear-gradient(180deg, #fafbfc 0%, #f5f7fa 100%);
-    border-bottom: 1px solid #e8ecf0;
+    padding: 6px 10px;
+    background: var(--bg-dark);
+    border-bottom: 1px solid var(--border);
     min-height: 36px;
     flex-shrink: 0;
-
-    body.theme-dark & {
-      background: linear-gradient(180deg, #2d2d30 0%, #252526 100%);
-      border-bottom-color: #404040;
-    }
   }
 
   &__app-title {
-    font-size: 13px;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    color: #444;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    color: var(--fg);
     user-select: none;
     white-space: nowrap;
     overflow: hidden;
@@ -76,13 +51,7 @@
     display: inline-flex;
     align-items: center;
 
-    body.theme-dark & {
-      color: #ccc;
-    }
-
-    .control-panel__panel--minimized & {
-      display: none;
-    }
+    .control-panel__panel--minimized & { display: none; }
   }
 
   &__app-icon {
@@ -96,31 +65,23 @@
   &__toggle {
     background: none;
     border: none;
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 500;
-    color: #666;
+    color: var(--fg-muted);
     cursor: pointer;
-    padding: 8px;
+    padding: 6px;
     border-radius: 0;
-    transition: all 0.2s ease;
+    transition: background-color 0.12s ease, color 0.12s ease;
     display: flex;
     align-items: center;
     justify-content: center;
-    min-width: 32px;
-    height: 32px;
+    min-width: 28px;
+    height: 28px;
+    font-family: var(--font-mono);
 
     &:hover {
-      background-color: rgba(0, 0, 0, 0.05);
-      color: #333;
-    }
-
-    body.theme-dark & {
-      color: #ccc;
-
-      &:hover {
-        background-color: rgba(255, 255, 255, 0.1);
-        color: #fff;
-      }
+      background-color: var(--bg-highlight);
+      color: var(--fg);
     }
   }
 
@@ -129,17 +90,12 @@
     overflow-y: auto;
     overflow-x: hidden;
     transition: opacity 0.2s ease, visibility 0.2s ease;
-
   }
 
   // --- Accordion ---
 
   &__accordion-section {
-    border-bottom: 1px solid #e8ecf0;
-
-    body.theme-dark & {
-      border-bottom-color: #333;
-    }
+    border-bottom: 1px solid var(--border);
   }
 
   &__accordion-header {
@@ -148,43 +104,28 @@
     padding: 6px 12px;
     cursor: pointer;
     user-select: none;
-    transition: background 0.15s ease;
+    transition: background-color 0.12s ease;
 
-    &:hover {
-      background: #f0f2f5;
-
-      body.theme-dark & {
-        background: #2d2d30;
-      }
-    }
+    &:hover { background: var(--bg-highlight); }
   }
 
   &__accordion-chevron {
     font-size: 8px;
     margin-right: 8px;
     transition: transform 0.2s ease;
-    color: #6b7280;
+    color: var(--fg-muted);
     display: inline-block;
 
-    body.theme-dark & {
-      color: #9ca3af;
-    }
-
-    &--expanded {
-      transform: rotate(90deg);
-    }
+    &--expanded { transform: rotate(90deg); }
   }
 
   &__accordion-title {
     font-size: 11px;
     font-weight: 700;
-    color: #6b7280;
+    color: var(--fg-muted);
     text-transform: uppercase;
     letter-spacing: 0.5px;
-
-    body.theme-dark & {
-      color: #9ca3af;
-    }
+    font-family: var(--font-mono);
   }
 
   &__accordion-body {
@@ -192,9 +133,7 @@
     overflow: hidden;
     transition: max-height 0.25s ease;
 
-    &--expanded {
-      max-height: 2000px;
-    }
+    &--expanded { max-height: 2000px; }
   }
 
   // --- Resize Handle ---
@@ -208,24 +147,21 @@
     cursor: col-resize;
     z-index: 1;
 
-    &:hover {
-      background: rgba(0, 120, 212, 0.3);
-    }
+    &:hover { background: var(--blue); opacity: 0.5; }
   }
 
   // --- Dataset Items ---
 
-  &__list {
-    padding: 0;
-  }
+  &__list { padding: 0; }
 
   &__item {
     display: flex;
     align-items: center;
     padding: 6px 16px;
-    border-bottom: 1px solid #f0f2f5;
+    border-bottom: 1px solid var(--border);
     transition: background 0.15s ease;
     position: relative;
+    font-family: var(--font-mono);
 
     &::before {
       content: "";
@@ -233,45 +169,26 @@
       left: 0;
       top: 0;
       bottom: 0;
-      width: 3px;
+      width: 2px;
       background: transparent;
       transition: background 0.15s ease;
-    }
-
-    body.theme-dark & {
-      border-bottom-color: #333;
     }
 
     &:not(&--loaded) {
       cursor: pointer;
 
       &:hover {
-        background: #f8f9fa;
+        background: var(--bg-highlight);
 
-        &::before {
-          background: #3b82f6;
-        }
-      }
-
-      body.theme-dark & {
-        &:hover {
-          background: #2d2d30;
-        }
+        &::before { background: var(--blue); }
       }
     }
 
     &--loaded {
-      background: linear-gradient(90deg, #f0f9ff 0%, #e0f2fe 100%);
-      color: #0369a1;
+      background: var(--bg);
+      color: var(--cyan);
 
-      &::before {
-        background: #10b981;
-      }
-
-      body.theme-dark & {
-        background: linear-gradient(90deg, #0f172a 0%, #1e293b 100%);
-        color: #60a5fa;
-      }
+      &::before { background: var(--green); }
     }
   }
 
@@ -282,13 +199,10 @@
 
   &__item-name {
     font-weight: 600;
-    font-size: 14px;
-    color: #1f2937;
+    font-size: 13px;
+    color: var(--fg);
     line-height: 1.4;
-
-    body.theme-dark & {
-      color: #e5e7eb;
-    }
+    font-family: var(--font-mono);
   }
 
   // --- Section Items (Views, Queries) ---
@@ -299,35 +213,26 @@
     justify-content: space-between;
     padding: 5px 16px;
     cursor: pointer;
-    transition: background 0.15s ease;
+    transition: background-color 0.12s ease;
 
-    &:hover {
-      background: #f8f9fa;
-
-      body.theme-dark & {
-        background: #2d2d30;
-      }
-    }
+    &:hover { background: var(--bg-highlight); }
   }
 
   &__section-item-name {
-    font-size: 13px;
+    font-size: 12px;
     font-weight: 500;
-    color: #374151;
+    color: var(--fg-dark);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     flex: 1;
-
-    body.theme-dark & {
-      color: #d1d5db;
-    }
+    font-family: var(--font-mono);
   }
 
   &__section-item-delete {
     background: none;
     border: none;
-    color: #9ca3af;
+    color: var(--fg-muted);
     font-size: 14px;
     cursor: pointer;
     padding: 2px 4px;
@@ -335,35 +240,23 @@
     opacity: 0;
     transition: all 0.15s ease;
 
-    .control-panel__section-item:hover & {
-      opacity: 1;
-    }
+    .control-panel__section-item:hover & { opacity: 1; }
 
     &:hover {
-      color: #dc3545;
-      background: rgba(220, 53, 69, 0.1);
+      color: var(--red);
+      background: var(--error-bg);
     }
   }
 
   // --- Column Stats (embedded in accordion) ---
 
-  &__column-stats {
-    padding: 0;
-  }
+  &__column-stats { padding: 0; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .control-panel {
-    &__panel {
-      transition: none;
-    }
-
-    &__accordion-body {
-      transition: none;
-    }
-
-    &__accordion-chevron {
-      transition: none;
-    }
+    &__panel,
+    &__accordion-body,
+    &__accordion-chevron { transition: none; }
   }
 }

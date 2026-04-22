@@ -3,13 +3,15 @@ import { EditorState } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { oneDark } from "@codemirror/theme-one-dark";
+// oneDark removed in favour of the tokyonight CSS overrides in
+// styles/components/sql-editor.scss — keeps the editor coherent with the
+// rest of the chrome.
 import { FocusableComponent } from "../BedevereApp/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { keymapService } from "../../data/KeymapService";
 import { commandRegistry } from "../../data/CommandRegistry";
 import { SqlAutoComplete } from "./SqlAutoComplete";
-import { detectCurrentTheme, listenForThemeChanges } from "../SpreadsheetVisualizer/utils/theme";
+import { listenForThemeChanges } from "../SpreadsheetVisualizer/utils/theme";
 
 export class SqlEditor implements FocusableComponent {
   public readonly componentId: string;
@@ -201,8 +203,6 @@ export class SqlEditor implements FocusableComponent {
   }
 
   private initializeEditor(): void {
-    const isDark = detectCurrentTheme() === "dark";
-
     const extensions = [
       lineNumbers(),
       history(),
@@ -231,10 +231,6 @@ export class SqlEditor implements FocusableComponent {
         },
       ]),
     ];
-
-    if (isDark) {
-      extensions.push(oneDark);
-    }
 
     const state = EditorState.create({
       doc: "",

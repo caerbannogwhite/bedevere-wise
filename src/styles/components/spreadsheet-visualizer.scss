@@ -1,4 +1,5 @@
-// SpreadsheetVisualizer Component Styles
+// SpreadsheetVisualizer wrapper. Most of the visual is canvas-rendered via
+// theme.ts; this file owns only the wrapper / scrollbar / focus chrome.
 
 #spreadsheet-container {
   position: relative;
@@ -6,17 +7,7 @@
   width: 100%;
   height: 100%;
   overflow: hidden;
-  background-color: #ffffff;
-
-  // Dark theme
-  body.theme-dark & {
-    background-color: #1e1e1e;
-  }
-
-  // Light theme
-  body.theme-light & {
-    background-color: #ffffff;
-  }
+  background-color: var(--bg);
 
   canvas {
     transition: width 0.2s ease-in-out;
@@ -27,17 +18,10 @@
 
 #column-stats-container {
   flex-shrink: 0;
-  background-color: #f8f9fa;
-  border-left: 1px solid #e1e5e9;
-
-  // Dark theme
-  body.theme-dark & {
-    background-color: #2d2d30;
-    border-left-color: #3c3c3c;
-  }
+  background-color: var(--bg-dark);
+  border-left: 1px solid var(--border);
 }
 
-// Canvas positioning
 #selection-canvas,
 #hover-canvas {
   position: absolute;
@@ -46,22 +30,14 @@
   left: 0;
 }
 
-// Ensure proper stacking
-#selection-canvas {
-  z-index: 2;
-}
+#selection-canvas { z-index: 2; }
+#hover-canvas     { z-index: 1; }
 
-#hover-canvas {
-  z-index: 1;
-}
-
-// Multi-dataset integration - ensure full space utilization
 .tab-manager__dataset-container {
   width: 100%;
   height: 100%;
   position: relative;
 
-  // Ensure spreadsheet takes full space when active
   &--active {
     display: flex !important;
     flex-direction: column;
@@ -72,7 +48,6 @@
     height: 100% !important;
     flex: 1;
 
-    // Ensure canvas takes full container size
     canvas {
       max-width: 100%;
       max-height: 100%;
@@ -80,7 +55,6 @@
   }
 }
 
-// Scrollbar styles (these are drawn on canvas, but we can define the colors here)
 .scrollbar {
   &--vertical {
     position: absolute;
@@ -88,12 +62,7 @@
     top: 0;
     width: 12px;
     height: 100%;
-    background-color: #f3f3f3;
-
-    // Dark theme
-    body.theme-dark & {
-      background-color: #2d2d30;
-    }
+    background-color: var(--bg-dark);
   }
 
   &--horizontal {
@@ -102,68 +71,28 @@
     left: 0;
     width: 100%;
     height: 12px;
-    background-color: #f3f3f3;
-
-    // Dark theme
-    body.theme-dark & {
-      background-color: #2d2d30;
-    }
+    background-color: var(--bg-dark);
   }
 
   &--thumb {
-    background-color: #d6dade;
+    background-color: var(--gutter);
     border-radius: 0;
 
-    // Dark theme
-    body.theme-dark & {
-      background-color: #666666;
-    }
-
-    &:hover {
-      background-color: #c1c8cd;
-
-      // Dark theme
-      body.theme-dark & {
-        background-color: #777777;
-      }
-    }
+    &:hover { background-color: var(--border-strong); }
   }
 }
 
-// Focus and interaction states
 #spreadsheet-container:focus-within {
-  outline: 2px solid #0078d4;
-  outline-offset: -2px;
-
-  // Dark theme
-  body.theme-dark & {
-    outline-color: #0078d4;
-  }
-
-  // Light theme
-  body.theme-light & {
-    outline-color: #0078d4;
-  }
+  outline: 1px solid var(--blue);
+  outline-offset: -1px;
 }
 
-// High contrast support
 @media (prefers-contrast: high) {
   #spreadsheet-container {
-    border: 2px solid;
-
-    body.theme-dark & {
-      border-color: #ffffff;
-    }
-
-    body.theme-light & {
-      border-color: #000000;
-    }
+    border: 2px solid var(--fg);
   }
 }
 
-// Reduced motion support
 @media (prefers-reduced-motion: reduce) {
-  #spreadsheet-container canvas {
-    transition: none;
-  }
+  #spreadsheet-container canvas { transition: none; }
 }

@@ -1,47 +1,35 @@
-// MessagePopover — expanded view of a status bar message, anchored above
-// the status bar. Shows full message + optional details + copy button.
+// MessagePopover — expanded view of a status-bar message, anchored above
+// the status bar. Tokyonight palette via tokens.
 
 .message-popover {
   position: fixed;
-  bottom: 28px; // just above the 22px status bar
+  bottom: 28px;
   left: 8px;
   width: max(520px, min(800px, 60vw));
   max-height: 50vh;
   display: flex;
   flex-direction: column;
-  background: #1f2933;
-  color: #f0f4f8;
-  border: 1px solid #2c3c4c;
+  background: var(--bg-float);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
   border-radius: 0;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.25);
-  z-index: 1100; // above status bar (z:1000), below modals like command palette
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 1100;
+  font-family: var(--font-mono);
   font-size: 12px;
   animation: messagePopoverSlideIn 0.18s ease-out;
-
-  body.theme-light & {
-    background: #ffffff;
-    color: #1f2933;
-    border-color: #d8dfe6;
-    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15), 0 -2px 8px rgba(0, 0, 0, 0.08);
-  }
 
   &__header {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid #2c3c4c;
-    font-weight: 600;
+    border-bottom: 1px solid var(--border);
+    font-weight: 700;
     font-size: 11px;
     letter-spacing: 0.5px;
     text-transform: uppercase;
-
-    body.theme-light & {
-      border-bottom-color: #e2e8f0;
-    }
+    color: var(--fg-dark);
   }
 
   &__icon {
@@ -54,9 +42,9 @@
   }
 
   &__time {
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
-    opacity: 0.7;
+    opacity: 0.65;
     font-weight: 400;
     text-transform: none;
     letter-spacing: 0;
@@ -72,16 +60,12 @@
     padding: 2px 6px;
     border-radius: 0;
     line-height: 1;
-    opacity: 0.7;
-    transition: all 0.15s ease;
+    opacity: 0.65;
+    transition: all 0.12s ease;
 
     &:hover {
       opacity: 1;
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    body.theme-light &:hover {
-      background: rgba(0, 0, 0, 0.08);
+      background: var(--bg-highlight);
     }
   }
 
@@ -98,30 +82,25 @@
     white-space: pre-wrap;
     word-break: break-word;
     user-select: text;
+    color: var(--fg);
   }
 
   &__details {
     margin-top: 10px;
     padding: 8px 10px;
-    background: rgba(0, 0, 0, 0.25);
-    border: 1px solid #2c3c4c;
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
     border-radius: 0;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-size: 11px;
     line-height: 1.5;
-    color: #c5cdd6;
+    color: var(--fg-dark);
     overflow-x: auto;
     max-height: 220px;
     overflow-y: auto;
     white-space: pre-wrap;
     word-break: break-word;
     user-select: text;
-
-    body.theme-light & {
-      background: #f6f7f9;
-      color: #4b5563;
-      border-color: #e2e8f0;
-    }
   }
 
   &__footer {
@@ -129,116 +108,51 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 8px 12px;
-    border-top: 1px solid #2c3c4c;
-
-    body.theme-light & {
-      border-top-color: #e2e8f0;
-    }
+    border-top: 1px solid var(--border);
   }
 
   &__copy-btn {
     padding: 4px 12px;
-    border: 1px solid #3c4c5c;
+    border: 1px solid var(--border-strong);
     border-radius: 0;
     background: transparent;
-    color: inherit;
+    color: var(--fg-dark);
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: inherit;
+    transition: all 0.12s ease;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: #4c5c6c;
+      background: var(--bg-highlight);
+      color: var(--fg);
     }
 
     &--copied {
-      background: #16a34a;
-      color: #ffffff;
-      border-color: #16a34a;
-    }
-
-    body.theme-light & {
-      border-color: #cbd5e1;
-
-      &:hover {
-        background: #f1f5f9;
-        border-color: #94a3b8;
-      }
-
-      &--copied {
-        background: #16a34a;
-        color: #ffffff;
-        border-color: #16a34a;
-      }
+      background: var(--green);
+      color: var(--bg-dark);
+      border-color: var(--green);
     }
   }
 
   // Severity accents on the header
-  &--error .message-popover__header {
-    color: #ff9e9e;
-    border-bottom-color: rgba(241, 76, 76, 0.4);
-
-    body.theme-light & {
-      color: #b91c1c;
-      border-bottom-color: rgba(241, 76, 76, 0.35);
-    }
-  }
-  &--error .message-popover__icon {
-    color: #ff6b6b;
-  }
-
-  &--warning .message-popover__header {
-    color: #ffd76b;
-    border-bottom-color: rgba(255, 204, 2, 0.4);
-
-    body.theme-light & {
-      color: #a16207;
-      border-bottom-color: rgba(255, 204, 2, 0.4);
-    }
-  }
-  &--warning .message-popover__icon {
-    color: #ffcc02;
-  }
-
-  &--success .message-popover__header {
-    color: #8fe693;
-    border-bottom-color: rgba(137, 209, 133, 0.4);
-
-    body.theme-light & {
-      color: #166534;
-    }
-  }
-  &--success .message-popover__icon {
-    color: #89d185;
-  }
-
-  &--info .message-popover__header {
-    color: #8cd3ff;
-    border-bottom-color: rgba(0, 122, 204, 0.4);
-
-    body.theme-light & {
-      color: #0a5a9e;
-    }
-  }
-  &--info .message-popover__icon {
-    color: #8cd3ff;
-  }
+  &--error .message-popover__header   { color: var(--red);     border-bottom-color: var(--red); }
+  &--error .message-popover__icon     { color: var(--red); }
+  &--warning .message-popover__header { color: var(--yellow);  border-bottom-color: var(--yellow); }
+  &--warning .message-popover__icon   { color: var(--yellow); }
+  &--success .message-popover__header { color: var(--green);   border-bottom-color: var(--green); }
+  &--success .message-popover__icon   { color: var(--green); }
+  &--info .message-popover__header    { color: var(--cyan);    border-bottom-color: var(--cyan); }
+  &--info .message-popover__icon      { color: var(--cyan); }
 }
 
 @keyframes messagePopoverSlideIn {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-// Narrow screens
 @media (max-width: 640px) {
   .message-popover {
     left: 4px;
@@ -248,8 +162,7 @@
   }
 }
 
-// CellValuePopover — inspector for complex (STRUCT / LIST / MAP / JSON) cell
-// values. Borrows MessagePopover's positioning + dismissal pattern.
+// CellValuePopover — inspector for complex (STRUCT / LIST / MAP / JSON) cells.
 .cell-value-popover {
   position: fixed;
   bottom: 32px;
@@ -258,37 +171,24 @@
   max-height: 55vh;
   display: flex;
   flex-direction: column;
-  background: #2d2d30;
-  color: #e0e0e0;
-  border: 1px solid #3c3c3c;
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.25);
+  background: var(--bg-float);
+  color: var(--fg);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4), 0 -2px 8px rgba(0, 0, 0, 0.2);
   z-index: 1100;
-  font-family:
-    -apple-system, BlinkMacSystemFont, "Segoe UI", "Roboto", "Oxygen", "Ubuntu", "Cantarell", "Fira Sans", "Droid Sans",
-    "Helvetica Neue", sans-serif;
+  font-family: var(--font-mono);
   font-size: 12px;
   animation: messagePopoverSlideIn 0.18s ease-out;
-
-  body.theme-light & {
-    background: #ffffff;
-    color: #333333;
-    border-color: #d8dfe6;
-    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.15), 0 -2px 8px rgba(0, 0, 0, 0.08);
-  }
 
   &__header {
     display: flex;
     align-items: center;
     gap: 8px;
     padding: 8px 12px;
-    border-bottom: 1px solid #3c3c3c;
+    border-bottom: 1px solid var(--border);
     font-size: 12px;
-    font-weight: 600;
+    font-weight: 700;
     letter-spacing: 0.3px;
-
-    body.theme-light & {
-      border-bottom-color: #e2e8f0;
-    }
   }
 
   &__label {
@@ -297,31 +197,23 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    color: #f5b927;
-
-    body.theme-light & {
-      color: #b07a00;
-    }
+    color: var(--yellow);
   }
 
   &__close {
     background: transparent;
     border: none;
-    color: inherit;
+    color: var(--fg-dark);
     font-size: 14px;
     cursor: pointer;
     padding: 2px 6px;
     line-height: 1;
     opacity: 0.7;
-    transition: all 0.15s ease;
+    transition: all 0.12s ease;
 
     &:hover {
       opacity: 1;
-      background: rgba(255, 255, 255, 0.12);
-    }
-
-    body.theme-light &:hover {
-      background: rgba(0, 0, 0, 0.08);
+      background: var(--bg-highlight);
     }
   }
 
@@ -337,39 +229,26 @@
     border-collapse: collapse;
     font-size: 12px;
 
-    tr:nth-child(even) {
-      background: rgba(255, 255, 255, 0.03);
-
-      body.theme-light & {
-        background: rgba(0, 0, 0, 0.02);
-      }
-    }
-
-    tr:hover {
-      background: rgba(245, 185, 39, 0.1);
-    }
+    tr:nth-child(even) { background: var(--bg-dark); }
+    tr:hover           { background: var(--bg-highlight); }
   }
 
   &__key {
     padding: 4px 12px;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-size: 11.5px;
-    color: #bbb;
+    color: var(--magenta);
     vertical-align: top;
     white-space: nowrap;
-    border-right: 1px solid rgba(255, 255, 255, 0.05);
+    border-right: 1px solid var(--border);
     width: 1%;
-
-    body.theme-light & {
-      color: #555;
-      border-right-color: rgba(0, 0, 0, 0.06);
-    }
   }
 
   &__value {
     padding: 4px 12px;
-    font-family: "Consolas", "Monaco", "Courier New", monospace;
+    font-family: var(--font-mono);
     font-size: 11.5px;
+    color: var(--fg);
     word-break: break-all;
     user-select: text;
   }
@@ -379,6 +258,7 @@
     text-align: center;
     opacity: 0.6;
     font-style: italic;
+    color: var(--fg-muted);
   }
 
   &__footer {
@@ -386,48 +266,31 @@
     justify-content: flex-end;
     gap: 8px;
     padding: 8px 12px;
-    border-top: 1px solid #3c3c3c;
-
-    body.theme-light & {
-      border-top-color: #e2e8f0;
-    }
+    border-top: 1px solid var(--border);
   }
 
   &__copy-btn {
     padding: 4px 12px;
-    border: 1px solid #4b4b4b;
+    border: 1px solid var(--border-strong);
     background: transparent;
-    color: inherit;
+    color: var(--fg-dark);
     font-size: 11px;
-    font-weight: 500;
+    font-weight: 600;
     cursor: pointer;
-    transition: all 0.15s ease;
-    font-family: inherit;
+    transition: all 0.12s ease;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
 
     &:hover {
-      background: rgba(255, 255, 255, 0.08);
-      border-color: #666;
+      background: var(--bg-highlight);
+      color: var(--fg);
     }
 
     &--copied {
-      background: #16a34a;
-      color: #ffffff;
-      border-color: #16a34a;
-    }
-
-    body.theme-light & {
-      border-color: #cbd5e1;
-
-      &:hover {
-        background: #f1f5f9;
-        border-color: #94a3b8;
-      }
-
-      &--copied {
-        background: #16a34a;
-        color: #ffffff;
-        border-color: #16a34a;
-      }
+      background: var(--green);
+      color: var(--bg-dark);
+      border-color: var(--green);
     }
   }
 }
