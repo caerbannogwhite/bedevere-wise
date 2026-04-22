@@ -1,14 +1,12 @@
 import { DataProvider } from "@/data/types";
 import { SpreadsheetOptions } from "./types";
-import { DEFAULT_CACHE_CHUNK_SIZE, DEFAULT_CACHE_TIME_TO_LIVE, DEFAULT_INITIAL_CACHE_SIZE, DEFAULT_MAX_CACHE_SIZE } from "./defaults";
+import { DEFAULT_CACHE_CHUNK_SIZE, DEFAULT_INITIAL_CACHE_SIZE, DEFAULT_MAX_CACHE_SIZE } from "./defaults";
 
 export type CacheRange = { start: number; end: number };
 
 /**
- * A single cached chunk of rows. Holds the raw data plus its last-accessed
- * timestamp used by the central cleanup sweep in {@link SpreadsheetCache}.
- * Chunks no longer own their own timers (we used to spawn a recursive
- * setTimeout per entry, which created lots of timer callbacks).
+ * A single cached chunk of rows. `lastAccessed` drives the LRU eviction
+ * sweep that fires synchronously after each insert (no timer).
  */
 interface CacheEntry {
   range: CacheRange;
@@ -16,116 +14,214 @@ interface CacheEntry {
   lastAccessed: number;
 }
 
+export type LoadedListener = (range: CacheRange) => void;
+
+/**
+ * Result returned by the synchronous read path. `rows` has exactly
+ * `endRow - startRow` entries; missing rows are `null`. `hasMissing`
+ * is set when at least one row was missing — the caller should call
+ * `requestRange` to trigger a background load and re-paint when
+ * `onLoaded` fires.
+ */
+export interface CacheReadSync {
+  rows: (any[] | null)[];
+  hasMissing: boolean;
+}
+
 export class SpreadsheetCache {
   /**
-   * Cached chunks, kept sorted by {@link CacheEntry.range.start}. This
-   * replaces the previous `Map<CacheRange, CacheEntry>` which used reference
-   * equality on its object keys — a silent foot-gun since a direct `.get()`
-   * by value could never hit. Keeping the list sorted also lets us skip the
-   * per-call `sort()` that the old implementation did inside `getData`.
+   * Cached chunks, kept sorted by `range.start`. Sorted-list lookup is
+   * O(n) but n is small (≤ maxCacheSize / cacheChunkSize entries) and the
+   * read path uses linear walk anyway.
    */
   private entries: CacheEntry[] = [];
-  private isLoading = false;
-  private loadQueue: { resolve: () => void }[] = [];
+
+  /**
+   * Ranges currently being fetched. Prevents duplicate requests when
+   * multiple frames in a row ask for the same missing data while the
+   * first request is still in flight.
+   */
+  private inFlight: Map<string, Promise<void>> = new Map();
 
   private datasetTotalRows: number = 0;
   private initialCacheSize: number;
   private cacheChunkSize: number;
   private maxCacheSize: number;
-  private cacheTimeToLive: number;
   private dataProvider: DataProvider;
 
-  private cleanupTimer: ReturnType<typeof setInterval> | null = null;
+  private listeners: LoadedListener[] = [];
+
+  // Monotonic counter — used as `lastAccessed` instead of Date.now() to
+  // avoid clock-skew weirdness and to give every access a unique sort key.
+  private accessTick = 0;
 
   constructor(dataProvider: DataProvider, options: SpreadsheetOptions) {
     this.dataProvider = dataProvider;
-
     this.initialCacheSize = options.initialCacheSize ?? DEFAULT_INITIAL_CACHE_SIZE;
     this.cacheChunkSize = options.cacheChunkSize ?? DEFAULT_CACHE_CHUNK_SIZE;
     this.maxCacheSize = options.maxCacheSize ?? DEFAULT_MAX_CACHE_SIZE;
-    this.cacheTimeToLive = options.cacheTimeToLive ?? DEFAULT_CACHE_TIME_TO_LIVE;
-
+    // The cap must comfortably hold the working set or LRU will thrash.
     this.maxCacheSize = Math.max(this.maxCacheSize, this.initialCacheSize + this.cacheChunkSize);
-
-    // A single periodic sweep replaces per-entry recursive setTimeout chains.
-    // One timer callback, regardless of how many entries exist.
-    this.cleanupTimer = setInterval(() => this.cleanup(), this.cacheTimeToLive);
   }
 
   public async initialize(totalRows: number): Promise<void> {
     this.datasetTotalRows = totalRows;
-    if (totalRows === 0) {
-      return; // Don't load anything for empty datasets
-    }
+    if (totalRows === 0) return;
     const initialSize = Math.min(this.initialCacheSize, this.datasetTotalRows);
     await this.loadChunk(0, initialSize);
   }
 
-  public async loadChunk(startRow: number, endRow: number): Promise<void> {
-    // If already loading, queue this request
-    if (this.isLoading) {
-      return new Promise<void>((resolve) => {
-        this.loadQueue.push({ resolve });
-      });
+  // ---- Read APIs ----------------------------------------------------------
+
+  /**
+   * Synchronous read. Returns immediately with whatever is already cached;
+   * missing rows are `null`. Use in the render loop so a cache miss
+   * doesn't block the frame — render placeholders for the null rows and
+   * call {@link requestRange} to trigger a background load.
+   */
+  public getDataSync(startRow: number, endRow: number): CacheReadSync {
+    const result: CacheReadSync = { rows: [], hasMissing: false };
+    if (startRow >= this.datasetTotalRows || endRow <= startRow) return result;
+    endRow = Math.min(endRow, this.datasetTotalRows);
+
+    const tick = ++this.accessTick;
+    const len = endRow - startRow;
+    result.rows = new Array(len);
+    for (let i = 0; i < len; i++) result.rows[i] = null;
+
+    for (const entry of this.entries) {
+      const r = entry.range;
+      if (r.end <= startRow) continue;
+      if (r.start >= endRow) break;
+      const overlapStart = Math.max(r.start, startRow);
+      const overlapEnd = Math.min(r.end, endRow);
+      for (let row = overlapStart; row < overlapEnd; row++) {
+        result.rows[row - startRow] = entry.rows[row - r.start];
+      }
+      entry.lastAccessed = tick;
     }
 
-    this.isLoading = true;
-
-    // Check if we already have this data in cache
-    const missingRanges = this.getMissingRanges(startRow, endRow);
-
-    for (const range of missingRanges) {
-      const data = await this.dataProvider.fetchData(range.start, range.end);
-      this.insertEntry({ range, rows: data, lastAccessed: Date.now() });
+    for (let i = 0; i < len; i++) {
+      if (result.rows[i] === null) {
+        result.hasMissing = true;
+        break;
+      }
     }
+    return result;
+  }
 
-    this.isLoading = false;
+  /**
+   * Async read. Awaits any missing chunks before resolving. Use for
+   * cold-path callers that genuinely need the resolved data (selection
+   * export, column-width measurement).
+   */
+  public async getData(startRow: number, endRow: number): Promise<any[][]> {
+    if (startRow >= this.datasetTotalRows || endRow <= startRow) return [];
+    endRow = Math.min(endRow, this.datasetTotalRows);
+    await this.loadChunk(startRow, endRow);
 
-    // Process queued requests
-    while (this.loadQueue.length > 0) {
-      this.loadQueue.shift()?.resolve();
-    }
+    const sync = this.getDataSync(startRow, endRow);
+    // After loadChunk resolves, sync should never have nulls in the
+    // requested range; defensively filter just in case.
+    return sync.rows.filter((r): r is any[] => r !== null);
   }
 
   public async getValue(row: number, column: number): Promise<any> {
-    return (await this.getData(row, row + 1))[0][column];
+    const data = await this.getData(row, row + 1);
+    return data[0]?.[column];
   }
 
-  public async getData(startRow: number, endRow: number): Promise<any[][]> {
-    // Handle boundary conditions
-    if (startRow >= this.datasetTotalRows || endRow <= startRow) {
-      return [];
-    }
-
-    // Clamp endRow to dataset bounds
+  /**
+   * Schedule a background load for the given range. Returns immediately;
+   * `onLoaded` fires when the data lands. Multiple concurrent requests
+   * for the same missing range coalesce.
+   */
+  public requestRange(startRow: number, endRow: number): void {
+    if (startRow >= this.datasetTotalRows || endRow <= startRow) return;
     endRow = Math.min(endRow, this.datasetTotalRows);
 
-    // Check if we have all the data in cache, if not, fetch it
-    await this.loadChunk(startRow, endRow);
-
-    // Collect data from cache. `entries` is already sorted by range.start, so
-    // no per-call sort is needed here.
-    const result: any[][] = [];
-    let currentStartRow = startRow;
-
-    for (const entry of this.entries) {
-      const range = entry.range;
-      if (currentStartRow >= range.start && currentStartRow < range.end) {
-        const rangeStart = currentStartRow - range.start;
-        const rangeEnd = Math.min(endRow - range.start, range.end - range.start);
-
-        if (rangeEnd > rangeStart) {
-          entry.lastAccessed = Date.now();
-          result.push(...entry.rows.slice(rangeStart, rangeEnd));
-        }
-
-        currentStartRow = range.end;
-        if (currentStartRow >= endRow) break;
-      }
+    const missing = this.getMissingRanges(startRow, endRow);
+    for (const range of missing) {
+      const key = `${range.start}-${range.end}`;
+      if (this.inFlight.has(key)) continue;
+      const p = this.dataProvider
+        .fetchData(range.start, range.end)
+        .then((rows) => {
+          this.insertEntry({ range, rows, lastAccessed: ++this.accessTick });
+          this.evictIfOverCap();
+          this.inFlight.delete(key);
+          for (const cb of this.listeners) cb(range);
+        })
+        .catch((err) => {
+          this.inFlight.delete(key);
+          console.error(`Cache fetch failed for rows ${range.start}-${range.end}:`, err);
+        });
+      this.inFlight.set(key, p);
     }
-
-    return result;
   }
+
+  /** Subscribe to "chunk landed in cache" events. Returns an unsubscribe. */
+  public onLoaded(callback: LoadedListener): () => void {
+    this.listeners.push(callback);
+    return () => {
+      const i = this.listeners.indexOf(callback);
+      if (i >= 0) this.listeners.splice(i, 1);
+    };
+  }
+
+  // ---- Internal load + eviction ------------------------------------------
+
+  /**
+   * Awaitable load for cold-path callers. Re-uses the in-flight map so
+   * the sync `requestRange` and async `loadChunk` can race without
+   * duplicating fetches.
+   */
+  public async loadChunk(startRow: number, endRow: number): Promise<void> {
+    const missing = this.getMissingRanges(startRow, endRow);
+    if (missing.length === 0) return;
+    await Promise.all(
+      missing.map((range) => {
+        const key = `${range.start}-${range.end}`;
+        const existing = this.inFlight.get(key);
+        if (existing) return existing;
+        const p = this.dataProvider
+          .fetchData(range.start, range.end)
+          .then((rows) => {
+            this.insertEntry({ range, rows, lastAccessed: ++this.accessTick });
+            this.evictIfOverCap();
+            this.inFlight.delete(key);
+            for (const cb of this.listeners) cb(range);
+          })
+          .catch((err) => {
+            this.inFlight.delete(key);
+            throw err;
+          });
+        this.inFlight.set(key, p);
+        return p;
+      }),
+    );
+  }
+
+  /**
+   * After every insert, drop entries by ascending `lastAccessed` until
+   * the cached row count fits under `maxCacheSize`. Cheap because
+   * `entries` is small (typically < 50).
+   */
+  private evictIfOverCap(): void {
+    let cached = this.getCachedRows();
+    if (cached <= this.maxCacheSize) return;
+
+    // Sort a shallow copy by recency; keep the most recent.
+    const ordered = this.entries.slice().sort((a, b) => a.lastAccessed - b.lastAccessed);
+    for (const victim of ordered) {
+      if (cached <= this.maxCacheSize) break;
+      const i = this.entries.indexOf(victim);
+      if (i >= 0) this.entries.splice(i, 1);
+      cached -= victim.range.end - victim.range.start;
+    }
+  }
+
+  // ---- Stats / lifecycle -------------------------------------------------
 
   public getCacheStats(): {
     cacheSize: number;
@@ -145,26 +241,24 @@ export class SpreadsheetCache {
       cacheChunkSize: this.cacheChunkSize,
       maxCacheSize: this.maxCacheSize,
       cachedRows: this.getCachedRows(),
-      isLoading: this.isLoading,
+      isLoading: this.inFlight.size > 0,
     };
   }
 
   public clear(): void {
     this.entries = [];
-    this.isLoading = false;
-    this.loadQueue = [];
-    if (this.cleanupTimer !== null) {
-      clearInterval(this.cleanupTimer);
-      this.cleanupTimer = null;
-    }
+    this.inFlight.clear();
+    this.listeners = [];
   }
 
   public getCachedRows(): number {
-    return this.entries.reduce((acc, e) => acc + (e.range.end - e.range.start), 0);
+    let n = 0;
+    for (const e of this.entries) n += e.range.end - e.range.start;
+    return n;
   }
 
   public getMissingRanges(startRow: number, endRow: number): CacheRange[] {
-    // Intervals are half-open: start is included, end is not [start, end)
+    // Intervals are half-open: [start, end)
 
     // If the interval is smaller than the cache chunk size, grow it.
     const chunkSize = this.cacheChunkSize;
@@ -181,38 +275,20 @@ export class SpreadsheetCache {
     for (const entry of this.entries) {
       const range = entry.range;
 
-      // Start is before the current range
       if (startRow < range.start) {
-        // End before the current range: include the whole new range
         if (endRow <= range.start) {
           endRow = Math.min(range.start, startRow + chunkSize);
           ranges.push({ start: startRow, end: endRow });
           return ranges;
         }
-
-        // The end is included or after the current range
-        // Include from range start to current start
         ranges.push({ start: startRow, end: range.start });
-
-        // The end is included in the current range: stop
         if (endRow <= range.end) return ranges;
-
-        // If the end is not included, set start to the end of the
-        // current range and continue
         startRow = range.end;
-      }
-
-      // The start is included in the current range
-      else if (startRow < range.end) {
-        // The end is included in the current range: stop
+      } else if (startRow < range.end) {
         if (endRow <= range.end) return ranges;
-
         startRow = range.end;
         endRow = Math.min(this.datasetTotalRows, Math.max(endRow, range.end + chunkSize));
       }
-
-      // The start is equal to the end of the current range:
-      // will be handled by the next range
     }
 
     const last = this.entries[this.entries.length - 1].range;
@@ -226,23 +302,12 @@ export class SpreadsheetCache {
     return ranges;
   }
 
-  /**
-   * Insert an entry keeping {@link entries} sorted by `range.start`.
-   */
+  /** Insert keeping {@link entries} sorted by `range.start`. */
   private insertEntry(entry: CacheEntry): void {
     let i = 0;
     while (i < this.entries.length && this.entries[i].range.start < entry.range.start) {
       i++;
     }
     this.entries.splice(i, 0, entry);
-  }
-
-  /**
-   * Periodic sweep: drop entries that haven't been accessed in
-   * {@link cacheTimeToLive} ms. Called by the cleanup timer (not per-entry).
-   */
-  private cleanup(): void {
-    const now = Date.now();
-    this.entries = this.entries.filter((e) => now - e.lastAccessed < this.cacheTimeToLive);
   }
 }

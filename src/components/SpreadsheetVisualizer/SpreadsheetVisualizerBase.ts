@@ -37,8 +37,8 @@ import { getThemeColors } from "./utils/theme";
 import { SpreadsheetOptions } from "./types";
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { ColumnInternal } from "./internals";
-import { minMax, truncateWithEllipsis } from "./utils/drawing";
-import { getFormattedValueAndStyle, getFormatOptions } from "./utils/formatting";
+import { minMax, setMeasureSignature, truncateWithEllipsis } from "./utils/drawing";
+import { formatValueIntoScratch, getFormatOptions, makeFormattedScratch } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
 
@@ -111,6 +111,11 @@ export class SpreadsheetVisualizerBase {
   // Theme management
   protected themeCleanup: (() => void) | null = null;
 
+  // Reusable per-cell scratch — written by formatValueIntoScratch in the
+  // tight inner loop. Lives on `this` so its allocation amortises across
+  // all draws (one allocation per spreadsheet, not per cell per frame).
+  private cellScratch = makeFormattedScratch();
+
   constructor(container: HTMLElement, dataProvider: DataProvider, options: Partial<SpreadsheetOptions> = {}) {
     this.container = container;
 
@@ -148,13 +153,17 @@ export class SpreadsheetVisualizerBase {
     this.scrollContainer.appendChild(this.scrollSpacer);
     this.container.appendChild(this.scrollContainer);
 
-    // Sync scroll position from native scrollbar to internal state
+    // Sync scroll position from native scrollbar to internal state.
+    // The draw is deferred to the next animation frame via `scheduleDraw`
+    // so a burst of scroll events in one frame collapses to a single
+    // redraw — a wheel-spin that fires 20 events per frame used to paint
+    // 20 times; now it paints once.
     this.scrollContainer.addEventListener("scroll", () => {
       this.scrollX = this.scrollContainer.scrollLeft;
       this.scrollY = this.scrollContainer.scrollTop;
       this.preloadDataForScroll(this.scrollY);
       this.updateToDraw(ToDraw.Cells);
-      this.draw().catch(console.error);
+      this.scheduleDraw();
     });
 
     // Prevent the scroll container from handling navigation keys synchronously.
@@ -250,6 +259,23 @@ export class SpreadsheetVisualizerBase {
     this.options.width = minMax(this.options.width, this.options.minWidth, this.options.maxWidth);
 
     this.installContainerObservers();
+    this.attachCacheListener();
+  }
+
+  /**
+   * Wire the spreadsheet to the cache's "chunk loaded" event so skeleton
+   * rows flip to real data on the next frame after the fetch resolves.
+   * Stored subscription is disposed in {@link destroyBase}; the caller
+   * must invoke this again after replacing the cache (see
+   * {@link SpreadsheetVisualizer.reinitialize}).
+   */
+  private cacheLoadedUnsubscribe: (() => void) | null = null;
+  protected attachCacheListener(): void {
+    this.cacheLoadedUnsubscribe?.();
+    this.cacheLoadedUnsubscribe = this.cache.onLoaded(() => {
+      this.updateToDraw(ToDraw.Cells);
+      this.scheduleDraw();
+    });
   }
 
   // ResizeObserver for the spreadsheet container so the canvas reflows when
@@ -323,6 +349,25 @@ export class SpreadsheetVisualizerBase {
     if (handler) handler.call(this).catch((err) => console.error("handleResize failed:", err));
   }
 
+  // RAF-batched draw. Multiple `scheduleDraw()` calls within the same
+  // frame coalesce to one paint at the next animation frame.
+  private pendingDraw: number | null = null;
+
+  protected scheduleDraw(): void {
+    if (this.pendingDraw !== null) return;
+    this.pendingDraw = requestAnimationFrame(() => {
+      this.pendingDraw = null;
+      this.draw().catch((err) => console.error("draw failed:", err));
+    });
+  }
+
+  protected cancelScheduledDraw(): void {
+    if (this.pendingDraw !== null) {
+      cancelAnimationFrame(this.pendingDraw);
+      this.pendingDraw = null;
+    }
+  }
+
   /**
    * Tear down per-instance observers. Visualizer.destroy() is the chained
    * caller; subclasses without their own destroy inherit nothing extra.
@@ -333,6 +378,9 @@ export class SpreadsheetVisualizerBase {
       this.resizeObserver = null;
     }
     this.disarmDprListener();
+    this.cancelScheduledDraw();
+    this.cacheLoadedUnsubscribe?.();
+    this.cacheLoadedUnsubscribe = null;
   }
 
   // Overridden by SpreadsheetVisualizerSelection — stubs needed for scroll listener
@@ -422,10 +470,12 @@ export class SpreadsheetVisualizerBase {
   private guessColumnWidths(values: any[][], col: ColumnInternal, colIndex: number): number {
     const cap = this.options.maxStringLength;
     const widths = [this.ctx.measureText(col.name).width + this.options.cellPadding * 2];
+    const scratch = this.cellScratch;
 
     for (const row of values) {
-      const { formatted, style } = getFormattedValueAndStyle(row[colIndex], this.columns[colIndex], this.options);
-      this.ctx.textAlign = style.textAlign || this.options.textAlign;
+      formatValueIntoScratch(row[colIndex], this.columns[colIndex], this.options, scratch);
+      this.ctx.textAlign = scratch.textAlign;
+      const formatted = scratch.formatted;
       const measured = cap > 0 && formatted.length > cap ? formatted.slice(0, cap) : formatted;
       const width = this.ctx.measureText(measured).width + this.options.cellPadding * 2;
       widths.push(width);
@@ -439,6 +489,26 @@ export class SpreadsheetVisualizerBase {
     return minMax(width, this.options.minCellWidth, this.options.maxCellWidth);
   }
 
+  /**
+   * Yield the current task back to the browser. Lets pending paint /
+   * input handlers run between column-width measurement chunks instead
+   * of starving the main thread for ~100ms on big tables.
+   */
+  private yieldToBrowser(): Promise<void> {
+    return new Promise((resolve) => {
+      // setTimeout(0) yields to the macrotask queue — input + scroll
+      // events get a chance to dispatch. rAF would also work but ties
+      // resolution to display refresh.
+      setTimeout(resolve, 0);
+    });
+  }
+
+  /**
+   * Compute per-column widths. The first chunk is synchronous so the
+   * initial draw has reasonable widths immediately; remaining chunks
+   * yield between iterations and trigger a redraw on completion. Big
+   * tables (100+ cols) no longer freeze the UI for ~100ms at startup.
+   */
   protected async calculateColumnWidths() {
     this.ctx.font = `${this.options.fontSize}px ${this.options.fontFamily}`;
     this.ctx.textAlign = "left";
@@ -447,38 +517,66 @@ export class SpreadsheetVisualizerBase {
     this.ctx.imageSmoothingEnabled = this.options.imageSmoothingEnabled ?? DEFAULT_IMAGE_SMOOTHING_ENABLED;
     this.ctx.imageSmoothingQuality = this.options.imageSmoothingQuality ?? DEFAULT_IMAGE_SMOOTHING_QUALITY;
 
-    // Try to get rows from cache first, fallback to data provider
     const maxRows = Math.min(this.options.maxFormatGuessLength, this.totalRows);
     const rows = await this.cache.getData(0, maxRows);
 
-    // Calculate minimum widths based on content
-    this.colWidths = this.columns.map((col, colIndex) => {
-      col.widthPx = this.guessColumnWidths(rows, col, colIndex);
+    // Pre-seed colWidths so the first paint has something to render even
+    // before any column is measured. Reuses the previous run's values
+    // when possible (e.g. on a resize that doesn't change the dataset).
+    if (this.colWidths.length !== this.columns.length) {
+      this.colWidths = this.columns.map((col) => col.widthPx || this.options.minCellWidth);
+    }
 
-      // Widen columns that have active sort/filter to fit indicators
-      if (this.filterManager) {
-        let indicatorSpace = 0;
-        if (this.filterManager.isColumnSorted(this.datasetName, col.name)) indicatorSpace += 16;
-        if (this.filterManager.isColumnFiltered(this.datasetName, col.name)) indicatorSpace += 10;
-        if (indicatorSpace > 0) {
-          col.widthPx = Math.min(col.widthPx + indicatorSpace, this.options.maxCellWidth);
+    const COLS_PER_CHUNK = 16;
+    const total = this.columns.length;
+
+    for (let chunkStart = 0; chunkStart < total; chunkStart += COLS_PER_CHUNK) {
+      const chunkEnd = Math.min(chunkStart + COLS_PER_CHUNK, total);
+      for (let i = chunkStart; i < chunkEnd; i++) {
+        const col = this.columns[i];
+        col.widthPx = this.guessColumnWidths(rows, col, i);
+
+        // Widen columns with active sort/filter to fit indicators.
+        if (this.filterManager) {
+          let indicatorSpace = 0;
+          if (this.filterManager.isColumnSorted(this.datasetName, col.name)) indicatorSpace += 16;
+          if (this.filterManager.isColumnFiltered(this.datasetName, col.name)) indicatorSpace += 10;
+          if (indicatorSpace > 0) {
+            col.widthPx = Math.min(col.widthPx + indicatorSpace, this.options.maxCellWidth);
+          }
         }
+
+        this.colWidths[i] = col.widthPx;
       }
 
-      return col.widthPx;
-    });
+      // After each chunk: refresh derived layout state so a redraw
+      // mid-measurement renders correctly.
+      this.recomputeLayoutFromWidths();
 
-    // Calculate column offsets
+      // Yield between chunks so input / paint can run. The first chunk
+      // runs without yielding so the very first frame has reasonable
+      // widths.
+      if (chunkEnd < total) {
+        this.scheduleDraw();
+        await this.yieldToBrowser();
+      }
+    }
+  }
+
+  /**
+   * Derive colOffsets / totalWidth / totalScrollX / scroll-spacer from
+   * the current colWidths. Called once per chunk during yielding
+   * measurement so a redraw mid-pass renders correctly.
+   */
+  private recomputeLayoutFromWidths(): void {
     this.colOffsets = [this.options.rowHeaderWidth];
     for (let i = 1; i < this.columns.length; i++) {
       this.colOffsets.push(this.colOffsets[i - 1] + this.colWidths[i - 1]);
     }
-
-    // Calculate total width
-    this.totalWidth = this.colOffsets[this.colOffsets.length - 1] + this.colWidths[this.colWidths.length - 1];
+    this.totalWidth =
+      (this.colOffsets[this.colOffsets.length - 1] || 0) +
+      (this.colWidths[this.colWidths.length - 1] || 0);
     this.totalScrollX = Math.max(0, this.totalWidth - this.viewportWidth);
-
-    // Update spacer width for native scrollbar
     this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.viewportWidth)}px`;
   }
 
@@ -581,8 +679,14 @@ export class SpreadsheetVisualizerBase {
     return null;
   }
 
-  protected async drawCells(startRow: number, endRow: number) {
-    const dataPromise = this.cache.getData(startRow, endRow);
+  protected drawCells(startRow: number, endRow: number): void {
+    // Synchronous read — never blocks the frame. Missing rows render as
+    // skeleton placeholders below; the cache fires onLoaded when the
+    // background fetch lands and our subscription kicks scheduleDraw().
+    const dataSync = this.cache.getDataSync(startRow, endRow);
+    if (dataSync.hasMissing) {
+      this.cache.requestRange(startRow, endRow);
+    }
 
     const ctx = this.ctx;
     const o = this.options;
@@ -622,35 +726,50 @@ export class SpreadsheetVisualizerBase {
     }
 
     // ---- 4. Cell text + per-cell type-coloured backgrounds ----
-    const data = await dataPromise;
-    ctx.font = `${o.fontSize}px ${o.fontFamily}`;
+    const cellFont = `${o.fontSize}px ${o.fontFamily}`;
+    ctx.font = cellFont;
+    ctx.letterSpacing = o.letterSpacing;
+    setMeasureSignature(cellFont, o.letterSpacing);
     ctx.textBaseline = "middle";
 
+    const scratch = this.cellScratch;
+    const cap = o.maxStringLength;
     let y = ch;
-    for (let row = 0; row < data.length; row++) {
+    for (let row = 0; row < dataSync.rows.length; row++) {
+      const rowData = dataSync.rows[row];
+      if (rowData === null) {
+        // Skeleton placeholder — distinct enough from cell bg to read as
+        // "loading" without screaming for attention. A short muted bar
+        // hints that real content will arrive.
+        ctx.fillStyle = o.headerBackgroundColor;
+        ctx.fillRect(rhw, y, width - rhw, ch);
+        ctx.fillStyle = o.cellBackgroundColor;
+        ctx.fillRect(rhw + pad, y + ch * 0.38, Math.min(80, width - rhw - pad * 2), ch * 0.24);
+        y += ch;
+        continue;
+      }
       let x = this.colOffsets[fvc] - this.scrollX;
       for (let col = fvc; col <= lvc; col++) {
         const cellWidth = this.colWidths[col];
         const column = this.columns[col];
-        const { formatted, style } = getFormattedValueAndStyle(data[row][col], column, o);
+        formatValueIntoScratch(rowData[col], column, o, scratch);
 
         // Type-coloured cells overdraw the stripe / default cell bg.
-        if (style.backgroundColor && style.backgroundColor !== o.cellBackgroundColor) {
-          ctx.fillStyle = style.backgroundColor;
+        if (scratch.backgroundColor && scratch.backgroundColor !== o.cellBackgroundColor) {
+          ctx.fillStyle = scratch.backgroundColor;
           ctx.fillRect(x, y, cellWidth, ch);
         }
 
-        // Text
-        const align = (style.textAlign || o.textAlign) as CanvasTextAlign;
+        const align = scratch.textAlign;
         ctx.textAlign = align;
-        ctx.fillStyle = style.textColor || o.cellTextColor;
+        ctx.fillStyle = scratch.textColor || o.cellTextColor;
 
         let textX = x + pad;
         if (align === "center") textX = x + cellWidth / 2;
         else if (align === "right") textX = x + cellWidth - pad;
         const textY = y + ch / 2;
 
-        const cap = o.maxStringLength;
+        const formatted = scratch.formatted;
         const capped =
           cap > 0 && formatted.length > cap ? formatted.slice(0, cap) + "\u2026" : formatted;
         const maxTextWidth = cellWidth - pad * 2;
@@ -665,7 +784,9 @@ export class SpreadsheetVisualizerBase {
     }
 
     // ---- 5. Column headers (text + indicators + null-count badge) ----
-    ctx.font = `${o.headerFontSize}px ${o.fontFamily}`;
+    const headerFont = `${o.headerFontSize}px ${o.fontFamily}`;
+    ctx.font = headerFont;
+    setMeasureSignature(headerFont, o.letterSpacing);
     ctx.textBaseline = "middle";
     ctx.textAlign = "left";
 

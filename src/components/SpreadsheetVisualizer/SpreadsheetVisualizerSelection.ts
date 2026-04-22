@@ -138,8 +138,9 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   protected async draw() {
-    const { canvas } = this;
-    const { height } = canvas;
+    // Use CSS-pixel viewport, not canvas.height (which is dpr-scaled and
+    // would over-compute visible rows by the dpr factor).
+    const height = this.viewportHeight;
 
     // Calculate visible area
     const visibleStartRow = Math.floor(this.scrollY / this.options.cellHeight);
@@ -156,7 +157,10 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       this.drawColHover();
     } else {
       if (this.toDraw >= ToDraw.Cells) {
-        await this.drawCells(visibleStartRow, visibleEndRow);
+        // Sync now — cache misses no longer block the frame, they render
+        // skeleton placeholders and trigger a repaint via the cache's
+        // onLoaded subscription.
+        this.drawCells(visibleStartRow, visibleEndRow);
       }
       if (this.toDraw >= ToDraw.Selection) {
         this.drawSelection(visibleStartRow);
@@ -191,44 +195,52 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     this.notifySelectionChange();
   }
 
+  /**
+   * Last cell-hover rect painted onto the hover canvas. `drawCellHover`
+   * reads this to scope its clear to the old + new rects, instead of
+   * clearing the whole canvas — matters because mouse moves fire this
+   * function many times a second during normal scrolling.
+   */
+  private lastCellHoverRect: { x: number; y: number; w: number; h: number } | null = null;
+
   private drawCellHover(visibleStartRow: number) {
-    // Clear the hover canvas
-    this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+    // Clear the old rect (if any). 3px padding covers the 2px stroke.
+    const prev = this.lastCellHoverRect;
+    if (prev) {
+      this.hoverCtx.clearRect(prev.x - 3, prev.y - 3, prev.w + 6, prev.h + 6);
+      this.lastCellHoverRect = null;
+    }
+
+    if (!this.hoveredCell) return;
+    const { row, col } = this.hoveredCell;
+
+    const y = (row - visibleStartRow) * this.options.cellHeight;
+    const height = this.options.cellHeight;
+
+    let x = this.colOffsets[col] - this.scrollX;
+    let width = this.colWidths[col];
+
+    if (x < this.options.rowHeaderWidth) {
+      x = this.options.rowHeaderWidth;
+      width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
+    }
 
     this.hoverCtx.fillStyle = this.options.hoverColor;
     this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
     this.hoverCtx.lineWidth = 2;
 
-    if (this.hoveredCell) {
-      const { row, col } = this.hoveredCell;
+    this.hoverCtx.fillRect(x, y, width, height);
+    this.hoverCtx.strokeRect(x, y, width, height);
+    this.hoverCtx.lineWidth = 1;
+    this.hoverCtx.strokeRect(x + 1, y + 1, width - 2, height - 2);
 
-      const y = (row - visibleStartRow) * this.options.cellHeight;
-      const height = this.options.cellHeight;
-
-      let x = this.colOffsets[col] - this.scrollX;
-      let width = this.colWidths[col];
-
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-      }
-
-      // Draw hover background
-      this.hoverCtx.fillRect(x, y, width, height);
-
-      // Draw enhanced border
-      this.hoverCtx.strokeRect(x, y, width, height);
-
-      // Add inner glow effect
-      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-      this.hoverCtx.lineWidth = 1;
-      this.hoverCtx.strokeRect(x + 1, y + 1, width - 2, height - 2);
-    }
+    this.lastCellHoverRect = { x, y, w: width, h: height };
   }
 
   private drawColHover() {
-    // Clear the hover canvas
+    // Full-canvas clear — invalidates any prior cell-hover dirty rect.
     this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+    this.lastCellHoverRect = null;
 
     this.hoverCtx.fillStyle = this.options.hoverColor;
     this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;

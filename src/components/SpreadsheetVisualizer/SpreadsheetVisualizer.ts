@@ -49,6 +49,10 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     this.dataProvider = dataProvider;
     this.cache.clear();
     this.cache = new SpreadsheetCache(this.dataProvider, this.options);
+    // Re-subscribe to the new cache's load events so skeleton rows flip
+    // to real data on fetch resolution. The previous cache's listeners
+    // were wiped by its own clear() above.
+    this.attachCacheListener();
     this.scrollX = 0;
     this.scrollY = 0;
     this.selectedCells = null;

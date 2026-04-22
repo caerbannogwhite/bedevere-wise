@@ -367,97 +367,118 @@ export const formatValue = (value: any, column: ColumnInternal, options: Spreads
   return { raw: value, formatted: String(value) };
 };
 
+// ----------------------------------------------------------------------
+// Cell-format scratch struct + hot-path entrypoint
+// ----------------------------------------------------------------------
+//
+// The render loop calls `formatValueIntoScratch` once per visible cell,
+// reusing a single FormattedScratch instance. That eliminates the
+// per-cell `{ raw, formatted, style: {...} }` object literal that
+// `getFormattedValueAndStyle` allocates — at 1,600 visible cells × 60fps
+// that's ~96k allocations/sec saved off the GC, plus the nested
+// `style: {}` literal.
+//
+// The CellStyle pointers (textColor / backgroundColor / textAlign) are
+// constants on the theme object — so the scratch holds string references,
+// not copies, and switches between them by pointer.
+
+export interface FormattedScratch {
+  raw: any;
+  formatted: string;
+  textAlign: "left" | "center" | "right";
+  textColor: string;
+  backgroundColor: string;
+}
+
+export function makeFormattedScratch(): FormattedScratch {
+  return {
+    raw: null,
+    formatted: "",
+    textAlign: "left",
+    textColor: "",
+    backgroundColor: "",
+  };
+}
+
+/**
+ * Hot-path formatter. Mutates `out` in place and returns nothing.
+ *
+ * Style pointers are taken directly from the theme cache; the theme
+ * object itself is module-cached and only rebuilt on theme flip, so this
+ * function allocates exactly the strings produced by `formatValue`
+ * (which it can't avoid — the formatted text is genuinely new each call).
+ */
+export function formatValueIntoScratch(
+  value: any,
+  column: ColumnInternal,
+  options: SpreadsheetOptions,
+  out: FormattedScratch,
+): void {
+  const dt = column.dataType;
+  const theme = getThemeColors();
+
+  if (value === null || value === undefined) {
+    out.raw = null;
+    out.formatted = formatValue(value, column, options).formatted;
+    out.textAlign = "left";
+    out.textColor = theme.nullStyle.textColor;
+    out.backgroundColor = theme.nullStyle.backgroundColor;
+    return;
+  }
+
+  const { raw, formatted } = formatValue(value, column, options);
+  out.raw = raw;
+  out.formatted = formatted;
+
+  if (isBooleanType(dt)) {
+    out.textAlign = "center";
+    out.textColor = theme.booleanStyle.textColor;
+    out.backgroundColor = theme.booleanStyle.backgroundColor;
+    return;
+  }
+  if (isNumericType(dt)) {
+    out.textAlign = "right";
+    out.textColor = theme.numericStyle.textColor;
+    out.backgroundColor = theme.numericStyle.backgroundColor;
+    return;
+  }
+  if (isDateType(dt) || isTimeType(dt)) {
+    out.textAlign = "left";
+    out.textColor = theme.dateStyle.textColor;
+    out.backgroundColor = theme.dateStyle.backgroundColor;
+    return;
+  }
+  if (isTimestampType(dt)) {
+    out.textAlign = "left";
+    out.textColor = theme.datetimeStyle.textColor;
+    out.backgroundColor = theme.datetimeStyle.backgroundColor;
+    return;
+  }
+  // VARCHAR, UUID, ENUM, BLOB, INTERVAL, complex, unknown
+  out.textAlign = "left";
+  out.textColor = theme.stringStyle.textColor;
+  out.backgroundColor = theme.stringStyle.backgroundColor;
+}
+
+/**
+ * Allocating wrapper kept for cold-path callers (selection export, copy
+ * formatting). Hot-path callers should use `formatValueIntoScratch` with
+ * a long-lived scratch object.
+ */
 export function getFormattedValueAndStyle(
   value: any,
   column: ColumnInternal,
   options: SpreadsheetOptions,
 ): { raw: any; formatted: string; style: Partial<CellStyle> } {
-  const dt = column.dataType;
-  const theme = getThemeColors();
-
-  // Null early
-  if (value === null || value === undefined) {
-    return {
-      raw: null,
-      formatted: formatValue(value, column, options).formatted,
-      style: {
-        textAlign: "left",
-        textColor: theme.nullStyle.textColor,
-        backgroundColor: theme.nullStyle.backgroundColor,
-      },
-    };
-  }
-
-  const { raw, formatted } = formatValue(value, column, options);
-
-  if (isBooleanType(dt)) {
-    return {
-      raw,
-      formatted,
-      style: {
-        textAlign: "center",
-        textColor: theme.booleanStyle.textColor,
-        backgroundColor: theme.booleanStyle.backgroundColor,
-      },
-    };
-  }
-
-  if (isNumericType(dt)) {
-    return {
-      raw,
-      formatted,
-      style: {
-        textAlign: "right",
-        textColor: theme.numericStyle.textColor,
-        backgroundColor: theme.numericStyle.backgroundColor,
-      },
-    };
-  }
-
-  if (isDateType(dt)) {
-    return {
-      raw,
-      formatted,
-      style: {
-        textAlign: "left",
-        textColor: theme.dateStyle.textColor,
-        backgroundColor: theme.dateStyle.backgroundColor,
-      },
-    };
-  }
-
-  if (isTimeType(dt)) {
-    return {
-      raw,
-      formatted,
-      style: {
-        textAlign: "left",
-        textColor: theme.dateStyle.textColor,
-        backgroundColor: theme.dateStyle.backgroundColor,
-      },
-    };
-  }
-
-  if (isTimestampType(dt)) {
-    return {
-      raw,
-      formatted,
-      style: {
-        textAlign: "left",
-        textColor: theme.datetimeStyle.textColor,
-        backgroundColor: theme.datetimeStyle.backgroundColor,
-      },
-    };
-  }
-
-  // VARCHAR, UUID, ENUM, BLOB, INTERVAL, complex, unknown — left-aligned string style
+  const out = makeFormattedScratch();
+  formatValueIntoScratch(value, column, options, out);
   return {
-    raw,
-    formatted,
+    raw: out.raw,
+    formatted: out.formatted,
     style: {
-      textAlign: "left",
-      textColor: theme.stringStyle.textColor,
-      backgroundColor: theme.stringStyle.backgroundColor,
+      textAlign: out.textAlign,
+      textColor: out.textColor,
+      backgroundColor: out.backgroundColor,
     },
   };
 }
