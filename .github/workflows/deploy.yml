@@ -24,7 +24,15 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      # GH Pages serves the project at github.io/bedevere-wise/ — vite needs
+      # to know the prefix at build time. Cloudflare Pages keeps BASE_PATH
+      # at "/" via its own env config (see DEPLOY.md).
       - run: bun run build
+        env:
+          BASE_PATH: /bedevere-wise/
+          # Optional: set the feedback worker URL if you want GH Pages
+          # builds to talk to the same worker as the CF Pages deploy.
+          # VITE_FEEDBACK_URL: https://bedevere-feedback.YOUR-SUBDOMAIN.workers.dev
 
       - uses: actions/upload-pages-artifact@v3
         with:
