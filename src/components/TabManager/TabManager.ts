@@ -450,16 +450,10 @@ export class TabManager {
       this.eventDispatcher.registerComponent(this.sqlEditor);
     }
 
-    // Wire up query execution
-    this.sqlEditor.setOnExecuteCallback(async (query: string) => {
-      try {
-        await this.addQueryResult(query, duckDBService);
-      } catch (error) {
-        if (this.onQueryErrorCallback) {
-          this.onQueryErrorCallback(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-    });
+    // Wire up query execution. Routes through dispatchInput so a `.command`
+    // typed in the SQL editor + Ctrl+Enter behaves the same as in the
+    // CommandBar (otherwise it'd be sent to DuckDB as raw SQL).
+    this.sqlEditor.setOnExecuteCallback((query: string) => this.dispatchInput(query));
 
     // Sync the CommandBar's SQL-toggle state + resize on editor toggle.
     this.sqlEditor.setOnToggleCallback((isExpanded) => {
@@ -470,7 +464,7 @@ export class TabManager {
     // CommandBar shell submit is wired here because dispatch to SQL needs
     // duckDBService; dot-only commands (.help etc.) would work earlier but
     // this keeps the wiring in one place.
-    this.commandBar?.setOnSubmitCallback((input) => this.handleCommandBarSubmit(input));
+    this.commandBar?.setOnSubmitCallback((input) => this.dispatchInput(input));
   }
 
   public toggleSqlEditor(): void {
@@ -559,11 +553,12 @@ export class TabManager {
   }
 
   /**
-   * Dispatch a CommandBar submission: dot-command → Shell; anything else → SQL.
-   * Routed through the same code path as the SqlEditor's Ctrl+Enter, so the
-   * 0.7 query-time chip and error toast behave identically.
+   * Dispatch user input from either the CommandBar or the SqlEditor:
+   * dot-command → Shell; anything else → SQL. Both callers route through
+   * here so the query-time chip and error toast behave identically and a
+   * `.command` typed in the SQL editor isn't sent to DuckDB as raw SQL.
    */
-  private async handleCommandBarSubmit(input: string): Promise<void> {
+  private async dispatchInput(input: string): Promise<void> {
     const parsed = parseShellLine(input);
     if (parsed) {
       const result = await runShellLine(input);
