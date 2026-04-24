@@ -23,7 +23,6 @@ import { ViewManager } from "@/data/ViewManager";
 import { PersistenceService, persistenceService } from "@/data/PersistenceService";
 import { keymapService } from "@/data/KeymapService";
 import { commandRegistry } from "@/data/CommandRegistry";
-import { quoteIdent } from "@/data/sqlIdent";
 import { FileImportService } from "@/data/FileImportService";
 import { DuckDBExtensionLoader } from "@/data/DuckDBExtensionLoader";
 import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
@@ -882,7 +881,14 @@ export class BedevereApp implements EventHandler {
         const table = params?.table;
         if (!table) throw new Error(".columns requires a table name (e.g. .columns penguins)");
         if (!this.duckDBService) throw new Error("Database not initialized");
-        await this.tabManager.addQueryResult(`DESCRIBE ${quoteIdent(String(table))}`, this.duckDBService);
+        // information_schema.columns rather than DESCRIBE — addQueryResult
+        // wraps in CREATE TABLE … AS (…) which DuckDB's DESCRIBE statement
+        // can't appear inside (it's not a SELECT).
+        const tableLiteral = String(table).replace(/'/g, "''");
+        await this.tabManager.addQueryResult(
+          `SELECT column_name, data_type, is_nullable, column_default, ordinal_position FROM information_schema.columns WHERE table_schema = 'main' AND table_name = '${tableLiteral}' ORDER BY ordinal_position`,
+          this.duckDBService,
+        );
       },
     });
 
