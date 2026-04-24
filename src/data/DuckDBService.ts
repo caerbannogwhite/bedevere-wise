@@ -40,7 +40,9 @@ export class DuckDBService {
       await this.db.open({ allowUnsignedExtensions: true });
       this.isInitialized = true;
 
-      console.log("DuckDB initialized successfully");
+      if (import.meta.env.DEV) {
+        console.log("DuckDB initialized successfully");
+      }
     } catch (error) {
       console.error("Failed to initialize DuckDB:", error);
       throw error;

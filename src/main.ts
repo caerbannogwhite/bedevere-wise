@@ -12,13 +12,12 @@ import {
 
 // Initialize the Bedevere Wise application
 async function initApplication() {
-  const debugMode = true;
+  const debugMode = import.meta.env.DEV;
   const appVersion = "0.7-son-of-uther-pendragon";
 
   // Initialize DuckDB first
   try {
     await duckDBService.initialize();
-    console.log("DuckDB initialized successfully");
   } catch (error) {
     console.error("Failed to initialize DuckDB:", error);
     // Continue without DuckDB if initialization fails
