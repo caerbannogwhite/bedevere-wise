@@ -8,6 +8,11 @@
 {
 	"name": "bedevere-wise",
 	"compatibility_date": "2026-04-24",
+	"workers_dev": false,
+	"preview_urls": false,
+	"routes": [
+		{ "pattern": "bedeverewise.app", "custom_domain": true }
+	],
 	"assets": {
 		"directory": "./dist",
 		"not_found_handling": "single-page-application"
