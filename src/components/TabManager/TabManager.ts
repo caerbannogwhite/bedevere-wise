@@ -475,6 +475,10 @@ export class TabManager {
     return this.sqlEditor;
   }
 
+  public focusCommandBar(): void {
+    this.commandBar?.focusInput();
+  }
+
   private async handleFilterChange(datasetName: string): Promise<void> {
     const tab = this.tabs.find((t) => t.metadata.name === datasetName);
     if (!tab || !this.duckDBService) return;

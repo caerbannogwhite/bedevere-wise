@@ -298,6 +298,46 @@ export class ControlPanel {
     return [...this.datasets];
   }
 
+  /** Names of every importable leaf in the tree (file or sheet, imported or not). */
+  public getAllFileTreeNames(): string[] {
+    const names: string[] = [];
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.kind === "file" || n.kind === "sheet") names.push(n.alias ?? n.name);
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(this.fileTree);
+    return names;
+  }
+
+  /**
+   * Resolve a user-supplied name to a tree leaf and import it if needed,
+   * then return its DuckDB table name. Returns null if no leaf matches.
+   * `importNode` already calls TabManager.switchToDataset, so the caller
+   * doesn't need to switch again on the import path.
+   */
+  public async openByName(name: string): Promise<string | null> {
+    const walk = (nodes: FileTreeNode[]): FileTreeNode | null => {
+      for (const n of nodes) {
+        if ((n.kind === "file" || n.kind === "sheet") && (n.alias === name || n.name === name)) {
+          return n;
+        }
+        if (n.children) {
+          const hit = walk(n.children);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    const node = walk(this.fileTree);
+    if (!node) return null;
+    if (node.isImported && node.tableName) return node.tableName;
+    const result = await this.importNode(node);
+    if (!result.ok) throw new Error(result.error.message);
+    return node.tableName ?? null;
+  }
+
   // --- File import & tree ---
 
   public setFileImportService(service: FileImportService): void {

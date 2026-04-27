@@ -933,6 +933,29 @@
       &:hover { color: var(--fg-dark); }
     }
   }
+
+  // ---------------------------------------------------------------------
+  // Commands tab — registry-driven listing, two-column dl per category.
+  // ---------------------------------------------------------------------
+  &__commands-list {
+    display: grid;
+    grid-template-columns: max-content 1fr;
+    column-gap: 16px;
+    row-gap: 4px;
+    margin: 8px 0 18px;
+  }
+
+  &__commands-name {
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--cyan);
+    white-space: nowrap;
+  }
+
+  &__commands-desc {
+    color: var(--fg-muted);
+    margin: 0;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

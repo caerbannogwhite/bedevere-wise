@@ -39,6 +39,11 @@ body.theme-light {
   --magenta:         #9854f1;
   --purple:          #7847bd;
 
+  // Version chip — brand accent. Light theme uses a brighter gold than
+  // --yellow (#8c6c3e is muddy as a fill); dark theme keeps the existing look.
+  --version-bg:      #d4a04e;
+  --version-fg:      #2a2018;
+
   // Semantic
   --selection:       rgba(46, 125, 233, 0.15);
   --selection-bg:    rgba(46, 125, 233, 0.18);
@@ -79,6 +84,10 @@ body.theme-dark {
   --red:             #f7768e;
   --magenta:         #bb9af7;
   --purple:          #9d7cd8;
+
+  // Version chip — see light-theme block for rationale.
+  --version-bg:      #e0af68;
+  --version-fg:      #16161e;
 
   // Semantic
   --selection:       rgba(122, 162, 247, 0.18);

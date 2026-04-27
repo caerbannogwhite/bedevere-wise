@@ -1,7 +1,7 @@
 import { TabManager } from "../TabManager";
 import { ControlPanel } from "../ControlPanel";
 import { StatusBar } from "../StatusBar";
-import { HelpPanel } from "../HelpPanel";
+import { HelpPanel, HelpPanelTab } from "../HelpPanel";
 import {
   DEFAULT_DATE_FORMAT,
   DEFAULT_DATETIME_FORMAT,
@@ -23,6 +23,7 @@ import { ViewManager } from "@/data/ViewManager";
 import { PersistenceService, persistenceService } from "@/data/PersistenceService";
 import { keymapService } from "@/data/KeymapService";
 import { commandRegistry } from "@/data/CommandRegistry";
+import { formatCommandHelp } from "@/data/Shell";
 import { FileImportService } from "@/data/FileImportService";
 import { DuckDBExtensionLoader } from "@/data/DuckDBExtensionLoader";
 import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
@@ -756,6 +757,82 @@ export class BedevereApp implements EventHandler {
       execute: () => this.toggleFullscreen(),
     });
     commandRegistry.register({
+      id: "help.toggle",
+      title: "Toggle Help Panel",
+      description: "Open or close the help panel",
+      category: "View",
+      scope: "global",
+      execute: () => {
+        if (this.helpPanel.isOpen()) this.helpPanel.hide();
+        else this.helpPanel.show("howto");
+      },
+    });
+    // Per-tab shortcut commands. Each opens the panel on its tab; if the
+    // panel is already open, just switches tabs (HelpPanel.show handles
+    // both states). None of these toggle.
+    const HELP_TAB_COMMANDS: Array<[id: string, shellName: string, tab: HelpPanelTab, title: string]> = [
+      ["help.howto",     "how-to",    "howto",     "Open How-To"],
+      ["help.shortcuts", "shortcuts", "shortcuts", "Open Shortcuts"],
+      ["help.feedback",  "feedback",  "feedback",  "Open Feedback"],
+      ["help.about",     "about",     "about",     "Open About"],
+    ];
+    for (const [id, shellName, tab, title] of HELP_TAB_COMMANDS) {
+      commandRegistry.register({
+        id,
+        shellName,
+        title,
+        description: `Open the ${tab} tab of the help panel`,
+        category: "View",
+        scope: "global",
+        execute: () => this.helpPanel.show(tab),
+      });
+    }
+    commandRegistry.register({
+      id: "help.commands",
+      shellName: "help",
+      title: "Show Commands Help",
+      description: "Open the Commands tab of the help panel. `.help <name>` shows details for one command in a popover.",
+      category: "View",
+      parameters: [
+        {
+          name: "command",
+          type: "string",
+          required: false,
+          description: "Specific command name (omit to open the Commands tab)",
+          options: () =>
+            commandRegistry
+              .list({ shellOnly: true })
+              .map((c) => c.shellName!)
+              .filter(Boolean),
+        },
+      ],
+      execute: (params) => {
+        const specific = params?.command as string | undefined;
+        if (!specific) {
+          this.helpPanel.show("commands");
+          return;
+        }
+        const cmd = commandRegistry.getByShellName(specific) || commandRegistry.get(specific);
+        if (!cmd) {
+          this.showMessage(`Unknown command: ${specific}. Try .help`, "error");
+          return;
+        }
+        const full = formatCommandHelp(cmd);
+        const firstLine = full.split("\n", 1)[0];
+        const rest = full.slice(firstLine.length + 1);
+        this.showMessage(firstLine, "info", { details: rest.length > 0 ? rest : undefined, duration: 0 });
+      },
+    });
+    commandRegistry.register({
+      id: "shell.focus",
+      shellName: "focus",
+      title: "Focus Shell",
+      description: "Move keyboard focus to the command shell input",
+      category: "View",
+      scope: "global",
+      execute: () => this.tabManager.focusCommandBar(),
+    });
+    commandRegistry.register({
       id: "tabs.next",
       title: "Next Tab",
       description: "Switch to the next dataset tab",
@@ -866,20 +943,22 @@ export class BedevereApp implements EventHandler {
       id: "shell.columns",
       shellName: "columns",
       title: "Describe Table",
-      description: "Open a new tab with the columns of a table",
+      description: "Open a new tab with the columns of a table (defaults to the active tab if no name is given)",
       category: "Dataset",
       parameters: [
         {
           name: "table",
           type: "string",
-          required: true,
-          description: "Table name",
+          required: false,
+          description: "Table name (defaults to active tab)",
           options: () => this.tabManager.getDatasetIds(),
         },
       ],
       execute: async (params) => {
-        const table = params?.table;
-        if (!table) throw new Error(".columns requires a table name (e.g. .columns penguins)");
+        const table =
+          (params?.table as string | undefined) ??
+          this.tabManager.getActiveDatasetTab()?.metadata.name;
+        if (!table) throw new Error(".columns needs a table name (or an active dataset tab)");
         if (!this.duckDBService) throw new Error("Database not initialized");
         // information_schema.columns rather than DESCRIBE — addQueryResult
         // wraps in CREATE TABLE … AS (…) which DuckDB's DESCRIBE statement
@@ -893,29 +972,16 @@ export class BedevereApp implements EventHandler {
     });
 
     commandRegistry.register({
-      id: "shell.open",
-      shellName: "open",
-      title: "Open Dataset / File / Folder",
-      description: "No args → file picker. `--folder` / `-d` → folder picker. <name> → switch to an already-imported dataset.",
+      id: "shell.import",
+      shellName: "import",
+      title: "Import File / Folder",
+      description: "Pick a file (no args) or a folder (`--folder` / `-d`) to add to Datasets",
       category: "Dataset",
       execute: async (params) => {
-        // Folder form.
         if (params?.folder || params?.d) {
           this.leftPanel?.openFolderPicker();
           return;
         }
-        // Dataset-name form.
-        const arg = (params?._args as string[] | undefined)?.[0];
-        if (arg && this.tabManager.getDatasetIds().includes(arg)) {
-          await this.tabManager.switchToDataset(arg);
-          return;
-        }
-        if (arg) {
-          // Arg supplied but doesn't match an imported dataset — error out so
-          // the user knows, rather than silently opening a file picker.
-          throw new Error(`No dataset named '${arg}'. Drop a file or run .open to pick one.`);
-        }
-        // No-arg form → native file picker. Reuses the ControlPanel drop path.
         const picker = document.createElement("input");
         picker.type = "file";
         picker.multiple = true;
@@ -931,10 +997,42 @@ export class BedevereApp implements EventHandler {
     });
 
     commandRegistry.register({
+      id: "shell.open",
+      shellName: "open",
+      title: "Open Dataset",
+      description: "Show a dataset from the Datasets panel in the spreadsheet (imports it first if needed)",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "dataset",
+          type: "string",
+          required: true,
+          description: "Name of a dataset/file in the Datasets panel",
+          options: () => this.leftPanel?.getAllFileTreeNames() ?? [],
+        },
+      ],
+      execute: async (params) => {
+        const name = params?.dataset as string | undefined;
+        if (!name) throw new Error(".open needs a name. Use .import to pick a new file from disk.");
+
+        if (this.tabManager.getDatasetIds().includes(name)) {
+          await this.tabManager.switchToDataset(name);
+          return;
+        }
+        // openByName imports the tree leaf and TabManager.switchToDataset is
+        // already called inside importNode, so no extra switch is needed here.
+        const tableName = await this.leftPanel?.openByName(name);
+        if (!tableName) {
+          throw new Error(`No dataset named '${name}' in Datasets. Use .import to add a file.`);
+        }
+      },
+    });
+
+    commandRegistry.register({
       id: "shell.close",
       shellName: "close",
       title: "Close Dataset Tab",
-      description: "Close the named dataset, or the active tab if no name is given",
+      description: "Close the named dataset, the active tab if no name is given, or `--all` to close every open dataset",
       category: "Dataset",
       parameters: [
         {
@@ -946,6 +1044,13 @@ export class BedevereApp implements EventHandler {
         },
       ],
       execute: (params) => {
+        if (params?.all) {
+          // Snapshot first — closeDataset mutates the underlying list as it goes.
+          for (const id of [...this.tabManager.getDatasetIds()]) {
+            this.tabManager.closeDataset(id);
+          }
+          return;
+        }
         const name = (params?.dataset as string | undefined) ?? this.tabManager.getActiveDatasetTab()?.metadata.name;
         if (!name) throw new Error("No active dataset to close");
         this.tabManager.closeDataset(name);
@@ -1055,26 +1160,10 @@ export class BedevereApp implements EventHandler {
   private async handleShellSettings(params: Record<string, any>): Promise<void> {
     const keys = Object.keys(params).filter((k) => k !== "_args");
 
-    // Print mode.
+    // No args → open the rich Settings tab in the HelpPanel.
     const positional = (params._args as string[] | undefined) ?? [];
     if (keys.length === 0 && positional.length === 0) {
-      const s = this.persistenceService.loadAppSettings();
-      const details = [
-        `  theme              = ${s.theme ?? "auto"}`,
-        `  dateFormat         = ${s.dateFormat ?? "yyyy-MM-dd"}`,
-        `  datetimeFormat     = ${s.datetimeFormat ?? "yyyy-MM-dd HH:mm:ss"}`,
-        `  numberMinDecimals  = ${s.numberMinDecimals ?? 2}`,
-        `  numberMaxDecimals  = ${s.numberMaxDecimals ?? 2}`,
-        `  numberUseGrouping  = ${s.numberUseGrouping ?? true}`,
-        `  minCellWidth       = ${s.minCellWidth ?? 100}`,
-        `  maxStringLength    = ${s.maxStringLength ?? 100}`,
-        `  copyDelimiter      = ${s.copyDelimiter ?? "tab"}`,
-        `  copyIncludeHeader  = ${s.copyIncludeHeader ?? true}`,
-      ].join("\n");
-      this.showMessage("Settings (click to expand — override with .settings key=value)", "info", {
-        details,
-        duration: 0,
-      });
+      this.helpPanel.show("settings");
       return;
     }
 
@@ -1162,6 +1251,8 @@ export class BedevereApp implements EventHandler {
 
   private toggleSqlEditor(): void {
     this.tabManager.toggleSqlEditor();
+    const editor = this.tabManager.getSqlEditor();
+    if (editor?.isExpanded()) editor.focus();
   }
 
   private async executeQuery(query: string): Promise<void> {
@@ -1235,21 +1326,28 @@ export class BedevereApp implements EventHandler {
       }
 
       const { includeHeader, includeIndex, format } = params || {};
+      const datasetName = activeDataset.metadata.name;
 
+      let ext = "";
       switch (format) {
         case "csv":
-          await exportAsText(selection, includeHeader, includeIndex);
+          ext = "csv";
+          await exportAsText(selection, includeHeader, includeIndex, ",", "\n", datasetName);
           break;
         case "tsv":
-          await exportAsText(selection, includeHeader, includeIndex, "\t");
+          ext = "tsv";
+          await exportAsText(selection, includeHeader, includeIndex, "\t", "\n", datasetName);
           break;
         case "html":
-          await exportAsHTML(selection, includeHeader, includeIndex);
+          ext = "html";
+          await exportAsHTML(selection, includeHeader, includeIndex, datasetName);
           break;
         case "markdown":
-          await exportAsMarkdown(selection, includeHeader, includeIndex);
+          ext = "md";
+          await exportAsMarkdown(selection, includeHeader, includeIndex, "\n", datasetName);
           break;
       }
+      this.showMessage(`Exported ${datasetName}.${ext} to clipboard + downloads`, "success");
     } else {
       this.showMessage("No active dataset to export", "warning");
     }

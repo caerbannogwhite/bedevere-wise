@@ -39,9 +39,13 @@ export class CommandBar {
   private pendingDraft: string = ""; // stores the unsubmitted line when user starts walking history
 
   // Autocomplete dropdown for dot-commands. Visible only while the input
-  // starts with '.' and has matching suggestions.
+  // starts with '.' and has matching suggestions. Two modes:
+  //   "command"  — typing the command name itself, list is Command objects
+  //   "argument" — past the first space, list is param.options() strings
   private suggestionsEl!: HTMLDivElement;
-  private suggestions: Command[] = [];
+  private suggestionMode: "command" | "argument" = "command";
+  private commandSuggestions: Command[] = [];
+  private argumentSuggestions: string[] = [];
   private suggestionIndex: number = -1; // -1 = no item highlighted
   private suggestionsVisible: boolean = false;
 
@@ -87,14 +91,21 @@ export class CommandBar {
       // Defer hide so a click on a suggestion lands before the dropdown unmounts.
       window.setTimeout(() => this.hideSuggestions(), 150);
     });
-    this.element.appendChild(this.input);
 
-    // Autocomplete dropdown. Positioned by CSS (absolute inside command-bar).
+    // Wrap input + suggestions so the dropdown anchors to the input's exact
+    // horizontal footprint (left:0 / right:0 inside the wrap) instead of
+    // relying on hardcoded offsets to dodge the prompt and SQL button.
+    const inputWrap = document.createElement("div");
+    inputWrap.className = "command-bar__input-wrap";
+    inputWrap.appendChild(this.input);
+
+    // Autocomplete dropdown. Positioned absolutely against `inputWrap`.
     this.suggestionsEl = document.createElement("div");
     this.suggestionsEl.className = "command-bar__suggestions command-bar__suggestions--hidden";
-    this.element.appendChild(this.suggestionsEl);
+    inputWrap.appendChild(this.suggestionsEl);
 
-    // SQL editor toggle button (existing)
+    this.element.appendChild(inputWrap);
+
     this.toggleButton = document.createElement("button");
     this.toggleButton.className = "command-bar__sql-toggle";
     this.toggleButton.title = "Toggle SQL Editor (Ctrl+E)";
@@ -191,28 +202,28 @@ export class CommandBar {
   // ---- autocomplete ------------------------------------------------------
 
   /**
-   * Recompute the suggestion list based on the current input. Matches any
-   * shell command whose `.<shellName>` starts with the typed prefix. Hides
-   * the dropdown when the input isn't a dot-command or no matches exist.
+   * Recompute the suggestion list based on the current input. Dispatches to
+   * either command-name or argument completion depending on whether the user
+   * has typed past the first space.
    */
   private updateSuggestions(): void {
     const value = this.input.value;
-    const prefix = value.trim();
-
-    // Not a dot-command → no completions.
-    if (!prefix.startsWith(".")) {
+    if (!value.startsWith(".")) {
       this.hideSuggestions();
       return;
     }
-    // Only complete the FIRST token. Once the user has typed a space, they're
-    // onto arguments; the dropdown steps aside.
-    const firstSpace = prefix.indexOf(" ");
-    if (firstSpace !== -1) {
-      this.hideSuggestions();
+    const afterDot = value.slice(1);
+    const firstSpace = afterDot.indexOf(" ");
+    if (firstSpace === -1) {
+      this.updateCommandSuggestions(afterDot);
       return;
     }
+    this.updateArgumentSuggestions(afterDot.slice(0, firstSpace), afterDot.slice(firstSpace + 1));
+  }
 
-    const needle = prefix.slice(1).toLowerCase(); // drop the '.'
+  /** Match shell commands whose `.<shellName>` starts with the typed prefix. */
+  private updateCommandSuggestions(needleRaw: string): void {
+    const needle = needleRaw.toLowerCase();
     const matches = commandRegistry
       .list({ shellOnly: true })
       .filter((cmd) => {
@@ -229,8 +240,58 @@ export class CommandBar {
       return;
     }
 
-    this.suggestions = matches;
-    this.suggestionIndex = 0; // first match pre-selected so Tab is one keypress
+    this.suggestionMode = "command";
+    this.commandSuggestions = matches;
+    this.argumentSuggestions = [];
+    this.suggestionIndex = 0;
+    this.renderSuggestions();
+    this.suggestionsVisible = true;
+    this.suggestionsEl.classList.remove("command-bar__suggestions--hidden");
+  }
+
+  /**
+   * Suggest values for the current positional argument of `cmdName`, drawn
+   * from that parameter's `options()` thunk. Skips flags / named-args
+   * (-x / key=val) — those aren't backed by `parameters[].options` today.
+   */
+  private updateArgumentSuggestions(cmdName: string, argString: string): void {
+    const cmd = commandRegistry.getByShellName(cmdName);
+    if (!cmd?.parameters?.length) {
+      this.hideSuggestions();
+      return;
+    }
+
+    const trailingSpace = /\s$/.test(this.input.value);
+    const tokens = argString.split(/\s+/).filter((t) => t.length > 0);
+    const currentToken = trailingSpace ? "" : (tokens[tokens.length - 1] ?? "");
+
+    if (currentToken.startsWith("-") || currentToken.includes("=")) {
+      this.hideSuggestions();
+      return;
+    }
+
+    const completedPositionals = (trailingSpace ? tokens : tokens.slice(0, -1))
+      .filter((t) => !t.startsWith("-") && !t.includes("="));
+    const positionalIndex = completedPositionals.length;
+
+    const param = cmd.parameters[positionalIndex];
+    if (!param?.options) {
+      this.hideSuggestions();
+      return;
+    }
+
+    const matches = param.options()
+      .filter((o) => o.toLowerCase().startsWith(currentToken.toLowerCase()))
+      .slice(0, SUGGESTIONS_MAX);
+    if (matches.length === 0) {
+      this.hideSuggestions();
+      return;
+    }
+
+    this.suggestionMode = "argument";
+    this.argumentSuggestions = matches;
+    this.commandSuggestions = [];
+    this.suggestionIndex = 0;
     this.renderSuggestions();
     this.suggestionsVisible = true;
     this.suggestionsEl.classList.remove("command-bar__suggestions--hidden");
@@ -238,51 +299,93 @@ export class CommandBar {
 
   private renderSuggestions(): void {
     this.suggestionsEl.innerHTML = "";
-    for (let i = 0; i < this.suggestions.length; i++) {
-      const cmd = this.suggestions[i];
-      const row = document.createElement("div");
-      row.className = "command-bar__suggestion";
-      if (i === this.suggestionIndex) row.classList.add("command-bar__suggestion--active");
-      row.addEventListener("mousedown", (e) => {
-        // mousedown (not click) so we beat the input's blur handler.
-        e.preventDefault();
-        this.suggestionIndex = i;
-        this.completeFromSuggestions();
-      });
+    if (this.suggestionMode === "command") {
+      for (let i = 0; i < this.commandSuggestions.length; i++) {
+        const cmd = this.commandSuggestions[i];
+        const row = this.createSuggestionRow(i);
 
-      const name = document.createElement("span");
-      name.className = "command-bar__suggestion-name";
-      name.textContent = `.${cmd.shellName}`;
-      row.appendChild(name);
+        const name = document.createElement("span");
+        name.className = "command-bar__suggestion-name";
+        name.textContent = `.${cmd.shellName}`;
+        row.appendChild(name);
 
-      const desc = document.createElement("span");
-      desc.className = "command-bar__suggestion-desc";
-      desc.textContent = cmd.description || cmd.title;
-      row.appendChild(desc);
+        const desc = document.createElement("span");
+        desc.className = "command-bar__suggestion-desc";
+        desc.textContent = cmd.description || cmd.title;
+        row.appendChild(desc);
 
-      this.suggestionsEl.appendChild(row);
+        this.suggestionsEl.appendChild(row);
+      }
+    } else {
+      for (let i = 0; i < this.argumentSuggestions.length; i++) {
+        const value = this.argumentSuggestions[i];
+        const row = this.createSuggestionRow(i);
+
+        const name = document.createElement("span");
+        name.className = "command-bar__suggestion-name";
+        name.textContent = value;
+        row.appendChild(name);
+
+        this.suggestionsEl.appendChild(row);
+      }
     }
   }
 
+  private createSuggestionRow(i: number): HTMLDivElement {
+    const row = document.createElement("div");
+    row.className = "command-bar__suggestion";
+    if (i === this.suggestionIndex) row.classList.add("command-bar__suggestion--active");
+    row.addEventListener("mousedown", (e) => {
+      // mousedown (not click) so we beat the input's blur handler.
+      e.preventDefault();
+      this.suggestionIndex = i;
+      this.completeFromSuggestions();
+    });
+    return row;
+  }
+
+  private getActiveSuggestionsLength(): number {
+    return this.suggestionMode === "command"
+      ? this.commandSuggestions.length
+      : this.argumentSuggestions.length;
+  }
+
   private moveSuggestion(delta: number): void {
-    if (this.suggestions.length === 0) return;
-    const len = this.suggestions.length;
+    const len = this.getActiveSuggestionsLength();
+    if (len === 0) return;
     this.suggestionIndex = (this.suggestionIndex + delta + len) % len;
     this.renderSuggestions();
   }
 
   private completeFromSuggestions(): void {
-    if (this.suggestionIndex < 0 || this.suggestionIndex >= this.suggestions.length) return;
-    const cmd = this.suggestions[this.suggestionIndex];
-    this.input.value = `.${cmd.shellName} `;
+    const len = this.getActiveSuggestionsLength();
+    if (this.suggestionIndex < 0 || this.suggestionIndex >= len) return;
+
+    if (this.suggestionMode === "command") {
+      const cmd = this.commandSuggestions[this.suggestionIndex];
+      this.input.value = `.${cmd.shellName} `;
+    } else {
+      const value = this.argumentSuggestions[this.suggestionIndex];
+      const current = this.input.value;
+      const trailingSpace = /\s$/.test(current);
+      if (trailingSpace) {
+        this.input.value = current + value + " ";
+      } else {
+        const lastSpace = current.lastIndexOf(" ");
+        this.input.value = current.slice(0, lastSpace + 1) + value + " ";
+      }
+    }
     this.input.setSelectionRange(this.input.value.length, this.input.value.length);
     this.hideSuggestions();
+    // Re-trigger so the next argument's options pop without an extra keystroke.
+    this.updateSuggestions();
   }
 
   private hideSuggestions(): void {
     if (!this.suggestionsVisible) return;
     this.suggestionsVisible = false;
-    this.suggestions = [];
+    this.commandSuggestions = [];
+    this.argumentSuggestions = [];
     this.suggestionIndex = -1;
     this.suggestionsEl.classList.add("command-bar__suggestions--hidden");
     this.suggestionsEl.innerHTML = "";

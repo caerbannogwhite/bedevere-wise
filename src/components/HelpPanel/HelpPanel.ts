@@ -11,8 +11,9 @@ import {
   isFeedbackConfigured,
   submitFeedback,
 } from "@/data/FeedbackService";
+import { Command, commandRegistry } from "@/data/CommandRegistry";
 
-export type HelpPanelTab = "howto" | "import" | "shortcuts" | "feedback" | "settings" | "about";
+export type HelpPanelTab = "howto" | "import" | "shortcuts" | "commands" | "feedback" | "settings" | "about";
 
 export interface HelpPanelOptions {
   version: string;
@@ -59,7 +60,7 @@ export const MIN_CELL_WIDTH_PRESETS: number[] = [50, 75, 100, 150, 200];
 /** 0 means "no cap" — the dropdown labels it as "None". */
 export const MAX_STRING_LENGTH_PRESETS: number[] = [50, 100, 200, 500, 0];
 
-const TAB_ORDER: HelpPanelTab[] = ["howto", "import", "shortcuts", "feedback", "settings", "about"];
+const TAB_ORDER: HelpPanelTab[] = ["howto", "import", "shortcuts", "commands", "feedback", "settings", "about"];
 
 const SCOPE_LABELS: Record<string, string> = {
   global: "App",
@@ -317,6 +318,12 @@ export class HelpPanel {
 
   public setTab(tab: HelpPanelTab): void {
     this.currentTab = tab;
+    // The Commands listing is registry-driven; rebuild on each show so it
+    // reflects whatever's been registered since the panel was last opened.
+    if (tab === "commands") {
+      const body = this.tabBodies.get("commands");
+      if (body) this.renderCommandsBody(body);
+    }
     for (const [id, btn] of this.tabButtons) {
       btn.classList.toggle("help-panel__tab--active", id === tab);
     }
@@ -347,6 +354,7 @@ export class HelpPanel {
     body.appendChild(this.buildHowToBody());
     body.appendChild(this.buildImportBody());
     body.appendChild(this.buildShortcutsBody());
+    body.appendChild(this.buildCommandsBody());
     body.appendChild(this.buildFeedbackBody());
     body.appendChild(this.buildSettingsBody());
     body.appendChild(this.buildAboutBody());
@@ -383,6 +391,7 @@ export class HelpPanel {
       howto: "How To",
       import: "Import",
       shortcuts: "Shortcuts",
+      commands: "Commands",
       feedback: "Feedback",
       settings: "Settings",
       about: "About",
@@ -885,6 +894,62 @@ export class HelpPanel {
     document.addEventListener("keydown", handler, { capture: true });
   }
 
+  private buildCommandsBody(): HTMLElement {
+    const body = document.createElement("div");
+    body.className = "help-panel__tab-body help-panel__tab-body--commands";
+    this.tabBodies.set("commands", body);
+    this.renderCommandsBody(body);
+    return body;
+  }
+
+  private renderCommandsBody(body: HTMLElement): void {
+    body.innerHTML = "";
+
+    const lead = document.createElement("p");
+    lead.className = "help-panel__lead";
+    lead.innerHTML =
+      "Type any of these into the shell (<kbd>Ctrl</kbd>+<kbd>`</kbd> to focus it). " +
+      "Lines without a leading dot run as DuckDB SQL.";
+    body.appendChild(lead);
+
+    const all = commandRegistry
+      .list({ shellOnly: true })
+      .sort((a, b) =>
+        (a.category || "").localeCompare(b.category || "") ||
+        (a.shellName || "").localeCompare(b.shellName || "")
+      );
+
+    const grouped = new Map<string, Command[]>();
+    for (const cmd of all) {
+      const cat = cmd.category || "Other";
+      if (!grouped.has(cat)) grouped.set(cat, []);
+      grouped.get(cat)!.push(cmd);
+    }
+
+    for (const [cat, cmds] of grouped) {
+      const h = document.createElement("h3");
+      h.className = "help-panel__section-title";
+      h.textContent = cat;
+      body.appendChild(h);
+
+      const list = document.createElement("dl");
+      list.className = "help-panel__commands-list";
+      for (const cmd of cmds) {
+        const dt = document.createElement("dt");
+        dt.className = "help-panel__commands-name";
+        const aliasSuffix = cmd.aliases?.length ? ` (.${cmd.aliases.join(", .")})` : "";
+        dt.textContent = `.${cmd.shellName}${aliasSuffix}`;
+        list.appendChild(dt);
+
+        const dd = document.createElement("dd");
+        dd.className = "help-panel__commands-desc";
+        dd.textContent = cmd.description || cmd.title;
+        list.appendChild(dd);
+      }
+      body.appendChild(list);
+    }
+  }
+
   private buildFeedbackBody(): HTMLElement {
     const body = document.createElement("div");
     body.className = "help-panel__tab-body help-panel__tab-body--feedback";
@@ -1039,7 +1104,7 @@ export class HelpPanel {
       "",
       message,
     ].filter(Boolean);
-    const href = `mailto:massimo.meneghello93@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
+    const href = `mailto:contact@bedeverewise.app?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(lines.join("\n"))}`;
     window.location.href = href;
   }
 
