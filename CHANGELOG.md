@@ -1,16 +1,25 @@
 # Changelog
 
-## v0.8 (in development)
+## v0.8-from-the-castle-of-camelot
 
-- [Feature] Dot-command shell hosted in the always-visible bar above the spreadsheet. Lines starting with `.` dispatch through a unified CommandRegistry; anything else runs as DuckDB SQL. History walked with Up/Down.
+- [Feature] Dot-command shell hosted in the always-visible bar above the spreadsheet. Lines starting with `.` dispatch through a unified CommandRegistry; anything else runs as DuckDB SQL. History walks Up/Down and persists across sessions (capped at 200 lines).
 - [Feature] `CommandRegistry` — the single source of truth for every verb. Palette, keymap, and shell all resolve through it.
-- [Feature] Shell commands: `.help`, `.tables`, `.columns <name>`, `.open [name | --folder]`, `.close [name]`, `.theme light|dark|auto`, `.tab next|prev|N`, `.settings [key=value]`, `.view save|drop <name>`, `.query save <name>`, `.export <csv|tsv|html|markdown>`, `.clear`, plus shell shortcuts for the keymap globals (`.panel`, `.sql`, `.fullscreen`, `.palette`).
-- [Feature] Dot-command autocomplete dropdown in the CommandBar: Tab completes, Up/Down navigate, Esc dismisses. Matches by shellName or alias prefix.
-- [Feature] Shell history is persisted across sessions (capped at 200 lines).
-- [Enhanced] Global-scope keymap actions (`app.togglePanel`, `app.toggleSqlEditor`, `tabs.next`, `tabs.prev`, etc.) now resolve via `commandRegistry.run(action)` instead of hand-maintained switch statements in three callers.
-- [Enhanced] Spreadsheet-scope keymap actions (`spreadsheet.moveUp`, `spreadsheet.copy`, etc.) likewise unify through the registry, routing to the active tab's `SpreadsheetVisualizer`.
-- [Enhanced] CommandBar is now always visible — reachable before the first dataset is imported so `.open` / `.help` work from a cold start.
-- [Deprecated] CommandPalette (Ctrl+P) is flagged for removal in 0.9. It keeps working in 0.8, backed by the new registry.
+- [Feature] Shell commands: `.help [name]`, `.how-to`, `.shortcuts`, `.feedback`, `.about`, `.tables`, `.columns [name]` (defaults to active tab), `.import [--folder]`, `.open <name>` (matches any Datasets-tree leaf, imports if needed), `.close [name | --all]`, `.theme light|dark|auto`, `.tab next|prev|N`, `.settings [key=value]` (opens Settings tab when no args), `.view save|drop <name>`, `.query save <name>`, `.export <csv|tsv|html|markdown>` (copies to clipboard AND downloads `<dataset>.<ext>`), `.clear`, plus shell shortcuts for global keymap actions (`.panel`, `.sql`, `.fullscreen`, `.palette`, `.focus`).
+- [Feature] CommandBar autocomplete: command names complete on dot-prefix; positional arguments complete from each parameter's `options()` thunk (e.g. `.open ` lists Datasets-tree leaves, `.theme ` offers `light/dark/auto`). Tab completes, Up/Down navigate, Esc dismisses.
+- [Feature] Help panel gains a Commands tab — registry-driven listing grouped by category. `.help` opens it instead of dumping a multi-screen manual into the status-bar tooltip.
+- [Feature] Keybindings: `Ctrl+/` toggles the help panel; `` Ctrl+` `` focuses the shell input.
+- [Feature] Tokyonight re-skin: Vim-flavoured palette (Day light / Storm dark) exposed via CSS custom properties; theme switching is a body-class flip with no SCSS recompile.
+- [Feature] Spreadsheet renderer Phase A: HiDPI-sharp glyphs and a single-pass grid pipeline.
+- [Feature] In-app feedback form (HelpPanel → Feedback) backed by a Cloudflare Worker + D1 store; `mailto:contact@bedeverewise.app` fallback for deployments without the worker.
+- [Feature] Deploy story: Cloudflare Workers Builds (recommended) + GitHub Pages, custom domain `bedeverewise.app`, DuckDB-WASM loaded from jsDelivr to keep the bundle slim.
+- [Enhanced] Global-scope keymap actions (`app.togglePanel`, `app.toggleSqlEditor`, `tabs.next`, `tabs.prev`, etc.) resolve via `commandRegistry.run(action)` instead of hand-maintained switch statements in three callers.
+- [Enhanced] Spreadsheet-scope keymap actions (`spreadsheet.moveUp`, `spreadsheet.copy`, etc.) also unify through the registry, routing to the active tab's `SpreadsheetVisualizer`.
+- [Enhanced] CommandBar is always visible — reachable before the first dataset is imported so `.import` / `.help` work from a cold start. SqlEditor input also routes through the dot-command dispatcher (a `.command` typed there + Ctrl+Enter behaves the same as in the CommandBar).
+- [Enhanced] `.sql` toggle now also focuses the SQL editor; `.close --all` closes every open dataset.
+- [Enhanced] Status-bar version chip uses dedicated `--version-bg` / `--version-fg` tokens (the light-theme yellow was muddy as a fill); the margin between version and adjacent message chips was dropped so success/error chips sit flush.
+- [Enhanced] Suggestions dropdown anchored to a wrapper around the input (`left: 0` / `right: 0`) instead of magic pixel offsets — aligns regardless of prompt or font.
+- [Bug-fix] `.columns` uses `information_schema.columns` instead of `DESCRIBE` (DuckDB's `DESCRIBE` can't appear inside a `CREATE TABLE … AS (…)` wrapper).
+- [Deprecated] CommandPalette (`Ctrl+Shift+P`) is flagged for removal in 0.9. It keeps working in 0.8, backed by the new registry.
 - [Removed] Duplicate palette entries `view.toggleLeftPanel` and `sql.toggleEditor` (superseded by `app.togglePanel` / `app.toggleSqlEditor`).
 
 ## v0.7-son-of-uther-pendragon

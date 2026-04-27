@@ -9,11 +9,11 @@ whichever combination fits.
 
 ## Hosting choices
 
-| Target | Cost | Setup time | Notes |
-| --- | --- | --- | --- |
-| **Cloudflare Workers Builds** (recommended) | $0/mo + custom domain (~$10/yr) | 15 min | Static SPA on global CDN. Cloudflare's new dashboard routes this via Workers (with static assets) rather than legacy Pages. |
-| **GitHub Pages** | $0/mo | already wired | Existing `.github/workflows/deploy.yml`. Constrained to `*.github.io/bedevere-wise/`. |
-| Fly.io / Render / Vercel server | $0–5/mo | varies | Overkill for a static SPA; useful only if you add a real backend. |
+| Target                                      | Cost                            | Setup time    | Notes                                                                                                                       |
+| ------------------------------------------- | ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| **Cloudflare Workers Builds** (recommended) | $0/mo + custom domain (~$10/yr) | 15 min        | Static SPA on global CDN. Cloudflare's new dashboard routes this via Workers (with static assets) rather than legacy Pages. |
+| **GitHub Pages**                            | $0/mo                           | already wired | Existing `.github/workflows/deploy.yml`. Constrained to `*.github.io/bedevere-wise/`.                                       |
+| Fly.io / Render / Vercel server             | $0–5/mo                         | varies        | Overkill for a static SPA; useful only if you add a real backend.                                                           |
 
 ## A. Cloudflare Workers Builds (the recommended path)
 
