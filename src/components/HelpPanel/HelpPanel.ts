@@ -1377,7 +1377,7 @@ export class HelpPanel {
 
     body.innerHTML = `
       <p class="help-panel__about-version">v${this.options.version}</p>
-      <p class="help-panel__about-description">A local-first data viewer powered by DuckDB.</p>
+      <p class="help-panel__about-description">Open SAS, SPSS, Stata, Parquet, Excel, and CSV files in your browser. Query them with SQL — no install, no upload.</p>
       <div class="help-panel__about-section">
         <h3 class="help-panel__about-section-title">Shell</h3>
         <p class="help-panel__about-shell-intro">
