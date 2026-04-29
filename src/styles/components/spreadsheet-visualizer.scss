@@ -34,15 +34,6 @@
 #hover-canvas     { z-index: 1; }
 
 .tab-manager__dataset-container {
-  width: 100%;
-  height: 100%;
-  position: relative;
-
-  &--active {
-    display: flex !important;
-    flex-direction: column;
-  }
-
   #spreadsheet-container {
     width: 100% !important;
     height: 100% !important;

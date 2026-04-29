@@ -35,19 +35,8 @@ export class DuckDBExtensionLoader {
       await this.duckDBService.executeQuery(`LOAD ${name}`);
       this.loaded.add(name);
 
-      // Probe available functions from this extension
-      try {
-        const funcs = await this.duckDBService.executeQuery(
-          `SELECT function_name FROM duckdb_functions() WHERE function_name LIKE '%xlsx%' OR function_name LIKE '%excel%' OR function_name LIKE '%sas%' OR function_name LIKE '%stata%' OR function_name LIKE '%sav%'`
-        );
-        const funcNames = funcs.map((r: any) => r.function_name);
-        if (funcNames.length > 0) {
-          console.log(`DuckDB extension "${name}" loaded — functions: ${[...new Set(funcNames)].join(", ")}`);
-        } else {
-          console.log(`DuckDB extension "${name}" loaded successfully`);
-        }
-      } catch {
-        console.log(`DuckDB extension "${name}" loaded successfully`);
+      if (import.meta.env.DEV) {
+        console.log(`DuckDB extension "${name}" loaded`);
       }
 
       // Run smoke tests for known-problematic functions.
@@ -77,7 +66,9 @@ export class DuckDBExtensionLoader {
 
       return true;
     } catch (error) {
-      console.log(`DuckDB extension "${name}" not available in WASM environment`);
+      if (import.meta.env.DEV) {
+        console.log(`DuckDB extension "${name}" not available in WASM environment`);
+      }
       return false;
     }
   }

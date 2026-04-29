@@ -1,9 +1,3 @@
-export interface ViewDefinition {
-  name: string;
-  sql: string;
-  createdAt: number;
-}
-
 export interface QueryBookmark {
   name: string;
   sql: string;
@@ -29,7 +23,6 @@ export interface AppSettings {
 }
 
 const STORAGE_KEYS = {
-  views: "bedevere_views",
   queries: "bedevere_queries",
   settings: "bedevere_settings",
 } as const;
@@ -39,37 +32,6 @@ const DB_VERSION = 1;
 const TABLE_STORE = "table_snapshots";
 
 export class PersistenceService {
-  // --- View Definitions (localStorage) ---
-
-  public saveViewDefinition(name: string, sqlStr: string): void {
-    const views = this.loadViewDefinitions();
-    const existing = views.findIndex((v) => v.name === name);
-    const def: ViewDefinition = { name, sql: sqlStr, createdAt: Date.now() };
-
-    if (existing >= 0) {
-      views[existing] = def;
-    } else {
-      views.push(def);
-    }
-
-    localStorage.setItem(STORAGE_KEYS.views, JSON.stringify(views));
-  }
-
-  public loadViewDefinitions(): ViewDefinition[] {
-    const raw = localStorage.getItem(STORAGE_KEYS.views);
-    if (!raw) return [];
-    try {
-      return JSON.parse(raw);
-    } catch {
-      return [];
-    }
-  }
-
-  public deleteViewDefinition(name: string): void {
-    const views = this.loadViewDefinitions().filter((v) => v.name !== name);
-    localStorage.setItem(STORAGE_KEYS.views, JSON.stringify(views));
-  }
-
   // --- Query Bookmarks (localStorage) ---
 
   public saveQueryBookmark(name: string, sqlStr: string): void {

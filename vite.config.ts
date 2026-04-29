@@ -1,9 +1,16 @@
 import { defineConfig } from "vite";
 import { resolve } from "path";
 
-export default defineConfig(({ command, mode }) => {
-  // GitHub Pages serves from /bedevere-wise/; dev stays at /
-  const base = command === "build" ? "/bedevere-wise/" : "/";
+export default defineConfig(({ command }) => {
+  // Base path resolution — different deploy targets serve from different
+  // roots, so the path is env-driven instead of baked in:
+  //   - Cloudflare Pages (and any custom-domain root): set BASE_PATH=/ or leave unset.
+  //   - GitHub Pages project page:                     set BASE_PATH=/bedevere-wise/.
+  //   - Local dev:                                     always /.
+  // Configure via the BASE_PATH env var in the deploy environment; the
+  // GH Pages workflow continues to work as long as it exports
+  // BASE_PATH=/bedevere-wise/ before `bun run build`.
+  const base = command === "build" ? process.env.BASE_PATH ?? "/" : "/";
 
   return {
     base,

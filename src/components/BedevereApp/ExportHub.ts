@@ -1,11 +1,25 @@
 import { ICellSelection } from "../SpreadsheetVisualizer";
 
+function downloadFile(content: string, filename: string, mime: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Defer revoke so the click has time to start the download.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
+}
+
 export const exportAsText = async (
   selection: ICellSelection,
   includeHeader: boolean,
   includeIndex: boolean,
   separator: string = ",",
-  eol: string = "\n"
+  eol: string = "\n",
+  datasetName: string = "export"
 ) => {
   const { rows, columns, formatted } = selection;
 
@@ -39,14 +53,24 @@ export const exportAsText = async (
     })
   );
 
+  const text = csvContent.join(eol);
+  const ext = separator === "\t" ? "tsv" : "csv";
+  const mime = separator === "\t" ? "text/tab-separated-values" : "text/csv";
+
   try {
-    await navigator.clipboard.writeText(csvContent.join(eol));
+    await navigator.clipboard.writeText(text);
   } catch (err) {
     console.error("Failed to copy text to clipboard:", err);
   }
+  downloadFile(text, `${datasetName}.${ext}`, mime);
 };
 
-export const exportAsHTML = async (selection: ICellSelection, includeHeader: boolean, includeIndex: boolean) => {
+export const exportAsHTML = async (
+  selection: ICellSelection,
+  includeHeader: boolean,
+  includeIndex: boolean,
+  datasetName: string = "export"
+) => {
   const { rows, columns, formatted } = selection;
 
   const headers = columns.map((column) => column.name);
@@ -75,9 +99,16 @@ export const exportAsHTML = async (selection: ICellSelection, includeHeader: boo
   } catch (err) {
     console.error("Failed to copy HTML to clipboard:", err);
   }
+  downloadFile(htmlContent, `${datasetName}.html`, "text/html");
 };
 
-export const exportAsMarkdown = async (selection: ICellSelection, _: boolean, includeIndex: boolean, eol: string = "\n") => {
+export const exportAsMarkdown = async (
+  selection: ICellSelection,
+  _: boolean,
+  includeIndex: boolean,
+  eol: string = "\n",
+  datasetName: string = "export"
+) => {
   const { rows, columns, formatted } = selection;
 
   const headers = columns.map((column) => column.name);
@@ -100,4 +131,5 @@ export const exportAsMarkdown = async (selection: ICellSelection, _: boolean, in
   } catch (err) {
     console.error("Failed to copy Markdown to clipboard:", err);
   }
+  downloadFile(markdownContent, `${datasetName}.md`, "text/markdown");
 };

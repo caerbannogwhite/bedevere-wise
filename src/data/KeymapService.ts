@@ -60,9 +60,10 @@ export function matchesBinding(event: KeyboardEvent, binding: KeyBinding): boole
 const DEFAULT_KEYMAP: KeymapEntry[] = [
   // Global (BedevereApp)
   { action: "app.togglePanel",       description: "Toggle control panel",       scope: "global",  binding: { key: "b", ctrl: true } },
-  { action: "app.commandPalette",    description: "Open command palette",       scope: "global",  binding: { key: "P", ctrl: true, shift: true } },
   { action: "app.toggleSqlEditor",   description: "Toggle SQL editor",          scope: "global",  binding: { key: "e", ctrl: true } },
   { action: "app.toggleFullscreen",  description: "Toggle fullscreen",          scope: "global",  binding: { key: "F11" } },
+  { action: "help.toggle",           description: "Toggle help panel",          scope: "global",  binding: { key: "/", ctrl: true } },
+  { action: "shell.focus",           description: "Focus the shell",            scope: "global",  binding: { key: "`", ctrl: true } },
   { action: "tabs.next",             description: "Switch to next tab",         scope: "global",  binding: { key: "ArrowRight", ctrl: true, alt: true } },
   { action: "tabs.prev",             description: "Switch to previous tab",     scope: "global",  binding: { key: "ArrowLeft", ctrl: true, alt: true } },
 

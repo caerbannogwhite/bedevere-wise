@@ -4,7 +4,6 @@ export * from "./DuckDBDataProvider";
 export * from "./ColumnFilterManager";
 export * from "./FilteredDuckDBDataProvider";
 export * from "./PersistenceService";
-export * from "./ViewManager";
 export * from "./KeymapService";
 export * from "./FileTreeTypes";
 export * from "./FileImportService";

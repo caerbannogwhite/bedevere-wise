@@ -64,7 +64,6 @@
       gap: 6px;
       font-weight: 600;
       padding: 0 10px;
-      margin: 0 4px;
       max-width: 480px;
       overflow: hidden;
       text-overflow: ellipsis;
@@ -148,11 +147,12 @@
       }
     }
 
-    // Version chip — duck-gold accent kept (brand) but mapped to the
-    // tokyonight yellow so it harmonises with the rest of the palette.
+    // Version chip — duck-gold brand accent. Uses dedicated tokens
+    // (--version-bg / --version-fg) rather than --yellow so the light
+    // theme can pick a brighter gold without disturbing other yellow uses.
     &--version {
-      background-color: var(--yellow);
-      color: var(--bg-dark);
+      background-color: var(--version-bg);
+      color: var(--version-fg);
       font-weight: 600;
       padding: 0 10px;
       gap: 6px;

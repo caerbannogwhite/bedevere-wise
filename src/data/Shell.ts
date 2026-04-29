@@ -142,9 +142,6 @@ export async function runShellLine(input: string): Promise<ShellResult> {
   const parsed = parseShellLine(input);
   if (!parsed) return { kind: "error", text: "Not a shell command (line must start with '.')" };
 
-  // Built-in: .help. Everything else dispatches through the registry.
-  if (parsed.name === "help") return buildHelp(parsed.positional[0]);
-
   const cmd = commandRegistry.getByShellName(parsed.name);
   if (!cmd) {
     return { kind: "error", text: `Unknown command '.${parsed.name}'. Try .help` };
@@ -164,48 +161,12 @@ export async function runShellLine(input: string): Promise<ShellResult> {
 }
 
 // ---------------------------------------------------------------------------
-// .help rendering
+// .help rendering — single-command formatter, used by the registered .help
+// command (BedevereApp) for `.help <name>`. The no-args path opens the
+// HelpPanel's Commands tab instead.
 // ---------------------------------------------------------------------------
 
-function buildHelp(specific?: string): ShellResult {
-  if (specific) {
-    const cmd = commandRegistry.getByShellName(specific) || commandRegistry.get(specific);
-    if (!cmd) return { kind: "error", text: `Unknown command: ${specific}. Try .help` };
-    const full = formatCommandHelp(cmd);
-    const firstLine = full.split("\n", 1)[0];
-    const rest = full.slice(firstLine.length + 1);
-    return { kind: "text", text: firstLine, details: rest.length > 0 ? rest : undefined };
-  }
-
-  const all = commandRegistry
-    .list({ shellOnly: true })
-    .sort((a, b) => (a.category || "").localeCompare(b.category || "") || (a.shellName || "").localeCompare(b.shellName || ""));
-
-  const lines: string[] = [];
-  let lastCat: string | undefined;
-  for (const cmd of all) {
-    const cat = cmd.category || "Other";
-    if (cat !== lastCat) {
-      if (lastCat !== undefined) lines.push("");
-      lines.push(`[${cat}]`);
-      lastCat = cat;
-    }
-    const aliasSuffix = cmd.aliases?.length ? ` (.${cmd.aliases.join(", .")})` : "";
-    const desc = cmd.description || cmd.title;
-    lines.push(`  .${cmd.shellName}${aliasSuffix} — ${desc}`);
-  }
-  lines.push("");
-  lines.push("Lines not starting with '.' run as DuckDB SQL.");
-  lines.push("Type .help <name> for per-command details.");
-
-  return {
-    kind: "text",
-    text: `Shell reference — ${all.length} commands (click to expand)`,
-    details: lines.join("\n"),
-  };
-}
-
-function formatCommandHelp(cmd: Command): string {
+export function formatCommandHelp(cmd: Command): string {
   const lines: string[] = [];
   const token = cmd.shellName ? `.${cmd.shellName}` : cmd.id;
   lines.push(`${token} — ${cmd.title}`);

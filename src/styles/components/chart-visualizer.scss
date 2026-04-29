@@ -1,0 +1,41 @@
+// vega-embed adds its `.vega-embed` + `.has-actions` classes DIRECTLY
+// to the host element (not a child wrapper) and ships
+// `.vega-embed { position: relative; display: inline-block }` at
+// single-class specificity, loaded after our bundle. Without
+// !important on positioning, the host falls out of its abs-stacked
+// context and only takes natural content height — chart renders as a
+// thin strip. The `!important`s pin our layout above vega-embed's
+// defaults regardless of stylesheet order.
+.chart-visualizer.tab-manager__dataset-container {
+  display: none;
+  padding: 16px 24px;
+  overflow: hidden;
+  background: var(--bg);
+  position: absolute !important;
+  inset: 0 !important;
+
+  &.tab-manager__dataset-container--active {
+    display: block !important;
+  }
+}
+
+// `.chart-wrapper` (NOT `.vega-embed`) is the element vega measures for
+// `width: "container"` / `height: "container"` in the spec.
+.chart-visualizer .chart-wrapper {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+// Soften vega-embed's action menu (top-right "..." → export / source /
+// editor / compiled) to match the rest of the app.
+.chart-visualizer summary {
+  color: var(--fg-muted);
+
+  &:hover { color: var(--fg); }
+}
+
+.chart-visualizer details > summary {
+  background: var(--bg-float);
+  border: 1px solid var(--border);
+  border-radius: 0;
+}

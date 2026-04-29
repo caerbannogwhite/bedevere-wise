@@ -3,9 +3,46 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Bedevere Wise</title>
-    <meta name="description" content="A local-first data viewer powered by DuckDB" />
+    <title>Bedevere Wise — SAS, SPSS, Stata & Parquet viewer in your browser</title>
+    <meta
+      name="description"
+      content="Drop a .sas7bdat, .sav, .dta, .xpt, .parquet, or .csv into your browser and query it with SQL. No install, no upload — runs locally via DuckDB-WASM."
+    />
+    <meta name="keywords" content="sas viewer, sas7bdat viewer, spss viewer, sav viewer, stata viewer, dta viewer, xpt viewer, parquet viewer, csv sql, duckdb, browser sql, local-first, biostatistics" />
+    <link rel="canonical" href="https://bedeverewise.app/" />
     <link rel="icon" type="image/x-icon" href="/duck.ico" />
+
+    <!-- Open Graph / social-share cards -->
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Bedevere Wise" />
+    <meta property="og:title" content="Bedevere Wise — SAS, SPSS, Stata & Parquet viewer in your browser" />
+    <meta
+      property="og:description"
+      content="Drop a .sas7bdat, .sav, .dta, .xpt, .parquet, or .csv into your browser and query it with SQL. No install, no upload — runs locally via DuckDB-WASM."
+    />
+    <meta property="og:url" content="https://bedeverewise.app/" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="Bedevere Wise — SAS, SPSS, Stata & Parquet viewer in your browser" />
+    <meta
+      name="twitter:description"
+      content="Drop a .sas7bdat, .sav, .dta, .xpt, .parquet, or .csv into your browser and query it with SQL. No install, no upload — runs locally via DuckDB-WASM."
+    />
+
+    <!-- Rich result hint for Google search -->
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Bedevere Wise",
+        "description": "Open SAS, SPSS, Stata, Parquet, and Excel files in your browser. Query them with SQL — no install, no upload.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Web",
+        "url": "https://bedeverewise.app/",
+        "author": { "@type": "Person", "name": "Massimo Meneghello" },
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/licenses/MIT"
+      }
+    </script>
     <style>
       /* Reset and base styles */
       * {

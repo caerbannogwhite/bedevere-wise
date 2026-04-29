@@ -23,6 +23,18 @@
     line-height: 1;
   }
 
+  // Wraps input + suggestions so the dropdown can anchor to the input's
+  // exact horizontal footprint, instead of guessing at where the prompt
+  // ends and the SQL button begins via hardcoded left/right offsets.
+  &__input-wrap {
+    flex: 1;
+    min-width: 0;
+    position: relative;
+    display: flex;
+    align-items: center;
+    height: 100%;
+  }
+
   &__shell-input {
     flex: 1;
     min-width: 0;
@@ -51,8 +63,8 @@
   &__suggestions {
     position: absolute;
     top: 100%;
-    left: 14px; // tuck under the input, past the ':' prompt
-    right: 60px; // leave room for the SQL button
+    left: 0;
+    right: 0;
     max-height: 260px;
     overflow-y: auto;
     background: var(--bg-float);

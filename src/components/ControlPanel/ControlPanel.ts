@@ -1,6 +1,5 @@
 import duckPng from "@/assets/duck.png?url";
 import { DataProvider, DatasetMetadata } from "../../data/types";
-import { ViewManager } from "../../data/ViewManager";
 import { PersistenceService } from "../../data/PersistenceService";
 import { FileImportService } from "../../data/FileImportService";
 import { FolderScanService } from "../../data/FolderScanService";
@@ -54,7 +53,6 @@ export class ControlPanel {
   private panelWidth: number = 320;
   private onToggleCallback?: (isMinimized: boolean) => void;
   private onSelectCallback?: (dataset: DataProvider) => void;
-  private viewManager?: ViewManager;
   private persistenceService?: PersistenceService;
   private onOpenQueryCallback?: (sql: string) => void;
   private onAliasChangeCallback?: (tableName: string, alias: string) => void;
@@ -70,7 +68,6 @@ export class ControlPanel {
   private accordionSections: Map<string, AccordionSection> = new Map();
   private datasetListElement!: HTMLElement;
   private columnStatsContainer!: HTMLElement;
-  private viewsListElement!: HTMLElement;
   private queriesListElement!: HTMLElement;
 
   // Resize
@@ -147,11 +144,7 @@ export class ControlPanel {
     this.columnStatsContainer.className = "control-panel__column-stats";
     this.createAccordionSection("column-stats", "Column Stats", false, this.columnStatsContainer);
 
-    // 3. VIEWS
-    this.viewsListElement = document.createElement("div");
-    this.createAccordionSection("views", "Views", false, this.viewsListElement);
-
-    // 4. SAVED QUERIES
+    // 3. SAVED QUERIES
     this.queriesListElement = document.createElement("div");
     this.createAccordionSection("saved-queries", "Saved Queries", false, this.queriesListElement);
   }
@@ -296,6 +289,46 @@ export class ControlPanel {
 
   public getAvailableDatasets(): DatasetInfo[] {
     return [...this.datasets];
+  }
+
+  /** Names of every importable leaf in the tree (file or sheet, imported or not). */
+  public getAllFileTreeNames(): string[] {
+    const names: string[] = [];
+    const walk = (nodes: FileTreeNode[]) => {
+      for (const n of nodes) {
+        if (n.kind === "file" || n.kind === "sheet") names.push(n.alias ?? n.name);
+        if (n.children) walk(n.children);
+      }
+    };
+    walk(this.fileTree);
+    return names;
+  }
+
+  /**
+   * Resolve a user-supplied name to a tree leaf and import it if needed,
+   * then return its DuckDB table name. Returns null if no leaf matches.
+   * `importNode` already calls TabManager.switchToDataset, so the caller
+   * doesn't need to switch again on the import path.
+   */
+  public async openByName(name: string): Promise<string | null> {
+    const walk = (nodes: FileTreeNode[]): FileTreeNode | null => {
+      for (const n of nodes) {
+        if ((n.kind === "file" || n.kind === "sheet") && (n.alias === name || n.name === name)) {
+          return n;
+        }
+        if (n.children) {
+          const hit = walk(n.children);
+          if (hit) return hit;
+        }
+      }
+      return null;
+    };
+    const node = walk(this.fileTree);
+    if (!node) return null;
+    if (node.isImported && node.tableName) return node.tableName;
+    const result = await this.importNode(node);
+    if (!result.ok) throw new Error(result.error.message);
+    return node.tableName ?? null;
   }
 
   // --- File import & tree ---
@@ -678,13 +711,7 @@ export class ControlPanel {
     this.onToggleCallback?.(this.isMinimized);
   }
 
-  // --- Views & Queries ---
-
-  public setViewManager(viewManager: ViewManager): void {
-    this.viewManager = viewManager;
-    this.viewManager.onChange(() => this.renderViews());
-    this.renderViews();
-  }
+  // --- Saved Queries ---
 
   public setPersistenceService(persistenceService: PersistenceService): void {
     this.persistenceService = persistenceService;
@@ -699,10 +726,6 @@ export class ControlPanel {
 
   public setOnOpenQueryCallback(callback: (sql: string) => void): void {
     this.onOpenQueryCallback = callback;
-  }
-
-  public refreshViews(): void {
-    this.renderViews();
   }
 
   public refreshSavedQueries(): void {
@@ -758,44 +781,6 @@ export class ControlPanel {
   }
 
   // --- Renderers ---
-
-  private renderViews(): void {
-    if (!this.viewManager) return;
-
-    const views = this.viewManager.listViews();
-    this.viewsListElement.innerHTML = "";
-
-    for (const view of views) {
-      const item = document.createElement("div");
-      item.className = "control-panel__section-item";
-
-      const name = document.createElement("span");
-      name.className = "control-panel__section-item-name";
-      name.textContent = view.name;
-      name.title = view.sql;
-
-      const deleteBtn = document.createElement("button");
-      deleteBtn.className = "control-panel__section-item-delete";
-      deleteBtn.textContent = "×";
-      deleteBtn.title = "Delete view";
-      deleteBtn.addEventListener("click", async (e) => {
-        e.stopPropagation();
-        await this.viewManager!.dropView(view.name);
-      });
-
-      item.appendChild(name);
-      item.appendChild(deleteBtn);
-
-      item.addEventListener("click", async () => {
-        const provider = this.viewManager!.getViewAsDataProvider(view.name);
-        const metadata = await provider.getMetadata();
-        await this.tabManager.addDataset(metadata, provider);
-        await this.tabManager.switchToDataset(view.name);
-      });
-
-      this.viewsListElement.appendChild(item);
-    }
-  }
 
   private renderSavedQueries(): void {
     if (!this.persistenceService) return;

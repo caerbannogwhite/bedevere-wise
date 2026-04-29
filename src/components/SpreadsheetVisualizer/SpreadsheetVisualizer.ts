@@ -5,6 +5,7 @@ import { SpreadsheetVisualizerFocusable } from "./SpreadsheetVisualizerFocusable
 import { SpreadsheetCache } from "./SpreadsheetCache";
 import { getThemeColors, listenForThemeChanges } from "./utils/theme";
 import { ColumnInternal } from "./internals";
+import { ToDraw } from "./SpreadsheetVisualizerBase";
 
 export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
   constructor(
@@ -23,6 +24,10 @@ export class SpreadsheetVisualizer extends SpreadsheetVisualizerFocusable {
     // Setup theme change listener
     this.themeCleanup = listenForThemeChanges(() => {
       this.updateThemeColors();
+      // `draw()` is gated on `this.toDraw`; without forcing a Cells-level
+      // repaint here, the next frame would no-op and the canvas would keep
+      // the old palette until the user scrolled / clicked.
+      this.updateToDraw(ToDraw.Cells);
       // Recompute column widths before redrawing — the cached metrics in
       // ColumnInternal.widthPx were measured against the previous theme's
       // font/letter-spacing; a theme flip can change the resolved

@@ -25,13 +25,12 @@ async function initApplication() {
     return;
   }
 
-  const debugMode = true;
-  const appVersion = "0.7-son-of-uther-pendragon";
+  const debugMode = import.meta.env.DEV;
+  const appVersion = "0.8-from-the-castle-of-camelot";
 
   // Initialize DuckDB first
   try {
     await duckDBService.initialize();
-    console.log("DuckDB initialized successfully");
   } catch (error) {
     console.error("Failed to initialize DuckDB:", error);
     // Continue without DuckDB if initialization fails
@@ -50,7 +49,6 @@ async function initApplication() {
     // theme: "light",
     showLeftPanel: true,
     statusBarVisible: true,
-    commandPaletteEnabled: true,
     spreadsheetOptions: {
       minHeight: 400,
       minWidth: 600,

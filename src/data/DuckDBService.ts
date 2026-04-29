@@ -1,8 +1,4 @@
 import * as duckdb from "@duckdb/duckdb-wasm";
-import duckdb_wasm from "@duckdb/duckdb-wasm/dist/duckdb-mvp.wasm?url";
-import mvp_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-mvp.worker.js?url";
-import duckdb_wasm_eh from "@duckdb/duckdb-wasm/dist/duckdb-eh.wasm?url";
-import eh_worker from "@duckdb/duckdb-wasm/dist/duckdb-browser-eh.worker.js?url";
 import { DuckDBDataProvider } from "./DuckDBDataProvider";
 import { quoteIdent } from "./sqlIdent";
 
@@ -24,30 +20,29 @@ export class DuckDBService {
     }
 
     try {
-      const MANUAL_BUNDLES: duckdb.DuckDBBundles = {
-        mvp: {
-          mainModule: duckdb_wasm,
-          mainWorker: mvp_worker,
-        },
-        eh: {
-          mainModule: duckdb_wasm_eh,
-          mainWorker: eh_worker,
-        },
-      };
+      // jsDelivr bundles instead of `?url` imports — the DuckDB-WASM
+      // artefacts are 35–41 MB each, which exceeds Cloudflare Workers'
+      // 25 MiB per-asset cap, so we can't ship them in our own bundle.
+      const bundle = await duckdb.selectBundle(duckdb.getJsDelivrBundles());
 
-      // Select a bundle based on browser checks
-      const bundle = await duckdb.selectBundle(MANUAL_BUNDLES);
+      // Workers can't be loaded cross-origin directly; wrap the jsDelivr
+      // URL in a same-origin Blob shim that importScripts() the real code.
+      const workerUrl = URL.createObjectURL(
+        new Blob([`importScripts("${bundle.mainWorker!}");`], { type: "text/javascript" })
+      );
 
-      // Instantiate the asynchronous version of DuckDB-wasm
-      this.worker = new Worker(bundle.mainWorker!);
+      this.worker = new Worker(workerUrl);
       const logger = new duckdb.VoidLogger();
       this.db = new duckdb.AsyncDuckDB(logger, this.worker);
 
       await this.db.instantiate(bundle.mainModule, bundle.pthreadWorker);
+      URL.revokeObjectURL(workerUrl);
       await this.db.open({ allowUnsignedExtensions: true });
       this.isInitialized = true;
 
-      console.log("DuckDB initialized successfully");
+      if (import.meta.env.DEV) {
+        console.log("DuckDB initialized successfully");
+      }
     } catch (error) {
       console.error("Failed to initialize DuckDB:", error);
       throw error;
@@ -137,9 +132,12 @@ export class DuckDBService {
 
   public async executeQueryAsDataProvider(query: string, resultName?: string): Promise<DuckDBDataProvider> {
     const tempName = resultName || `query_result_${Date.now()}`;
+    // Strip a single trailing semicolon — wrapping it inside `( … ;)` is a
+    // syntax error.
+    const inner = query.replace(/;\s*$/, "");
     const connection = await this.getConnection();
     try {
-      await connection.query(`CREATE OR REPLACE TABLE "${tempName}" AS (${query})`);
+      await connection.query(`CREATE OR REPLACE TABLE "${tempName}" AS (${inner})`);
     } finally {
       await connection.close();
     }

@@ -3,6 +3,7 @@ import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
 import { ColumnStatsVisualizerFocusable } from "../ColumnStatsVisualizer/ColumnStatsVisualizerFocusable";
 import { CommandBar } from "../CommandBar";
 import { SqlEditor } from "../SqlEditor";
+import type { ChartVisualizer } from "../ChartVisualizer";
 import { DataProvider, DatasetMetadata } from "../../data/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
@@ -10,8 +11,27 @@ import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvide
 import { EventDispatcher } from "../BedevereApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 import { parseShellLine, runShellLine, ShellResult } from "../../data/Shell";
+import type { VisualizationSpec } from "vega-embed";
+
+/**
+ * First SQL keyword (uppercased) of `input`, skipping leading whitespace and
+ * full-line `-- comments`. Returns "" if nothing alphabetic comes first.
+ */
+function firstSqlKeyword(input: string): string {
+  let i = 0;
+  while (i < input.length) {
+    while (i < input.length && /\s/.test(input[i])) i++;
+    if (input[i] === "-" && input[i + 1] === "-") {
+      while (i < input.length && input[i] !== "\n") i++;
+      continue;
+    }
+    break;
+  }
+  return input.slice(i).match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? "";
+}
 
 interface DatasetTab {
+  kind: "dataset";
   metadata: DatasetMetadata;
   dataProvider: DataProvider;
   spreadsheetVisualizer: SpreadsheetVisualizer;
@@ -20,13 +40,25 @@ interface DatasetTab {
   onCloseTab?: () => void;
 }
 
+interface ChartTab {
+  kind: "chart";
+  metadata: { name: string };
+  chartVisualizer: ChartVisualizer;
+  container: HTMLElement;
+  isActive: boolean;
+  onCloseTab?: () => void;
+}
+
+type Tab = DatasetTab | ChartTab;
+
 export class TabManager {
   private container: HTMLElement;
   private tabsContainer: HTMLElement;
   private sqlEditorContainer: HTMLElement;
   private commandBarContainer: HTMLElement;
   private contentContainer: HTMLElement;
-  private tabs: DatasetTab[] = [];
+  private tabs: Tab[] = [];
+  private chartCounter = 0;
   private activeTabId: string | null = null;
   private options: SpreadsheetOptions;
   private sharedStatsVisualizer: ColumnStatsVisualizerFocusable;
@@ -41,6 +73,9 @@ export class TabManager {
   private onQueryErrorCallback?: (error: Error) => void;
   private onQueryCompletedCallback?: (result: { elapsedMs: number; error?: Error }) => void;
   private onShellMessageCallback?: (text: string, details?: string) => void;
+  // Monotonic counter for default result-tab names (`result_1`, `result_2`,
+  // …). Resets per session — these tables don't survive a page reload.
+  private resultCounter = 0;
 
   constructor(parent: HTMLElement, options: SpreadsheetOptions = {}) {
     this.container = document.createElement("div");
@@ -165,6 +200,7 @@ export class TabManager {
     }
 
     const tab: DatasetTab = {
+      kind: "dataset",
       metadata,
       dataProvider,
       spreadsheetVisualizer,
@@ -221,9 +257,12 @@ export class TabManager {
 
     const tab = this.tabs[tabIndex];
 
-    // Unregister from event dispatcher if available
-    if (this.eventDispatcher) {
-      this.eventDispatcher.unregisterComponent(tab.spreadsheetVisualizer.componentId);
+    if (tab.kind === "dataset") {
+      if (this.eventDispatcher) {
+        this.eventDispatcher.unregisterComponent(tab.spreadsheetVisualizer.componentId);
+      }
+    } else {
+      tab.chartVisualizer.destroy();
     }
 
     // Remove tab element
@@ -262,15 +301,19 @@ export class TabManager {
   }
 
   public getActiveDatasetTab(): DatasetTab | null {
-    return this.tabs.find((t) => t.isActive) || null;
+    const active = this.tabs.find((t) => t.isActive);
+    return active && active.kind === "dataset" ? active : null;
   }
 
   public setEventDispatcher(eventDispatcher: EventDispatcher): void {
     this.eventDispatcher = eventDispatcher;
 
-    // Register all existing tabs with the event dispatcher
+    // Register all existing tabs with the event dispatcher (chart tabs aren't
+    // focusable in v0.9 so they're skipped).
     for (const tab of this.tabs) {
-      this.eventDispatcher.registerComponent(tab.spreadsheetVisualizer);
+      if (tab.kind === "dataset") {
+        this.eventDispatcher.registerComponent(tab.spreadsheetVisualizer);
+      }
     }
   }
 
@@ -278,7 +321,9 @@ export class TabManager {
     this.onCellSelectionCallback = callback;
     // Back-fill any tabs that were added before the callback was wired.
     for (const tab of this.tabs) {
-      tab.spreadsheetVisualizer.addOnSelectionChangeSubscription(callback);
+      if (tab.kind === "dataset") {
+        tab.spreadsheetVisualizer.addOnSelectionChangeSubscription(callback);
+      }
     }
   }
 
@@ -288,13 +333,16 @@ export class TabManager {
    * per-tab are logged but do not abort the others.
    */
   public async applyFormatChange(partial: Partial<SpreadsheetOptions>): Promise<void> {
-    await Promise.all(
-      this.tabs.map((tab) =>
+    const tasks: Array<Promise<void>> = [];
+    for (const tab of this.tabs) {
+      if (tab.kind !== "dataset") continue;
+      tasks.push(
         tab.spreadsheetVisualizer.refreshFormat(partial).catch((err: unknown) => {
           console.error(`refreshFormat failed for tab ${tab.metadata.name}:`, err);
         }),
-      ),
-    );
+      );
+    }
+    await Promise.all(tasks);
   }
 
   public setOnSelectCallback(callback: (dataset: DataProvider) => void): void {
@@ -313,7 +361,7 @@ export class TabManager {
     this.onQueryCompletedCallback = callback;
   }
 
-  private createTabElement(tab: DatasetTab): void {
+  private createTabElement(tab: Tab): void {
     const tabElement = document.createElement("div");
     tabElement.setAttribute("data-tab-id", tab.metadata.name);
     tabElement.className = "tab-manager__tab";
@@ -358,13 +406,14 @@ export class TabManager {
 
     // Activate new tab
     const newTab = this.tabs.find((t) => t.metadata.name === id);
-    if (newTab) {
-      newTab.isActive = true;
-      this.activeTabId = id;
-      newTab.container.classList.add("tab-manager__dataset-container--active");
-      this.updateTabStyles(id, true);
+    if (!newTab) return;
 
-      // Set focus on the new active tab
+    newTab.isActive = true;
+    this.activeTabId = id;
+    newTab.container.classList.add("tab-manager__dataset-container--active");
+    this.updateTabStyles(id, true);
+
+    if (newTab.kind === "dataset") {
       if (this.eventDispatcher) {
         this.eventDispatcher.setFocus(newTab.spreadsheetVisualizer.componentId);
       }
@@ -380,6 +429,10 @@ export class TabManager {
       if (this.onSelectCallback) {
         this.onSelectCallback(newTab.dataProvider);
       }
+    } else {
+      // Chart tabs have no spreadsheet → hide the column-stats sidebar so
+      // a stale dataset's stats don't sit beside the chart.
+      this.sharedStatsVisualizer.hide();
     }
   }
 
@@ -410,12 +463,13 @@ export class TabManager {
   private async handleResize(): Promise<void> {
     // Trigger resize on the active spreadsheet visualizer
     const activeTab = this.tabs.find((tab) => tab.isActive);
-    if (activeTab) {
+    if (activeTab && activeTab.kind === "dataset") {
       // Force layout recalculation before resize
       this.container.offsetHeight;
       await new Promise((resolve) => requestAnimationFrame(resolve));
       await activeTab.spreadsheetVisualizer.resize();
     }
+    // Charts (Vega-Lite) auto-fit their container; nothing to invoke here.
   }
 
   public async resize(): Promise<void> {
@@ -450,16 +504,10 @@ export class TabManager {
       this.eventDispatcher.registerComponent(this.sqlEditor);
     }
 
-    // Wire up query execution
-    this.sqlEditor.setOnExecuteCallback(async (query: string) => {
-      try {
-        await this.addQueryResult(query, duckDBService);
-      } catch (error) {
-        if (this.onQueryErrorCallback) {
-          this.onQueryErrorCallback(error instanceof Error ? error : new Error(String(error)));
-        }
-      }
-    });
+    // Wire up query execution. Routes through dispatchInput so a `.command`
+    // typed in the SQL editor + Ctrl+Enter behaves the same as in the
+    // CommandBar (otherwise it'd be sent to DuckDB as raw SQL).
+    this.sqlEditor.setOnExecuteCallback((query: string) => this.dispatchInput(query));
 
     // Sync the CommandBar's SQL-toggle state + resize on editor toggle.
     this.sqlEditor.setOnToggleCallback((isExpanded) => {
@@ -470,7 +518,7 @@ export class TabManager {
     // CommandBar shell submit is wired here because dispatch to SQL needs
     // duckDBService; dot-only commands (.help etc.) would work earlier but
     // this keeps the wiring in one place.
-    this.commandBar?.setOnSubmitCallback((input) => this.handleCommandBarSubmit(input));
+    this.commandBar?.setOnSubmitCallback((input) => this.dispatchInput(input));
   }
 
   public toggleSqlEditor(): void {
@@ -481,9 +529,13 @@ export class TabManager {
     return this.sqlEditor;
   }
 
+  public focusCommandBar(): void {
+    this.commandBar?.focusInput();
+  }
+
   private async handleFilterChange(datasetName: string): Promise<void> {
     const tab = this.tabs.find((t) => t.metadata.name === datasetName);
-    if (!tab || !this.duckDBService) return;
+    if (!tab || tab.kind !== "dataset" || !this.duckDBService) return;
 
     // Determine the source table name
     const currentProvider = tab.dataProvider;
@@ -517,10 +569,18 @@ export class TabManager {
     await this.sharedStatsVisualizer.setSpreadsheetVisualizer(tab.spreadsheetVisualizer);
   }
 
+  /**
+   * SELECT/WITH path: wrap in `CREATE OR REPLACE TABLE result_<n>` and open
+   * the result as a dataset tab. The auto-name is short enough to JOIN
+   * against by hand, and `.alias result_n <new>` (which calls DuckDB
+   * ALTER TABLE … RENAME) lets the user rename the underlying table cleanly.
+   */
   public async addQueryResult(query: string, duckDBService: DuckDBService): Promise<void> {
     const start = performance.now();
     try {
-      const dataProvider = await duckDBService.executeQueryAsDataProvider(query);
+      this.resultCounter += 1;
+      const resultName = `result_${this.resultCounter}`;
+      const dataProvider = await duckDBService.executeQueryAsDataProvider(query, resultName);
       const metadata = await dataProvider.getMetadata();
       await this.addDataset(metadata, dataProvider);
       await this.switchToDataset(metadata.name);
@@ -533,10 +593,139 @@ export class TabManager {
     }
   }
 
+  /**
+   * Branch on the first SQL keyword:
+   *   - `SELECT` / `WITH` → wrap and open as a result tab (addQueryResult)
+   *   - `VISUALIZE`        → route through stats_duck + vega-embed (chart tab)
+   *   - everything else    → execute directly with no wrapper (DDL, DML, PRAGMA, …)
+   * The wrapper would otherwise corrupt non-result-producing statements and
+   * silently bypass stats_duck's top-level parser extension for VISUALIZE.
+   */
+  private async executeBareSQL(input: string, duckDBService: DuckDBService): Promise<void> {
+    const firstToken = firstSqlKeyword(input);
+    if (firstToken === "VISUALIZE") {
+      await this.executeVisualize(input, duckDBService);
+      return;
+    }
+    if (firstToken === "SELECT" || firstToken === "WITH") {
+      await this.addQueryResult(input, duckDBService);
+      return;
+    }
+    await this.executeSideEffecting(input, duckDBService);
+  }
+
+  private async executeSideEffecting(input: string, duckDBService: DuckDBService): Promise<void> {
+    const start = performance.now();
+    try {
+      await duckDBService.executeQuery(input);
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start, error: err });
+      throw err;
+    }
+  }
+
+  /**
+   * stats_duck `VISUALIZE … DRAW <mark>` returns one row with two columns:
+   *   - `spec`       : VARCHAR — Vega-Lite v5 JSON; references named datasets
+   *                    `layer_0`, `layer_1`, … (one per DRAW clause).
+   *   - `layer_sqls` : MAP(VARCHAR, VARCHAR) — `{layer_n: SELECT …}` pairs.
+   * We run each layer's SQL via DuckDB-WASM, convert the resulting Arrow rows
+   * to JS objects, and hand spec + datasets to vega-embed (which has a
+   * `datasets` option that matches this exact shape — no spec mutation).
+   */
+  private async executeVisualize(input: string, duckDBService: DuckDBService): Promise<void> {
+    const start = performance.now();
+    try {
+      let rows: any[];
+      try {
+        rows = await duckDBService.executeQuery(input);
+      } catch (parseErr) {
+        const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
+        if (/syntax error/i.test(msg) && /VISUALIZE/i.test(msg)) {
+          throw new Error(
+            "VISUALIZE rejected by DuckDB — the stats_duck (ggsql) parser extension " +
+              "didn't load. Check the browser console at startup for a stats_duck warning.",
+          );
+        }
+        throw parseErr;
+      }
+      if (!rows || rows.length === 0) {
+        throw new Error("VISUALIZE returned no rows — stats_duck parser may not be loaded");
+      }
+      const row = rows[0] as { spec?: string; layer_sqls?: unknown };
+      if (typeof row.spec !== "string") {
+        throw new Error("VISUALIZE result is missing the 'spec' column");
+      }
+      const spec = JSON.parse(row.spec) as VisualizationSpec;
+
+      // DuckDB's MAP type comes back as either a plain object or, in some
+      // versions of duckdb-wasm, a Map instance. Normalize to entries.
+      const layerSqls = row.layer_sqls;
+      const entries: Array<[string, string]> = [];
+      if (layerSqls instanceof Map) {
+        for (const [k, v] of layerSqls) entries.push([String(k), String(v)]);
+      } else if (layerSqls && typeof layerSqls === "object") {
+        for (const [k, v] of Object.entries(layerSqls as Record<string, unknown>)) {
+          entries.push([k, String(v)]);
+        }
+      } else {
+        throw new Error("VISUALIZE result is missing the 'layer_sqls' map");
+      }
+
+      const datasets: Record<string, unknown[]> = {};
+      for (const [name, layerSql] of entries) {
+        datasets[name] = await duckDBService.executeQuery(layerSql);
+      }
+
+      await this.addChartResult(spec, datasets);
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start });
+    } catch (error) {
+      const err = error instanceof Error ? error : new Error(String(error));
+      this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start, error: err });
+      throw err;
+    }
+  }
+
+  public async addChartResult(spec: VisualizationSpec, datasets: Record<string, unknown[]>): Promise<void> {
+    const chartContainer = document.createElement("div");
+    chartContainer.className = "tab-manager__dataset-container";
+    this.contentContainer.appendChild(chartContainer);
+
+    this.chartCounter += 1;
+    const name = `chart_${this.chartCounter}`;
+
+    // Dynamic import keeps the ~800 KB vega-embed bundle out of the initial
+    // page-load chunk for users who never run a VISUALIZE query.
+    const { ChartVisualizer } = await import("../ChartVisualizer");
+    const chartVisualizer = new ChartVisualizer(chartContainer);
+
+    const tab: ChartTab = {
+      kind: "chart",
+      metadata: { name },
+      chartVisualizer,
+      container: chartContainer,
+      isActive: false,
+    };
+    this.tabs.push(tab);
+    this.createTabElement(tab);
+    // Activate BEFORE rendering so vega-embed measures a visible container
+    // (chart_n containers default to display: none until --active applies;
+    // rendering into a 0×0 host produces a broken chart that "leaks" the
+    // previous tab's content when made visible).
+    await this.activateTab(name);
+    await chartVisualizer.setSpec(spec, datasets);
+  }
+
   public destroy(): void {
-    // Clean up all spreadsheet visualizers
+    // Clean up all visualizers (spreadsheet or chart).
     this.tabs.forEach((tab) => {
-      tab.spreadsheetVisualizer.destroy();
+      if (tab.kind === "dataset") {
+        tab.spreadsheetVisualizer.destroy();
+      } else {
+        tab.chartVisualizer.destroy();
+      }
     });
 
     // Hide shared stats visualizer
@@ -559,11 +748,12 @@ export class TabManager {
   }
 
   /**
-   * Dispatch a CommandBar submission: dot-command → Shell; anything else → SQL.
-   * Routed through the same code path as the SqlEditor's Ctrl+Enter, so the
-   * 0.7 query-time chip and error toast behave identically.
+   * Dispatch user input from either the CommandBar or the SqlEditor:
+   * dot-command → Shell; anything else → SQL. Both callers route through
+   * here so the query-time chip and error toast behave identically and a
+   * `.command` typed in the SQL editor isn't sent to DuckDB as raw SQL.
    */
-  private async handleCommandBarSubmit(input: string): Promise<void> {
+  private async dispatchInput(input: string): Promise<void> {
     const parsed = parseShellLine(input);
     if (parsed) {
       const result = await runShellLine(input);
@@ -575,7 +765,7 @@ export class TabManager {
       return;
     }
     try {
-      await this.addQueryResult(input, this.duckDBService);
+      await this.executeBareSQL(input, this.duckDBService);
     } catch (err) {
       this.onQueryErrorCallback?.(err instanceof Error ? err : new Error(String(err)));
     }

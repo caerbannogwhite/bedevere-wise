@@ -153,14 +153,25 @@ export function getThemeColors(theme?: "light" | "dark"): ThemeColors {
 export function listenForThemeChanges(callback: (theme: "light" | "dark") => void): () => void {
   let currentTheme = detectCurrentTheme();
 
-  // Watch for body class changes
-  const observer = new MutationObserver(() => {
+  // Force a recompute on every event. The module-level cache invalidator
+  // (installed by `installCacheInvalidation`) and this listener both watch
+  // the same body-class mutation, but MutationObserver delivery order isn't
+  // specified — if THIS observer fires first, `detectCurrentTheme` and
+  // `getThemeColors` would still return the old cached values, which then
+  // get baked into the visualizer's options and persist until the next
+  // render. Nulling the caches here makes the freshness guarantee local
+  // and order-independent.
+  const recompute = () => {
+    cachedTheme = null;
+    cachedColors = null;
     const newTheme = detectCurrentTheme();
     if (newTheme !== currentTheme) {
       currentTheme = newTheme;
       callback(newTheme);
     }
-  });
+  };
+
+  const observer = new MutationObserver(recompute);
 
   observer.observe(document.body, {
     attributes: true,
@@ -169,19 +180,10 @@ export function listenForThemeChanges(callback: (theme: "light" | "dark") => voi
 
   // Watch for system theme changes
   const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-  const handleMediaChange = () => {
-    const newTheme = detectCurrentTheme();
-    if (newTheme !== currentTheme) {
-      currentTheme = newTheme;
-      callback(newTheme);
-    }
-  };
+  mediaQuery.addEventListener("change", recompute);
 
-  mediaQuery.addEventListener("change", handleMediaChange);
-
-  // Return cleanup function
   return () => {
     observer.disconnect();
-    mediaQuery.removeEventListener("change", handleMediaChange);
+    mediaQuery.removeEventListener("change", recompute);
   };
 }
