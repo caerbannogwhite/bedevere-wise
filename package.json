@@ -79,6 +79,7 @@
     "@codemirror/theme-one-dark": "^6.1.3",
     "@codemirror/view": "^6.41.0",
     "@duckdb/duckdb-wasm": "^1.33.1-dev45.0",
-    "codemirror": "^6.0.2"
+    "codemirror": "^6.0.2",
+    "vega-embed": "^7.1.0"
   }
 }

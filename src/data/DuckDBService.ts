@@ -132,9 +132,12 @@ export class DuckDBService {
 
   public async executeQueryAsDataProvider(query: string, resultName?: string): Promise<DuckDBDataProvider> {
     const tempName = resultName || `query_result_${Date.now()}`;
+    // Strip a single trailing semicolon — wrapping it inside `( … ;)` is a
+    // syntax error.
+    const inner = query.replace(/;\s*$/, "");
     const connection = await this.getConnection();
     try {
-      await connection.query(`CREATE OR REPLACE TABLE "${tempName}" AS (${query})`);
+      await connection.query(`CREATE OR REPLACE TABLE "${tempName}" AS (${inner})`);
     } finally {
       await connection.close();
     }
