@@ -4,18 +4,10 @@ The app is a static SPA (DuckDB runs in the browser via WASM) plus an
 optional Cloudflare Worker for in-app feedback collection. There's no
 "backend server" — everything user-data-related lives in the browser.
 
-This document covers two deploy targets and the optional worker. Pick
-whichever combination fits.
+This document covers the recommended Cloudflare Workers Builds path and
+the optional feedback worker.
 
-## Hosting choices
-
-| Target                                      | Cost                            | Setup time    | Notes                                                                                                                       |
-| ------------------------------------------- | ------------------------------- | ------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Cloudflare Workers Builds** (recommended) | $0/mo + custom domain (~$10/yr) | 15 min        | Static SPA on global CDN. Cloudflare's new dashboard routes this via Workers (with static assets) rather than legacy Pages. |
-| **GitHub Pages**                            | $0/mo                           | already wired | Existing `.github/workflows/deploy.yml`. Constrained to `*.github.io/bedevere-wise/`.                                       |
-| Fly.io / Render / Vercel server             | $0–5/mo                         | varies        | Overkill for a static SPA; useful only if you add a real backend.                                                           |
-
-## A. Cloudflare Workers Builds (the recommended path)
+## Cloudflare Workers Builds (the deploy target)
 
 Cloudflare's dashboard now routes static-SPA deploys through "Workers
 Builds with static assets" rather than the legacy Pages flow. The end
@@ -41,9 +33,8 @@ configuration story is slightly different.
    the Cloudflare project, update the `name` field to match its slug.
 
 4. **Environment variables** (Settings → Variables and Secrets):
-   - `BASE_PATH` = `/`
    - `VITE_FEEDBACK_URL` = the URL of your deployed feedback worker
-     (see § C below). Leave unset until the worker exists.
+     (see § B below). Leave unset until the worker exists.
 
 5. **Custom domain** (Custom domains → Add): point a CNAME at
    `<project>.workers.dev` (Cloudflare manages the TLS cert
@@ -58,8 +49,7 @@ The auto-created build token (named "<project> build token" on
 https://dash.cloudflare.com/profile/api-tokens) sometimes ships with a
 narrower scope than `wrangler deploy` actually needs. If the deploy
 fails with `Authentication error [code: 10000]`, edit that token and
-add **Account → Workers Scripts: Edit** (and **Cloudflare Pages: Edit**
-if you also want the legacy `wrangler pages deploy` path to work).
+add **Account → Workers Scripts: Edit**.
 
 ### What the user sees as costs
 
@@ -68,16 +58,7 @@ if you also want the legacy `wrangler pages deploy` path to work).
   (about $9.15/yr for `.com`, $13/yr for `.dev`, $32.99/yr for `.io`).
 - TLS cert: $0 (Cloudflare-issued).
 
-## B. GitHub Pages (already set up)
-
-`.github/workflows/deploy.yml` builds and ships on every push to `main`.
-The workflow exports `BASE_PATH=/bedevere-wise/` so the bundle resolves
-its asset paths correctly under the project-page URL.
-
-To wire the feedback form, set `VITE_FEEDBACK_URL` in the workflow
-(uncomment the line in `deploy.yml`) and re-run.
-
-## C. Optional: feedback worker on Cloudflare Workers
+## B. Optional: feedback worker on Cloudflare Workers
 
 Subdirectory: `cloudflare/feedback-worker/`. See its
 [README](cloudflare/feedback-worker/README.md) for the step-by-step
