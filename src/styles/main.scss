@@ -8,12 +8,12 @@
 @use "components/control-panel";
 @use "components/status-bar";
 @use "components/message-popover";
-@use "components/command-palette";
 @use "components/bedevere-app";
 @use "components/command-bar";
 @use "components/sql-editor";
 @use "components/file-tree";
 @use "components/help-panel";
+@use "components/chart-visualizer";
 
 // Global styles
 * {

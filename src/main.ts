@@ -36,7 +36,6 @@ async function initApplication() {
     // theme: "light",
     showLeftPanel: true,
     statusBarVisible: true,
-    commandPaletteEnabled: true,
     spreadsheetOptions: {
       minHeight: 400,
       minWidth: 600,

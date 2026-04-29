@@ -9,17 +9,14 @@ import {
   DEFAULT_MAX_STRING_LENGTH,
   DEFAULT_NUMBER_FORMAT,
 } from "../SpreadsheetVisualizer/defaults";
-import { CommandPalette } from "../CommandPalette/CommandPalette";
 import penguinsCsv from "@/assets/samples/penguins.csv?raw";
 import { SpreadsheetOptions } from "../SpreadsheetVisualizer/types";
 import { DataProvider } from "../../data/types";
 import { FocusManager } from "./FocusManager";
 import { EventDispatcher } from "./EventDispatcher";
 import { EventHandler } from "./types";
-import { DatasetInfo } from "../ControlPanel/ControlPanel";
 import { exportAsHTML, exportAsMarkdown, exportAsText } from "./ExportHub";
 import { DuckDBService } from "@/data/DuckDBService";
-import { ViewManager } from "@/data/ViewManager";
 import { PersistenceService, persistenceService } from "@/data/PersistenceService";
 import { keymapService } from "@/data/KeymapService";
 import { commandRegistry } from "@/data/CommandRegistry";
@@ -39,7 +36,6 @@ export interface BedevereAppOptions {
   theme?: BedevereAppTheme;
   showLeftPanel?: boolean;
   statusBarVisible?: boolean;
-  commandPaletteEnabled?: boolean;
   debugMode?: boolean;
 }
 
@@ -50,7 +46,6 @@ export class BedevereApp implements EventHandler {
   private spreadsheetContainer!: HTMLElement;
 
   private duckDBService!: DuckDBService;
-  private commandPalette!: CommandPalette;
   private leftPanel!: ControlPanel;
   private tabManager!: TabManager;
   private statusBar!: StatusBar;
@@ -62,7 +57,6 @@ export class BedevereApp implements EventHandler {
 
   // Persistence, views, and import
   private persistenceService: PersistenceService;
-  private viewManager: ViewManager;
   private fileImportService: FileImportService;
   private extensionLoader: DuckDBExtensionLoader;
   private aliasManager: AliasManager;
@@ -76,7 +70,6 @@ export class BedevereApp implements EventHandler {
       theme: "dark",
       showLeftPanel: true,
       statusBarVisible: true,
-      commandPaletteEnabled: true,
       ...options,
     };
 
@@ -89,7 +82,6 @@ export class BedevereApp implements EventHandler {
 
     // Initialize persistence, view management, and import service
     this.persistenceService = persistenceService;
-    this.viewManager = new ViewManager(duckDBService, this.persistenceService);
     this.extensionLoader = new DuckDBExtensionLoader(duckDBService);
     this.fileImportService = new FileImportService(duckDBService);
     this.aliasManager = new AliasManager(duckDBService);
@@ -113,16 +105,41 @@ export class BedevereApp implements EventHandler {
       "SELECT * FROM read_xlsx('__probe_nonexistent__.xlsx') LIMIT 0",
     ]);
 
-    // Stats file formats: load stats_duck from its published extension repository
-    await this.extensionLoader.tryLoad("stats_duck", "https://caerbannogwhite.github.io/the-stats-duck");
+    // stats_duck (ggsql VISUALIZE parser). Source URL is env-configurable
+    // via VITE_STATS_DUCK_URL — see .env.example for the local-build setup.
+    // Page-relative paths (starting with `/`) get the origin prefixed because
+    // DuckDB-WASM's INSTALL FROM requires an absolute URL.
+    const rawStatsDuckUrl =
+      (import.meta.env.VITE_STATS_DUCK_URL as string | undefined) ||
+      "https://caerbannogwhite.github.io/the-stats-duck";
+    const statsDuckUrl = rawStatsDuckUrl.startsWith("/")
+      ? `${window.location.origin}${rawStatsDuckUrl}`
+      : rawStatsDuckUrl;
+    const installOk = await this.extensionLoader.tryLoad("stats_duck", statsDuckUrl);
+    if (!installOk) {
+      console.warn(`stats_duck install failed (URL: ${statsDuckUrl}). VISUALIZE / ggsql disabled.`);
+    } else {
+      // tryLoad's probe doesn't catch "INSTALL succeeded but parser hooks
+      // didn't attach" — that path returns 0 rows from a SELECT, not an
+      // error. An explicit count check is the only way to surface it,
+      // and it's a real failure mode (DuckDB-WASM version mismatch with
+      // the published extension build).
+      const ggsqlFns = await this.duckDBService.executeQuery(
+        "SELECT count(*) AS n FROM duckdb_functions() WHERE function_name LIKE 'ggsql_mark_v1_%'",
+      );
+      const n = Number((ggsqlFns?.[0] as { n?: unknown })?.n ?? 0);
+      if (n === 0) {
+        console.warn(
+          `stats_duck loaded from ${statsDuckUrl} but registered no ggsql_mark_v1_* ` +
+            "functions — parser hooks didn't attach. Likely a DuckDB-WASM version " +
+            "mismatch; run `SELECT version()` and rebuild the extension against it.",
+        );
+      }
+    }
 
     // Register extension-based handlers (they self-check if extension loaded)
     this.fileImportService.register(new ExcelFormatHandler(this.extensionLoader));
     this.fileImportService.register(new StatFormatHandler(this.extensionLoader));
-
-    // Restore saved views
-    await this.viewManager.initialize();
-    this.leftPanel?.refreshViews();
 
     // Restore app settings
     const settings = this.persistenceService.loadAppSettings();
@@ -187,7 +204,6 @@ export class BedevereApp implements EventHandler {
     this.focusManager.clearFocusStack();
 
     this.statusBar?.destroy();
-    this.commandPalette?.destroy();
     this.leftPanel?.destroy();
 
     this.container.remove();
@@ -241,7 +257,6 @@ export class BedevereApp implements EventHandler {
     // Status bar
     if (this.options.statusBarVisible) {
       this.statusBar = new StatusBar(this.container, this.version);
-      this.statusBar.setOnCommandCallback((command) => this.executeCommand(command));
       this.statusBar.setSpreadsheetOptions(this.options.spreadsheetOptions ?? {});
     }
 
@@ -305,13 +320,6 @@ export class BedevereApp implements EventHandler {
     });
     this.statusBar?.setOnHelpClickCallback(() => this.helpPanel.show("howto"));
 
-    // Command palette
-    if (this.options.commandPaletteEnabled) {
-      this.commandPalette = new CommandPalette(this.container, "command-palette");
-      this.commandPalette.setEventDispatcher(this.eventDispatcher);
-      this.eventDispatcher.registerComponent(this.commandPalette);
-    }
-
     // Calculate dimensions
     this.updateDimensions();
 
@@ -370,7 +378,6 @@ export class BedevereApp implements EventHandler {
           this.showMessage(`Failed to set alias: ${error instanceof Error ? error.message : "unknown error"}`, "error");
         }
       });
-      this.leftPanel.setViewManager(this.viewManager);
       this.leftPanel.setPersistenceService(this.persistenceService);
       this.leftPanel.setOnShowMessageCallback((msg, type, options) =>
         this.showMessage(msg, type, options),
@@ -503,223 +510,9 @@ export class BedevereApp implements EventHandler {
   }
 
   private registerCommands(): void {
-    if (!this.commandPalette) return;
-
-    // View commands
-    this.commandPalette.registerCommand({
-      id: "help.show",
-      title: "Show Help",
-      description: "Open the Help panel",
-      category: "View",
-      execute: () => this.helpPanel.show("howto"),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "view.toggleTheme",
-      title: "Toggle Theme",
-      description: "Switch between light and dark themes",
-      category: "View",
-      execute: () => this.toggleTheme(),
-    });
-
-    // Dataset commands
-    this.commandPalette.registerCommand({
-      id: "dataset.executeQuery",
-      title: "Execute Query",
-      description: "Execute a query on the currently active dataset",
-      category: "Dataset",
-      parameters: [
-        {
-          name: "query",
-          type: "string",
-          description: "The query to execute",
-          required: true,
-        },
-      ],
-      execute: (params?: Record<string, any>) => this.executeQuery(params?.query),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "dataset.open",
-      title: "Open Dataset",
-      description: "Open a dataset",
-      category: "Dataset",
-      parameters: [
-        {
-          name: "dataset",
-          type: "string",
-          description: "The name of the dataset to open",
-          required: true,
-          options: () => this.leftPanel.getAvailableDatasets().map((d) => d.metadata.name),
-        },
-      ],
-      execute: (params?: Record<string, any>) => this.openDataset(params?.dataset),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "dataset.exportSelection",
-      shellName: "export",
-      title: "Export Selection",
-      description: "Export the current selection (csv | tsv | html | markdown)",
-      category: "Dataset",
-      parameters: [
-        {
-          name: "format",
-          type: "string",
-          description: "The format to export the selection in",
-          required: true,
-          options: () => ["csv", "tsv", "html", "markdown"],
-        },
-        {
-          name: "includeHeader",
-          type: "boolean",
-          description: "Whether to include the header row in the export",
-          required: false,
-          default: "true",
-        },
-        {
-          name: "includeIndex",
-          type: "boolean",
-          description: "Whether to include the index column in the export",
-          required: false,
-          default: "true",
-        },
-      ],
-      when: () => this.tabManager.getActiveDatasetTab() !== null,
-      execute: (params?: Record<string, any>) => this.exportSelection(params),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "dataset.closeAll",
-      title: "Close All Datasets",
-      description: "Close all open datasets",
-      category: "Dataset",
-      when: () => this.tabManager.getDatasetIds().length > 0,
-      execute: () => this.closeAllDatasets(),
-    });
-
-    // SQL Editor commands
-    this.commandPalette.registerCommand({
-      id: "sql.executeQuery",
-      title: "Execute SQL Query",
-      description: "Execute the current query in the SQL editor",
-      category: "SQL",
-      keybinding: "Ctrl+Enter",
-      when: () => this.tabManager.getSqlEditor()?.isExpanded() === true,
-      execute: () => this.tabManager.getSqlEditor()?.execute(),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "sql.clearEditor",
-      shellName: "clear",
-      title: "Clear SQL Editor",
-      description: "Clear the SQL editor content",
-      category: "SQL",
-      when: () => this.tabManager.getSqlEditor()?.isExpanded() === true,
-      execute: () => this.tabManager.getSqlEditor()?.clear(),
-    });
-
-    // View/Query commands
-    this.commandPalette.registerCommand({
-      id: "view.createView",
-      title: "Create View",
-      description: "Save the SQL editor query as a reusable view",
-      category: "View",
-      parameters: [
-        {
-          name: "name",
-          type: "string",
-          description: "Name for the view",
-          required: true,
-        },
-      ],
-      when: () => {
-        const editor = this.tabManager.getSqlEditor();
-        return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
-      },
-      execute: async (params?: Record<string, any>) => {
-        const editor = this.tabManager.getSqlEditor();
-        if (!editor || !params?.name) return;
-        try {
-          await this.viewManager.createView(params.name, editor.getQuery());
-          this.showMessage(`View "${params.name}" created`, "success");
-        } catch (error) {
-          this.showMessage(`Failed to create view: ${error instanceof Error ? error.message : "unknown error"}`, "error");
-        }
-      },
-    });
-
-    this.commandPalette.registerCommand({
-      id: "query.saveQuery",
-      title: "Save Query",
-      description: "Save the current SQL editor query as a bookmark",
-      category: "Query",
-      parameters: [
-        {
-          name: "name",
-          type: "string",
-          description: "Name for the saved query",
-          required: true,
-        },
-      ],
-      when: () => {
-        const editor = this.tabManager.getSqlEditor();
-        return editor?.isExpanded() === true && editor.getQuery().trim().length > 0;
-      },
-      execute: (params?: Record<string, any>) => {
-        const editor = this.tabManager.getSqlEditor();
-        if (!editor || !params?.name) return;
-        this.persistenceService.saveQueryBookmark(params.name, editor.getQuery());
-        this.leftPanel?.refreshSavedQueries();
-        this.showMessage(`Query "${params.name}" saved`, "success");
-      },
-    });
-
-    // Import commands
-    this.commandPalette.registerCommand({
-      id: "dataset.importFolder",
-      title: "Import Folder",
-      description: "Open a folder and scan for supported data files",
-      category: "Dataset",
-      execute: () => this.leftPanel?.openFolderPicker(),
-    });
-
-    this.commandPalette.registerCommand({
-      id: "dataset.setAlias",
-      title: "Set Dataset Alias",
-      description: "Set a custom alias for a dataset table",
-      category: "Dataset",
-      parameters: [
-        {
-          name: "dataset",
-          type: "string",
-          description: "The dataset to rename",
-          required: true,
-          options: () => this.tabManager.getDatasetIds(),
-        },
-        {
-          name: "alias",
-          type: "string",
-          description: "The new alias",
-          required: true,
-        },
-      ],
-      when: () => this.tabManager.getDatasetIds().length > 0,
-      execute: async (params?: Record<string, any>) => {
-        if (params?.dataset && params?.alias) {
-          try {
-            await this.aliasManager.setAlias(params.dataset, params.alias);
-            this.showMessage(`Alias "${params.alias}" set`, "success");
-          } catch (error) {
-            this.showMessage(`Failed: ${error instanceof Error ? error.message : "unknown"}`, "error");
-          }
-        }
-      },
-    });
-
-    // Global-scope keymap actions. Registered here so handleKeyDown can
-    // dispatch via commandRegistry.run(action) instead of a local switch,
-    // and so the palette / shell / .help all see the same verbs.
+    // Global-scope keymap actions. handleKeyDown dispatches them via
+    // commandRegistry.run(action), and `.help`'s Commands tab pulls
+    // them out of the same registry.
     commandRegistry.register({
       id: "app.togglePanel",
       shellName: "panel",
@@ -728,15 +521,6 @@ export class BedevereApp implements EventHandler {
       category: "View",
       scope: "global",
       execute: () => this.toggleControlPanel(),
-    });
-    commandRegistry.register({
-      id: "app.commandPalette",
-      shellName: "palette",
-      title: "Command Palette",
-      description: "Open the command palette (deprecated in 0.9 — the shell will be the canonical surface)",
-      category: "View",
-      scope: "global",
-      execute: () => this.commandPalette?.show(),
     });
     commandRegistry.register({
       id: "app.toggleSqlEditor",
@@ -1094,38 +878,6 @@ export class BedevereApp implements EventHandler {
       },
     });
 
-    // ---- .view save|drop <name> -----------------------------------------
-    commandRegistry.register({
-      id: "shell.view",
-      shellName: "view",
-      title: "Manage SQL Views",
-      description: "`.view save <name>` persists the editor's query as a view; `.view drop <name>` removes one.",
-      category: "View",
-      parameters: [
-        { name: "action", type: "string", required: true, options: () => ["save", "drop"] },
-        { name: "name", type: "string", required: true },
-      ],
-      execute: async (params) => {
-        const action = String(params?.action ?? "").trim();
-        const name = String(params?.name ?? "").trim();
-        if (!name) throw new Error(".view requires a name: .view save <name> or .view drop <name>");
-        if (action === "save") {
-          const editor = this.tabManager.getSqlEditor();
-          const query = editor?.getQuery().trim();
-          if (!query) throw new Error("SQL editor is empty — open it with .sql and type a query first");
-          await this.viewManager.createView(name, query);
-          this.showMessage(`View "${name}" saved`, "success");
-          return;
-        }
-        if (action === "drop") {
-          await this.viewManager.dropView(name);
-          this.showMessage(`View "${name}" dropped`, "success");
-          return;
-        }
-        throw new Error(`.view expects 'save' or 'drop' as the first argument, got '${action}'`);
-      },
-    });
-
     // ---- .query save <name> ---------------------------------------------
     commandRegistry.register({
       id: "shell.query",
@@ -1147,6 +899,71 @@ export class BedevereApp implements EventHandler {
         if (!query) throw new Error("SQL editor is empty — open it with .sql and type a query first");
         this.persistenceService.saveQueryBookmark(name, query);
         this.showMessage(`Query "${name}" bookmarked`, "success");
+      },
+    });
+
+    // ---- .export -------------------------------------------------------
+    commandRegistry.register({
+      id: "dataset.exportSelection",
+      shellName: "export",
+      title: "Export Selection",
+      description: "Export the current selection (csv | tsv | html | markdown) to clipboard + downloads",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "format",
+          type: "string",
+          required: true,
+          description: "csv | tsv | html | markdown",
+          options: () => ["csv", "tsv", "html", "markdown"],
+        },
+        { name: "includeHeader", type: "boolean", required: false, default: "true" },
+        { name: "includeIndex",  type: "boolean", required: false, default: "true" },
+      ],
+      when: () => this.tabManager.getActiveDatasetTab() !== null,
+      execute: (params) => this.exportSelection(params),
+    });
+
+    // ---- .clear -------------------------------------------------------
+    commandRegistry.register({
+      id: "sql.clearEditor",
+      shellName: "clear",
+      title: "Clear SQL Editor",
+      description: "Clear the SQL editor content",
+      category: "SQL",
+      when: () => this.tabManager.getSqlEditor()?.isExpanded() === true,
+      execute: () => this.tabManager.getSqlEditor()?.clear(),
+    });
+
+    // ---- .alias <dataset> <alias> -------------------------------------
+    commandRegistry.register({
+      id: "dataset.setAlias",
+      shellName: "alias",
+      title: "Set Dataset Alias",
+      description: "Rename a dataset/table via DuckDB ALTER TABLE … RENAME",
+      category: "Dataset",
+      parameters: [
+        {
+          name: "dataset",
+          type: "string",
+          required: true,
+          description: "Existing dataset/table name",
+          options: () => this.tabManager.getDatasetIds(),
+        },
+        {
+          name: "alias",
+          type: "string",
+          required: true,
+          description: "New name",
+        },
+      ],
+      when: () => this.tabManager.getDatasetIds().length > 0,
+      execute: async (params) => {
+        const dataset = params?.dataset as string | undefined;
+        const alias = params?.alias as string | undefined;
+        if (!dataset || !alias) throw new Error(".alias requires a dataset and a new name");
+        await this.aliasManager.setAlias(dataset, alias);
+        this.showMessage(`Alias "${alias}" set`, "success");
       },
     });
   }
@@ -1221,24 +1038,8 @@ export class BedevereApp implements EventHandler {
     this.showMessage(`Updated: ${updates.join(", ")}`, "success");
   }
 
-  private async executeCommand(command: string): Promise<void> {
-    switch (command) {
-      case "workbench.action.showCommands":
-        this.commandPalette?.show();
-        break;
-
-      default:
-        console.warn("Unknown command:", command);
-    }
-  }
-
   private toggleControlPanel(): void {
     this.leftPanel.toggleMinimize();
-  }
-
-  private toggleTheme(): void {
-    this.setTheme(this.theme === "light" ? "dark" : "light");
-    this.showMessage(`Switched to ${this.theme} theme`, "info");
   }
 
   private toggleFullscreen(): void {
@@ -1255,21 +1056,6 @@ export class BedevereApp implements EventHandler {
     if (editor?.isExpanded()) editor.focus();
   }
 
-  private async executeQuery(query: string): Promise<void> {
-    try {
-      await this.tabManager.addQueryResult(query, this.duckDBService);
-      this.showMessage("Query executed successfully", "success");
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Query execution failed";
-      this.showMessage(msg, "error");
-      console.error("Query error:", error);
-    }
-  }
-
-  protected async findDatasetByName(name: string): Promise<DatasetInfo | undefined> {
-    return this.leftPanel.getAvailableDatasets().find((d) => d.metadata.name === name);
-  }
-
   private async loadSampleDataset(): Promise<void> {
     try {
       const file = new File([penguinsCsv], "penguins.csv", { type: "text/csv" });
@@ -1281,38 +1067,6 @@ export class BedevereApp implements EventHandler {
       this.showMessage(`Failed to load sample: ${msg}`, "error");
       throw error;
     }
-  }
-
-  private async _openDataset(datasetInfo: DatasetInfo): Promise<void> {
-    // Add to dataset panel
-    this.addDataset(datasetInfo.dataset);
-
-    // Create data provider and add to visualizer
-    await this.tabManager.addDataset(datasetInfo.metadata, datasetInfo.dataset);
-
-    // Mark as loaded in panel
-    this.leftPanel.markDatasetAsLoaded(datasetInfo.metadata.name);
-
-    await this.tabManager.switchToDataset(datasetInfo.metadata.name);
-
-    // Update status bar
-    this.updateStatusBarDatasetInfo();
-  }
-
-  protected async openDataset(name: string): Promise<void> {
-    const datasetInfo = await this.findDatasetByName(name);
-    if (!datasetInfo) {
-      this.showMessage(`Dataset "${name}" not found`, "error");
-      return;
-    }
-
-    await this._openDataset(datasetInfo);
-  }
-
-  private closeAllDatasets(): void {
-    const datasetIds = this.tabManager.getDatasetIds();
-    datasetIds.forEach((id) => this.tabManager.closeDataset(id));
-    this.showMessage("All datasets closed", "info");
   }
 
   private async exportSelection(params?: Record<string, any>): Promise<void> {
