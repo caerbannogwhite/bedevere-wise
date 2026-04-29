@@ -161,6 +161,8 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
         // skeleton placeholders and trigger a repaint via the cache's
         // onLoaded subscription.
         this.drawCells(visibleStartRow, visibleEndRow);
+        // Drop the hover dirty-rect — see `lastCellHoverRect` doc.
+        this.lastCellHoverRect = null;
       }
       if (this.toDraw >= ToDraw.Selection) {
         this.drawSelection(visibleStartRow);
@@ -197,19 +199,83 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   /**
    * Last cell-hover rect painted onto the hover canvas. `drawCellHover`
-   * reads this to scope its clear to the old + new rects, instead of
-   * clearing the whole canvas — matters because mouse moves fire this
-   * function many times a second during normal scrolling.
+   * uses it to scope its clear to the previous paint instead of wiping
+   * the full canvas on every mouse-move. `null` means the canvas may
+   * hold non-cell-hover content (column tint from `drawColHover`, or
+   * a stale paint after a Cells-level redraw); the next `drawCellHover`
+   * full-clears in that case.
    */
   private lastCellHoverRect: { x: number; y: number; w: number; h: number } | null = null;
 
+  /**
+   * Run `paint` with `ctx` clipped to the cell area (excludes the
+   * row-index gutter). Stops 2px overlay strokes — which canvas centers
+   * on the path, so `strokeRect(rhw, …)` paints `[rhw-1, rhw+1]` — from
+   * bleeding 1px into the gutter on column-0 hovers / selections.
+   */
+  private withCellAreaClip(ctx: CanvasRenderingContext2D, paint: () => void): void {
+    const rhw = this.options.rowHeaderWidth;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(rhw, 0, this.viewportWidth - rhw, this.viewportHeight);
+    ctx.clip();
+    paint();
+    ctx.restore();
+  }
+
+  /**
+   * Stroke a rect, optionally skipping the left and/or bottom edge.
+   * `skipLeft` keeps the centered 2px stroke from clipping to a 1px
+   * strip at the gutter boundary; `skipBottom` matches the existing
+   * "table overflows the viewport" path that signals "continues below".
+   */
+  private strokeRectEdges(
+    ctx: CanvasRenderingContext2D,
+    x: number,
+    y: number,
+    w: number,
+    h: number,
+    skipLeft: boolean = false,
+    skipBottom: boolean = false,
+  ): void {
+    if (!skipLeft && !skipBottom) {
+      ctx.strokeRect(x, y, w, h);
+      return;
+    }
+    ctx.beginPath();
+    if (skipLeft && skipBottom) {
+      // Top + right.
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + h);
+    } else if (skipLeft) {
+      // Top + right + bottom.
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + h);
+      ctx.lineTo(x, y + h);
+    } else {
+      // skipBottom only — left + top + right.
+      ctx.moveTo(x, y + h);
+      ctx.lineTo(x, y);
+      ctx.lineTo(x + w, y);
+      ctx.lineTo(x + w, y + h);
+    }
+    ctx.stroke();
+  }
+
   private drawCellHover(visibleStartRow: number) {
-    // Clear the old rect (if any). 3px padding covers the 2px stroke.
+    // Dirty-rect clear when we have a previous paint, full-clear otherwise.
+    // 3px padding covers the 2px stroke. A null `prev` means the canvas
+    // may hold a column-hover paint or a stale rect after a Cells-level
+    // redraw (see draw()); full-clear keeps both from ghosting.
     const prev = this.lastCellHoverRect;
     if (prev) {
       this.hoverCtx.clearRect(prev.x - 3, prev.y - 3, prev.w + 6, prev.h + 6);
-      this.lastCellHoverRect = null;
+    } else {
+      this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
     }
+    this.lastCellHoverRect = null;
 
     if (!this.hoveredCell) return;
     const { row, col } = this.hoveredCell;
@@ -217,22 +283,28 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     const y = (row - visibleStartRow) * this.options.cellHeight;
     const height = this.options.cellHeight;
 
+    const rhw = this.options.rowHeaderWidth;
     let x = this.colOffsets[col] - this.scrollX;
     let width = this.colWidths[col];
-
-    if (x < this.options.rowHeaderWidth) {
-      x = this.options.rowHeaderWidth;
-      width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
+    if (x < rhw) {
+      x = rhw;
+      width = this.colOffsets[col + 1] - this.scrollX - rhw;
     }
+    if (width <= 0) return; // cell is fully behind the gutter
 
-    this.hoverCtx.fillStyle = this.options.hoverColor;
-    this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-    this.hoverCtx.lineWidth = 2;
+    const atBoundary = x === rhw;
 
-    this.hoverCtx.fillRect(x, y, width, height);
-    this.hoverCtx.strokeRect(x, y, width, height);
-    this.hoverCtx.lineWidth = 1;
-    this.hoverCtx.strokeRect(x + 1, y + 1, width - 2, height - 2);
+    this.withCellAreaClip(this.hoverCtx, () => {
+      this.hoverCtx.fillStyle = this.options.hoverColor;
+      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
+      this.hoverCtx.fillRect(x, y, width, height);
+
+      this.hoverCtx.lineWidth = 2;
+      this.strokeRectEdges(this.hoverCtx, x, y, width, height, atBoundary);
+
+      this.hoverCtx.lineWidth = 1;
+      this.strokeRectEdges(this.hoverCtx, x + 1, y + 1, width - 2, height - 2, atBoundary);
+    });
 
     this.lastCellHoverRect = { x, y, w: width, h: height };
   }
@@ -242,60 +314,46 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
     this.lastCellHoverRect = null;
 
-    this.hoverCtx.fillStyle = this.options.hoverColor;
-    this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
-    this.hoverCtx.lineWidth = 2;
+    if (!this.hoveredCell) return;
+    const { col } = this.hoveredCell;
 
-    if (this.hoveredCell) {
-      const { col } = this.hoveredCell;
+    const rhw = this.options.rowHeaderWidth;
+    const height = Math.min(this.totalHeight, this.hoverCanvas.height);
+    const overflows = this.totalHeight > this.hoverCanvas.height;
 
-      const height = Math.min(this.totalHeight, this.hoverCanvas.height);
-      const overflows = this.totalHeight > this.hoverCanvas.height;
+    let x = this.colOffsets[col] - this.scrollX;
+    let width = this.colWidths[col];
+    if (x < rhw) {
+      x = rhw;
+      width = this.colOffsets[col + 1] - this.scrollX - rhw;
+    }
+    if (width <= 0) return;
 
-      let x = this.colOffsets[col] - this.scrollX;
-      let width = this.colWidths[col];
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
-      }
+    const atBoundary = x === rhw;
+    // Inner stroke base height: when the column overflows the viewport,
+    // the right edge runs to y=height (signals "continues below"); when
+    // it fits, the right edge stops at y=height-1 like a closed rect.
+    const innerH = overflows ? height - 1 : height - 2;
 
-      // Draw hover background
+    this.withCellAreaClip(this.hoverCtx, () => {
+      this.hoverCtx.fillStyle = this.options.hoverColor;
+      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
       this.hoverCtx.fillRect(x, 0, width, height);
 
-      // Draw border — skip bottom edge when table overflows viewport
-      if (overflows) {
-        this.hoverCtx.beginPath();
-        this.hoverCtx.moveTo(x, height);
-        this.hoverCtx.lineTo(x, 0);
-        this.hoverCtx.lineTo(x + width, 0);
-        this.hoverCtx.lineTo(x + width, height);
-        this.hoverCtx.stroke();
-      } else {
-        this.hoverCtx.strokeRect(x, 0, width, height);
-      }
+      this.hoverCtx.lineWidth = 2;
+      this.strokeRectEdges(this.hoverCtx, x, 0, width, height, atBoundary, overflows);
 
-      // Add inner glow effect
-      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
       this.hoverCtx.lineWidth = 1;
-      if (overflows) {
-        this.hoverCtx.beginPath();
-        this.hoverCtx.moveTo(x + 1, height);
-        this.hoverCtx.lineTo(x + 1, 1);
-        this.hoverCtx.lineTo(x + width - 1, 1);
-        this.hoverCtx.lineTo(x + width - 1, height);
-        this.hoverCtx.stroke();
-      } else {
-        this.hoverCtx.strokeRect(x + 1, 1, width - 2, height - 2);
-      }
-    }
+      this.strokeRectEdges(this.hoverCtx, x + 1, 1, width - 2, innerH, atBoundary, overflows);
+    });
   }
 
   private drawSelection(visibleStartRow: number) {
-    // Clear the selection canvas
     this.selectionCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
-
-    this.drawCellSelection(visibleStartRow);
-    this.drawColSelection();
+    this.withCellAreaClip(this.selectionCtx, () => {
+      this.drawCellSelection(visibleStartRow);
+      this.drawColSelection();
+    });
   }
 
   private drawCellSelection(visibleStartRow: number) {
@@ -342,12 +400,13 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
       // Draw enhanced selection border
       if (selectionBounds.width > 0 && selectionBounds.height > 0) {
         this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
-        this.selectionCtx.lineWidth = 2;
-        this.selectionCtx.strokeRect(selectionBounds.x, selectionBounds.y, selectionBounds.width, selectionBounds.height);
+        const sb = selectionBounds;
+        const atBoundary = sb.x === this.options.rowHeaderWidth;
 
-        // Add inner border for extra emphasis
+        this.selectionCtx.lineWidth = 2;
+        this.strokeRectEdges(this.selectionCtx, sb.x, sb.y, sb.width, sb.height, atBoundary);
         this.selectionCtx.lineWidth = 1;
-        this.selectionCtx.strokeRect(selectionBounds.x + 1, selectionBounds.y + 1, selectionBounds.width - 2, selectionBounds.height - 2);
+        this.strokeRectEdges(this.selectionCtx, sb.x + 1, sb.y + 1, sb.width - 2, sb.height - 2, atBoundary);
 
         // Draw selection handle (dot) in bottom-right corner
         const handleSize = 8;
@@ -371,48 +430,30 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   private drawColSelection() {
     this.selectionCtx.fillStyle = this.options.selectionColor;
     this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
-    this.selectionCtx.lineWidth = 2;
 
+    const rhw = this.options.rowHeaderWidth;
     const height = Math.min(this.totalHeight, this.selectionCanvas.height);
     const overflows = this.totalHeight > this.selectionCanvas.height;
+    const innerH = overflows ? height - 1 : height - 2;
+
     this.selectedCols.forEach((col) => {
-      // Skip if the column is not visible
-      if (this.colOffsets[col + 1] - this.scrollX < this.options.rowHeaderWidth) return;
+      if (this.colOffsets[col + 1] - this.scrollX < rhw) return; // off-screen
 
       let x = this.colOffsets[col] - this.scrollX;
       let width = this.colWidths[col];
-      if (x < this.options.rowHeaderWidth) {
-        x = this.options.rowHeaderWidth;
-        width = this.colOffsets[col + 1] - this.scrollX - this.options.rowHeaderWidth;
+      if (x < rhw) {
+        x = rhw;
+        width = this.colOffsets[col + 1] - this.scrollX - rhw;
       }
+      if (width <= 0) return;
+      const atBoundary = x === rhw;
 
-      // Draw selection background
       this.selectionCtx.fillRect(x, 0, width, height);
 
-      // Draw border — skip bottom edge when table overflows viewport
-      if (overflows) {
-        this.selectionCtx.beginPath();
-        this.selectionCtx.moveTo(x, height);
-        this.selectionCtx.lineTo(x, 0);
-        this.selectionCtx.lineTo(x + width, 0);
-        this.selectionCtx.lineTo(x + width, height);
-        this.selectionCtx.stroke();
-      } else {
-        this.selectionCtx.strokeRect(x, 0, width, height);
-      }
-
-      // Add inner border for extra emphasis
+      this.selectionCtx.lineWidth = 2;
+      this.strokeRectEdges(this.selectionCtx, x, 0, width, height, atBoundary, overflows);
       this.selectionCtx.lineWidth = 1;
-      if (overflows) {
-        this.selectionCtx.beginPath();
-        this.selectionCtx.moveTo(x + 1, height);
-        this.selectionCtx.lineTo(x + 1, 1);
-        this.selectionCtx.lineTo(x + width - 1, 1);
-        this.selectionCtx.lineTo(x + width - 1, height);
-        this.selectionCtx.stroke();
-      } else {
-        this.selectionCtx.strokeRect(x + 1, 1, width - 2, height - 2);
-      }
+      this.strokeRectEdges(this.selectionCtx, x + 1, 1, width - 2, innerH, atBoundary, overflows);
     });
   }
 

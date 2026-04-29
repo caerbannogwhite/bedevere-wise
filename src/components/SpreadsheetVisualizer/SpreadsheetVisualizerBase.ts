@@ -864,6 +864,16 @@ export class SpreadsheetVisualizerBase {
     }
 
     // ---- 6. Row indices (right-aligned numbers in the gutter) ----
+    // Repaint the gutter background first to mask any header / cell-text
+    // bleed from steps 4 and 5. Glyph rendering at the column boundary
+    // (auto-width pass picks an 80th-percentile width, so long-tail values
+    // sit right at the truncation threshold) plus subpixel overshoot on
+    // the leading character pushes 1–2px past the column's left edge.
+    // The mask covers the full gutter height (header row included) so
+    // both header text and cell text get masked.
+    ctx.fillStyle = o.headerBackgroundColor;
+    ctx.fillRect(0, 0, rhw, height);
+
     ctx.fillStyle = o.headerTextColor;
     ctx.textAlign = "right";
     const indexX = rhw - pad;
@@ -898,12 +908,17 @@ export class SpreadsheetVisualizerBase {
     ctx.moveTo(rhw + 0.5, 0);
     ctx.lineTo(rhw + 0.5, height);
 
-    // Column separators (right edge of each visible column)
+    // Column separators (right edge of each visible column). Skip lines
+    // whose right edge falls inside the gutter — when the user has
+    // scrolled right past col 0, the right edges of partially-scrolled
+    // columns can land at x < rhw and paint over the gutter mask.
     let gx = this.colOffsets[fvc] - this.scrollX;
     for (let col = fvc; col <= lvc; col++) {
       gx += this.colWidths[col];
-      ctx.moveTo(gx + 0.5, 0);
-      ctx.lineTo(gx + 0.5, height);
+      if (gx > rhw) {
+        ctx.moveTo(gx + 0.5, 0);
+        ctx.lineTo(gx + 0.5, height);
+      }
     }
 
     ctx.stroke();

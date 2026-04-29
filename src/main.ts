@@ -63,7 +63,6 @@ async function initApplication() {
     (window as any).duckDBService = duckDBService;
 
     console.log("Bedevere Wise initialized");
-    console.log("- Press Ctrl+P to open the command palette");
     console.log("- Press F11 to toggle fullscreen");
     console.log("- Access 'bedevereApp' from the console for debugging");
     console.log("- Access 'duckDBService' from the console for database operations");
