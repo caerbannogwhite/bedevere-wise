@@ -6,6 +6,13 @@ Drop a `.sas7bdat`, `.sav`, `.dta`, `.xpt`, `.parquet`, `.xlsx`, `.csv`, or `.ts
 
 [**Live app · bedeverewise.app**](https://bedeverewise.app/) · [Changelog](CHANGELOG.md)
 
+## Screenshots
+
+<p align="center">
+  <img src="docs/media/light.png" alt="Bedevere Wise — light theme" width="48%" />
+  <img src="docs/media/dark.png"  alt="Bedevere Wise — dark theme"  width="48%" />
+</p>
+
 ## Why this exists
 
 Most SQL clients (DBeaver, TablePlus, DataGrip) speak to database servers and won't open `.sas7bdat`. Most "open my SAS file" tools (the SAS Universal Viewer, IBM SPSS Statistics) are vendor-locked desktop apps without SQL. Pandas can do it but needs a Python install plus boilerplate per file. Bedevere Wise sits in the gap: drop the file, get a spreadsheet view, and run SQL against it in seconds.
@@ -18,7 +25,7 @@ Most SQL clients (DBeaver, TablePlus, DataGrip) speak to database servers and wo
 - **Inline column statistics** — per-type summaries, histograms, and value filters next to the table
 - **High-performance grid** — canvas-rendered, virtually scrolled, HiDPI-sharp
 - **Dot-command shell** — `.import`, `.open`, `.export`, `.tables`, `.columns`, `.help`, plus argument autocomplete
-- **Persistent workspace** — saved views, query bookmarks, and settings survive page reloads
+- **Persistent workspace** — saved queries and settings survive page reloads
 - **Fully client-side** — no server, no uploads; data stays in your browser
 
 ## License

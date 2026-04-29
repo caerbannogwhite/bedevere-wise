@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.9 (in development)
+
+- [Feature] **stats_duck plot rendering (Phase 1).** `VISUALIZE … DRAW <mark>` queries detected at dispatch time, routed past the result-table wrapper so stats_duck's parser-extension fires. The returned `(spec, layer_sqls)` row is fanned out: each layer SQL is run via DuckDB-WASM, the rows are inlined into a Vega-Lite `datasets` block, and vega-embed renders the chart in a new ChartTab alongside dataset tabs. Theme-aware (re-embeds on `.theme` flip with Tokyonight-flavoured config). vega-embed is code-split — no bundle hit for users who never plot.
+- [Feature] **Non-SELECT queries.** `CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `PRAGMA`, `COPY`, `EXPORT`, `SET`, transactions: all execute directly without the `CREATE OR REPLACE TABLE result_<n> AS (…)` wrap. The wrap previously corrupted DDL/DML and silently bypassed parser extensions like stats_duck's VISUALIZE.
+- [Feature] **`.alias <dataset> <new>`** — shell command for renaming a dataset/table via DuckDB `ALTER TABLE … RENAME` (migrated from the deprecated palette).
+- [Enhanced] Result tables now use friendly `result_1`, `result_2`, … names instead of `query_result_<huge-timestamp>`. Type-able in JOINs by hand; renameable via `.alias result_1 mydata` (which calls DuckDB's real ALTER TABLE so existing references keep working).
+- [Bug-fix] Theme flip now repaints the spreadsheet immediately. The module-level theme-color cache was racy with the body-class MutationObserver — the listener could fire before the cache invalidator, baking stale colors into each visualizer's options. Now the listener invalidates the cache itself before recomputing.
+- [Removed] **CommandPalette (Ctrl+Shift+P).** Deprecated in 0.8; gone in 0.9. Every palette-only command was either covered by an existing shell command or migrated (`.alias`).
+- [Removed] **View storage.** `.view save|drop`, `ViewManager`, and the `bedevere_views` localStorage key are gone. Saved views were unrecoverable across page reloads (source tables vanish), producing `worker_dispatcher` cascades on every refresh. Saved queries (`.query save`) cover the persist-my-SQL workflow; raw `CREATE VIEW` SQL works in-session now that non-SELECT queries are allowed.
+- [Removed] **GitHub Pages deploy workflow.** `.github/workflows/deploy.yml` removed. Cloudflare Workers Builds (custom domain `bedeverewise.app`) is now the only deploy target.
+
 ## v0.8-from-the-castle-of-camelot
 
 - [Feature] Dot-command shell hosted in the always-visible bar above the spreadsheet. Lines starting with `.` dispatch through a unified CommandRegistry; anything else runs as DuckDB SQL. History walks Up/Down and persists across sessions (capped at 200 lines).
