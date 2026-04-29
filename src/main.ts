@@ -12,19 +12,6 @@ import {
 
 // Initialize the Bedevere Wise application
 async function initApplication() {
-  // Spreadsheet perf harness — reachable via `?perf-harness`. Mounts a
-  // real SpreadsheetVisualizer against a synthetic 1M-row dataset and
-  // measures FPS over a scripted scroll. Phase B's perf gate. Lives
-  // outside the normal app boot so the measurement isn't contaminated by
-  // DuckDB init or app chrome.
-  if (typeof location !== "undefined" && location.search.includes("perf-harness")) {
-    const { runPerfHarness } = await import("./perf-harness");
-    const host = document.getElementById("app") || document.body;
-    host.innerHTML = "";
-    await runPerfHarness(host);
-    return;
-  }
-
   const debugMode = import.meta.env.DEV;
   const appVersion = "0.8-from-the-castle-of-camelot";
 
