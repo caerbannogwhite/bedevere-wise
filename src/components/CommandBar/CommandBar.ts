@@ -4,7 +4,11 @@ import { persistenceService } from "../../data/PersistenceService";
 import { Command, commandRegistry } from "../../data/CommandRegistry";
 
 const HISTORY_MAX = 200;
-const SUGGESTIONS_MAX = 8;
+// Generous cap: the dropdown is scrollable (max-height: 260px in CSS) so
+// rendering 50 items is fine, and shrinking the list to 8 was hiding ~half
+// of the registered shell commands behind a wall the user couldn't navigate
+// past with arrow keys.
+const SUGGESTIONS_MAX = 50;
 
 export interface CommandBarOptions {
   container: HTMLElement;
@@ -356,6 +360,11 @@ export class CommandBar {
     if (len === 0) return;
     this.suggestionIndex = (this.suggestionIndex + delta + len) % len;
     this.renderSuggestions();
+    // Keep the active row inside the dropdown's scroll viewport — without
+    // this the highlight can drift below the fold once the list is taller
+    // than the CSS max-height.
+    const active = this.suggestionsEl.querySelector<HTMLElement>(".command-bar__suggestion--active");
+    active?.scrollIntoView({ block: "nearest" });
   }
 
   private completeFromSuggestions(): void {

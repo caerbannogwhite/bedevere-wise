@@ -3,15 +3,31 @@ import { EditorState, Prec } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, insertTab, indentLess } from "@codemirror/commands";
-// oneDark removed in favour of the tokyonight CSS overrides in
-// styles/components/sql-editor.scss — keeps the editor coherent with the
-// rest of the chrome.
+import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
+import { tags as t } from "@lezer/highlight";
 import { FocusableComponent } from "../BedevereApp/types";
 import { DuckDBService } from "../../data/DuckDBService";
 import { keymapService } from "../../data/KeymapService";
 import { commandRegistry } from "../../data/CommandRegistry";
 import { SqlAutoComplete } from "./SqlAutoComplete";
 import { listenForThemeChanges } from "../SpreadsheetVisualizer/utils/theme";
+
+// Syntax highlighting that matches the tokyonight palette via CSS variables,
+// so the editor follows light/dark theme switches without a rebuild. Token
+// classes are emitted by `@codemirror/lang-sql`'s parser; we just bind colors
+// to the lezer tags.
+const tokyonightHighlight = HighlightStyle.define([
+  { tag: t.keyword, color: "var(--magenta)", fontWeight: "600" },
+  { tag: [t.string, t.special(t.string)], color: "var(--green)" },
+  { tag: [t.number, t.bool, t.atom], color: "var(--orange)" },
+  { tag: t.null, color: "var(--red)" },
+  { tag: [t.lineComment, t.blockComment], color: "var(--fg-muted)", fontStyle: "italic" },
+  { tag: [t.function(t.variableName), t.function(t.propertyName), t.standard(t.variableName)], color: "var(--blue)" },
+  { tag: [t.typeName, t.className], color: "var(--yellow)" },
+  { tag: t.operator, color: "var(--cyan)" },
+  { tag: [t.bracket, t.punctuation, t.separator], color: "var(--fg-dark)" },
+  { tag: t.variableName, color: "var(--fg)" },
+]);
 
 export class SqlEditor implements FocusableComponent {
   public readonly componentId: string;
@@ -211,6 +227,7 @@ export class SqlEditor implements FocusableComponent {
       lineNumbers(),
       history(),
       sql({ dialect: PostgreSQL }),
+      syntaxHighlighting(tokyonightHighlight),
       autocompletion({
         override: [this.autoComplete.getCompletionSource()],
       }),
