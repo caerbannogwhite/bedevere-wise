@@ -1,8 +1,8 @@
 import { EditorView, keymap, placeholder, lineNumbers } from "@codemirror/view";
-import { EditorState } from "@codemirror/state";
+import { EditorState, Prec } from "@codemirror/state";
 import { sql, PostgreSQL } from "@codemirror/lang-sql";
 import { autocompletion } from "@codemirror/autocomplete";
-import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import { defaultKeymap, history, historyKeymap, insertTab, indentLess } from "@codemirror/commands";
 // oneDark removed in favour of the tokyonight CSS overrides in
 // styles/components/sql-editor.scss — keeps the editor coherent with the
 // rest of the chrome.
@@ -112,8 +112,12 @@ export class SqlEditor implements FocusableComponent {
   }
 
   public async handleKeyDown(event: KeyboardEvent): Promise<boolean> {
+    // Mod-Enter (execute) is wired through the CodeMirror keymap so the editor
+    // owns its primary chord and we don't double-fire when the event also
+    // bubbles up to this document-level handler. Only sqlEditor.collapse
+    // (Escape when no autocomplete dropdown is open) needs routing here.
     const action = keymapService.matchEvent(event, "sqlEditor");
-    if (!action) return false;
+    if (action !== "sqlEditor.collapse") return false;
     event.preventDefault();
     if (commandRegistry.has(action)) {
       try { await commandRegistry.run(action); }
@@ -213,23 +217,22 @@ export class SqlEditor implements FocusableComponent {
       keymap.of([...defaultKeymap, ...historyKeymap]),
       placeholder("Enter SQL query... (Ctrl+Enter to execute)"),
       EditorView.lineWrapping,
-      // Prevent CodeMirror from handling Ctrl+Enter (we handle it in handleKeyDown)
-      keymap.of([
-        {
-          key: "Ctrl-Enter",
-          run: () => {
-            this.execute();
-            return true;
+      // Tab needs an explicit binding because defaultKeymap omits it — without
+      // this, Tab falls through to the browser and moves focus out of the
+      // editor. Mod-Enter must beat defaultKeymap's `Mod-Enter -> insertBlankLine`,
+      // hence Prec.high on the whole block.
+      Prec.high(
+        keymap.of([
+          { key: "Tab", run: insertTab, shift: indentLess },
+          {
+            key: "Mod-Enter",
+            run: () => {
+              this.execute();
+              return true;
+            },
           },
-        },
-        {
-          key: "Mod-Enter",
-          run: () => {
-            this.execute();
-            return true;
-          },
-        },
-      ]),
+        ])
+      ),
     ];
 
     const state = EditorState.create({

@@ -119,11 +119,13 @@ export class CommandBar {
   }
 
   private async onInputKeyDown(e: KeyboardEvent): Promise<void> {
-    // Autocomplete takes priority over history when visible. Tab/Up/Down/Esc
-    // address the dropdown; Enter still submits (bash-style: Tab completes,
-    // Enter runs).
+    // Autocomplete takes priority over history when visible. Enter and Tab
+    // both accept the highlighted suggestion (Enter is the canonical accept
+    // key, matched by the SQL editor's autocompletion; Tab is kept as a
+    // bash-style alternate). Up/Down navigate the dropdown; Esc closes it.
     if (this.suggestionsVisible) {
       switch (e.key) {
+        case "Enter":
         case "Tab": {
           e.preventDefault();
           e.stopPropagation();
@@ -148,7 +150,6 @@ export class CommandBar {
           this.moveSuggestion(-1);
           return;
         }
-        // Enter falls through to the submit path below.
       }
     }
 
