@@ -1,5 +1,6 @@
 import { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
 import { DuckDBService } from "../../data/DuckDBService";
+import { KNOWN_DIRECTIVES } from "../../data/sqlScript";
 import { STATS_DUCK_FUNCTIONS } from "./sqlDialect";
 
 const DUCKDB_FUNCTIONS: string[] = [
@@ -44,6 +45,18 @@ const SQL_KEYWORDS: string[] = [
   "DISTINCT", "ALL", "ASC", "DESC", "NULLS FIRST", "NULLS LAST",
   "WITH", "RECURSIVE", "OVER", "PARTITION BY", "ROWS", "FILTER",
   "DESCRIBE", "SHOW TABLES", "EXPLAIN", "COPY", "EXPORT",
+  // GGSQL (stats_duck) extensions
+  "VISUALIZE", "DRAW",
+];
+
+const SQL_TYPES: string[] = [
+  "BOOLEAN", "BOOL",
+  "TINYINT", "SMALLINT", "INTEGER", "INT", "BIGINT", "HUGEINT",
+  "REAL", "FLOAT", "DOUBLE", "DECIMAL", "NUMERIC",
+  "VARCHAR", "TEXT", "BLOB",
+  "DATE", "TIME", "TIMESTAMP", "INTERVAL",
+  "UUID", "JSON",
+  "ENUM", "STRUCT", "MAP", "LIST", "ARRAY",
 ];
 
 interface SchemaInfo {
@@ -106,6 +119,27 @@ export class SqlAutoComplete {
 
   public getCompletionSource() {
     return (context: CompletionContext): CompletionResult | null => {
+      // Directive completion (`.no-output`, …). Only fires when the dot is
+      // the first non-whitespace character on its line, so a `tablename.`
+      // column-access dot doesn't accidentally suggest directives.
+      const line = context.state.doc.lineAt(context.pos);
+      const lineBefore = line.text.slice(0, context.pos - line.from);
+      const directiveMatch = /^\s*(\.[\w-]*)$/.exec(lineBefore);
+      if (directiveMatch) {
+        const dir = directiveMatch[1];
+        const matches = KNOWN_DIRECTIVES.filter((d) => d.startsWith(dir));
+        if (matches.length > 0) {
+          return {
+            from: context.pos - dir.length,
+            options: matches.map((d): Completion => ({
+              label: d,
+              type: "keyword",
+              detail: "directive",
+            })),
+          };
+        }
+      }
+
       const word = context.matchBefore(/[\w.]+/);
       if (!word && !context.explicit) return null;
 
@@ -170,6 +204,16 @@ export class SqlAutoComplete {
           options.push({
             label: kw,
             type: "keyword",
+          });
+        }
+      }
+
+      // SQL types (DOUBLE, INTEGER, VARCHAR, …) — handy after CAST/AS.
+      for (const ty of SQL_TYPES) {
+        if (ty.startsWith(textUpper)) {
+          options.push({
+            label: ty,
+            type: "type",
           });
         }
       }

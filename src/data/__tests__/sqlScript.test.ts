@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { parseScript, classifyStatement, firstSqlKeyword } from "../sqlScript";
+import {
+  parseScript,
+  classifyStatement,
+  firstSqlKeyword,
+  extractCreateTargetName,
+} from "../sqlScript";
 
 describe("parseScript", () => {
   it("returns [] for empty / whitespace / comment-only input", () => {
@@ -113,6 +118,45 @@ describe("classifyStatement", () => {
   it("skips leading comments before reading the keyword", () => {
     expect(classifyStatement("-- header\nSELECT 1")).toBe("query");
     expect(classifyStatement("/* header */ SELECT 1")).toBe("query");
+  });
+});
+
+describe("extractCreateTargetName", () => {
+  it("returns the table name for a plain CREATE TABLE", () => {
+    expect(extractCreateTargetName("CREATE TABLE foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("CREATE TABLE foo (a INT)")).toBe("foo");
+  });
+  it("handles OR REPLACE / TEMP / TEMPORARY / IF NOT EXISTS", () => {
+    expect(extractCreateTargetName("CREATE OR REPLACE TABLE foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("CREATE TEMP TABLE foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("CREATE TEMPORARY TABLE foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("CREATE TABLE IF NOT EXISTS foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("CREATE OR REPLACE TEMP TABLE IF NOT EXISTS foo AS SELECT 1")).toBe("foo");
+  });
+  it("handles CREATE VIEW", () => {
+    expect(extractCreateTargetName("CREATE VIEW v AS SELECT 1")).toBe("v");
+    expect(extractCreateTargetName("CREATE OR REPLACE VIEW v AS SELECT 1")).toBe("v");
+  });
+  it("strips double-quoted identifiers (with `\"\"` escape)", () => {
+    expect(extractCreateTargetName('CREATE TABLE "weird name" AS SELECT 1')).toBe("weird name");
+    expect(extractCreateTargetName('CREATE TABLE "she said ""hi""" AS SELECT 1')).toBe('she said "hi"');
+  });
+  it("skips leading whitespace and comments", () => {
+    expect(extractCreateTargetName("  -- header\n  CREATE TABLE foo AS SELECT 1")).toBe("foo");
+    expect(extractCreateTargetName("/* header */\n  CREATE TABLE foo AS SELECT 1")).toBe("foo");
+  });
+  it("returns null for non-CREATE statements", () => {
+    expect(extractCreateTargetName("SELECT 1")).toBeNull();
+    expect(extractCreateTargetName("INSERT INTO foo VALUES (1)")).toBeNull();
+    expect(extractCreateTargetName("DROP TABLE foo")).toBeNull();
+    expect(extractCreateTargetName("")).toBeNull();
+  });
+  it("returns null for schema-qualified targets (only bare names supported)", () => {
+    expect(extractCreateTargetName("CREATE TABLE myschema.foo AS SELECT 1")).toBeNull();
+  });
+  it("ignores CREATE INDEX / CREATE SCHEMA / etc.", () => {
+    expect(extractCreateTargetName("CREATE INDEX idx ON foo (a)")).toBeNull();
+    expect(extractCreateTargetName("CREATE SCHEMA s")).toBeNull();
   });
 });
 

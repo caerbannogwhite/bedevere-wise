@@ -19,6 +19,13 @@ export interface ScriptStatement {
 
 export type StatementKind = "query" | "visualize" | "side-effect";
 
+/**
+ * Directives the SQL dispatcher recognises. Single source of truth: the
+ * dispatcher uses this for validation and the editor's autocomplete uses it
+ * to surface them as suggestions when the user types `.`.
+ */
+export const KNOWN_DIRECTIVES = [".no-output"] as const;
+
 export function parseScript(input: string): ScriptStatement[] {
   const out: ScriptStatement[] = [];
   let pending: string[] = [];
@@ -141,6 +148,32 @@ export function classifyStatement(sql: string): StatementKind {
  * is reached.
  */
 export function firstSqlKeyword(input: string): string {
+  return stripLeadingTrivia(input).match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? "";
+}
+
+/**
+ * If `sql` is `CREATE [OR REPLACE] [TEMP] TABLE/VIEW [IF NOT EXISTS] <name> …`,
+ * return `<name>` (with quotes stripped) so the dispatcher can open the new
+ * relation as a tab. Returns null for any other statement, or for a
+ * schema-qualified target (`schema.name`) — only bare names are supported.
+ */
+export function extractCreateTargetName(sql: string): string | null {
+  const stripped = stripLeadingTrivia(sql);
+  // The `(?![\w.])` boundary prevents the identifier branch from backtracking
+  // a shorter name out of a schema-qualified target like `myschema.foo` —
+  // such targets are intentionally rejected (we only auto-display bare names).
+  const m = /^CREATE\s+(?:OR\s+REPLACE\s+)?(?:TEMP(?:ORARY)?\s+)?(?:TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?("(?:[^"]|"")+"|[A-Za-z_]\w*)(?![\w.])/i.exec(stripped);
+  if (!m) return null;
+  let name = m[1];
+  if (name.startsWith('"') && name.endsWith('"')) {
+    name = name.slice(1, -1).replace(/""/g, '"');
+  }
+  return name;
+}
+
+/** Skip leading whitespace and comments, returning the substring that begins
+ *  at the first significant character. */
+function stripLeadingTrivia(input: string): string {
   let i = 0;
   while (i < input.length) {
     while (i < input.length && /\s/.test(input[i])) i++;
@@ -154,5 +187,5 @@ export function firstSqlKeyword(input: string): string {
     }
     break;
   }
-  return input.slice(i).match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? "";
+  return input.slice(i);
 }

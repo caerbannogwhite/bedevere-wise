@@ -11,10 +11,16 @@ import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvide
 import { EventDispatcher } from "../BedevereApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 import { parseShellLine, runShellLine, ShellResult } from "../../data/Shell";
-import { parseScript, classifyStatement } from "../../data/sqlScript";
+import { commandRegistry } from "../../data/CommandRegistry";
+import {
+  parseScript,
+  classifyStatement,
+  extractCreateTargetName,
+  KNOWN_DIRECTIVES,
+} from "../../data/sqlScript";
 import type { VisualizationSpec } from "vega-embed";
 
-const KNOWN_SQL_DIRECTIVES = new Set([".no-output"]);
+const KNOWN_SQL_DIRECTIVES = new Set<string>(KNOWN_DIRECTIVES);
 
 interface DatasetTab {
   kind: "dataset";
@@ -620,8 +626,29 @@ export class TabManager {
         await this.addQueryResult(sql, duckDBService);
       } else {
         await this.executeSideEffecting(sql, duckDBService);
+        // Auto-display the new relation when the side-effect was a CREATE
+        // TABLE / CREATE VIEW. .no-output (handled above) skips this.
+        const created = extractCreateTargetName(sql);
+        if (created) await this.openExistingTable(created, duckDBService);
       }
     }
+  }
+
+  /**
+   * Open an existing DuckDB table or view as a dataset tab. Used by the SQL
+   * dispatcher to surface the relation a user just CREATEd; switches to an
+   * existing tab when one already shows the same name.
+   */
+  private async openExistingTable(name: string, duckDBService: DuckDBService): Promise<void> {
+    if (this.getDatasetIds().includes(name)) {
+      await this.switchToDataset(name);
+      return;
+    }
+    const { DuckDBDataProvider } = await import("../../data/DuckDBDataProvider");
+    const provider = new DuckDBDataProvider(duckDBService, name, "");
+    const metadata = await provider.getMetadata();
+    await this.addDataset(metadata, provider);
+    await this.switchToDataset(metadata.name);
   }
 
   private async executeSideEffecting(input: string, duckDBService: DuckDBService): Promise<void> {
@@ -758,14 +785,16 @@ export class TabManager {
   }
 
   /**
-   * Dispatch user input from either the CommandBar or the SqlEditor:
-   * dot-command → Shell; anything else → SQL. Both callers route through
-   * here so the query-time chip and error toast behave identically and a
-   * `.command` typed in the SQL editor isn't sent to DuckDB as raw SQL.
+   * Dispatch user input from either the CommandBar or the SqlEditor.
+   * A dot-prefixed line is treated as a shell command only when the name is
+   * registered (e.g. `.help`, `.open`, `.focus`). Otherwise — including SQL
+   * directives like `.no-output` that prefix a multi-statement script — it
+   * falls through to executeBareSQL so the script dispatcher can validate
+   * directives and route statements.
    */
   private async dispatchInput(input: string): Promise<void> {
     const parsed = parseShellLine(input);
-    if (parsed) {
+    if (parsed && commandRegistry.getByShellName(parsed.name)) {
       const result = await runShellLine(input);
       this.handleShellResult(result);
       return;
