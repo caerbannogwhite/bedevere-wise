@@ -11,24 +11,10 @@ import { FilteredDuckDBDataProvider } from "../../data/FilteredDuckDBDataProvide
 import { EventDispatcher } from "../BedevereApp/EventDispatcher";
 import { ICellSelection } from "../SpreadsheetVisualizer/types";
 import { parseShellLine, runShellLine, ShellResult } from "../../data/Shell";
+import { parseScript, classifyStatement } from "../../data/sqlScript";
 import type { VisualizationSpec } from "vega-embed";
 
-/**
- * First SQL keyword (uppercased) of `input`, skipping leading whitespace and
- * full-line `-- comments`. Returns "" if nothing alphabetic comes first.
- */
-function firstSqlKeyword(input: string): string {
-  let i = 0;
-  while (i < input.length) {
-    while (i < input.length && /\s/.test(input[i])) i++;
-    if (input[i] === "-" && input[i + 1] === "-") {
-      while (i < input.length && input[i] !== "\n") i++;
-      continue;
-    }
-    break;
-  }
-  return input.slice(i).match(/^[A-Za-z]+/)?.[0]?.toUpperCase() ?? "";
-}
+const KNOWN_SQL_DIRECTIVES = new Set([".no-output"]);
 
 interface DatasetTab {
   kind: "dataset";
@@ -594,24 +580,48 @@ export class TabManager {
   }
 
   /**
-   * Branch on the first SQL keyword:
-   *   - `SELECT` / `WITH` → wrap and open as a result tab (addQueryResult)
-   *   - `VISUALIZE`        → route through stats_duck + vega-embed (chart tab)
-   *   - everything else    → execute directly with no wrapper (DDL, DML, PRAGMA, …)
-   * The wrapper would otherwise corrupt non-result-producing statements and
-   * silently bypass stats_duck's top-level parser extension for VISUALIZE.
+   * Run a SQL script — possibly multi-statement, possibly preceded by
+   * `.directive` lines — by parsing it into statements, validating any
+   * directives, and routing each statement by its first keyword:
+   *   - `SELECT` / `WITH` → open as a result tab (addQueryResult)
+   *   - `VISUALIZE`       → route through stats_duck + vega-embed (chart tab)
+   *   - everything else   → execute directly with no wrapper (DDL, DML, …)
+   * The result-tab wrapper would otherwise corrupt non-result-producing
+   * statements and silently bypass stats_duck's parser extension for
+   * VISUALIZE.
+   *
+   * Supported directives (apply to the next statement, then reset):
+   *   - `.no-output` — run the statement but suppress its tab/chart output.
    */
   private async executeBareSQL(input: string, duckDBService: DuckDBService): Promise<void> {
-    const firstToken = firstSqlKeyword(input);
-    if (firstToken === "VISUALIZE") {
-      await this.executeVisualize(input, duckDBService);
-      return;
+    const script = parseScript(input);
+    if (script.length === 0) return;
+
+    // Validate every directive before running anything: a typo shouldn't
+    // leave the DB in a half-applied state after some statements ran.
+    for (const { directives } of script) {
+      for (const d of directives) {
+        if (!KNOWN_SQL_DIRECTIVES.has(d.toLowerCase())) {
+          throw new Error(`Unknown SQL directive: ${d}`);
+        }
+      }
     }
-    if (firstToken === "SELECT" || firstToken === "WITH") {
-      await this.addQueryResult(input, duckDBService);
-      return;
+
+    for (const { sql, directives } of script) {
+      const noOutput = directives.some((d) => d.toLowerCase() === ".no-output");
+      if (noOutput) {
+        await this.executeSideEffecting(sql, duckDBService);
+        continue;
+      }
+      const kind = classifyStatement(sql);
+      if (kind === "visualize") {
+        await this.executeVisualize(sql, duckDBService);
+      } else if (kind === "query") {
+        await this.addQueryResult(sql, duckDBService);
+      } else {
+        await this.executeSideEffecting(sql, duckDBService);
+      }
     }
-    await this.executeSideEffecting(input, duckDBService);
   }
 
   private async executeSideEffecting(input: string, duckDBService: DuckDBService): Promise<void> {

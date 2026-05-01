@@ -1,6 +1,6 @@
 import { EditorView, keymap, placeholder, lineNumbers } from "@codemirror/view";
 import { EditorState, Prec } from "@codemirror/state";
-import { sql, PostgreSQL } from "@codemirror/lang-sql";
+import { sql } from "@codemirror/lang-sql";
 import { autocompletion } from "@codemirror/autocomplete";
 import { defaultKeymap, history, historyKeymap, insertTab, indentLess } from "@codemirror/commands";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
@@ -10,6 +10,7 @@ import { DuckDBService } from "../../data/DuckDBService";
 import { keymapService } from "../../data/KeymapService";
 import { commandRegistry } from "../../data/CommandRegistry";
 import { SqlAutoComplete } from "./SqlAutoComplete";
+import { BedevereSqlDialect } from "./sqlDialect";
 import { listenForThemeChanges } from "../SpreadsheetVisualizer/utils/theme";
 
 // Syntax highlighting that matches the tokyonight palette via CSS variables,
@@ -226,7 +227,7 @@ export class SqlEditor implements FocusableComponent {
     const extensions = [
       lineNumbers(),
       history(),
-      sql({ dialect: PostgreSQL }),
+      sql({ dialect: BedevereSqlDialect }),
       syntaxHighlighting(tokyonightHighlight),
       autocompletion({
         override: [this.autoComplete.getCompletionSource()],

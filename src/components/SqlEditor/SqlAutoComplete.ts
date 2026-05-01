@@ -1,5 +1,6 @@
 import { CompletionContext, CompletionResult, Completion } from "@codemirror/autocomplete";
 import { DuckDBService } from "../../data/DuckDBService";
+import { STATS_DUCK_FUNCTIONS } from "./sqlDialect";
 
 const DUCKDB_FUNCTIONS: string[] = [
   // Aggregate functions
@@ -50,9 +51,20 @@ interface SchemaInfo {
   lastRefresh: number;
 }
 
+/** Initial function list before `duckdb_functions()` introspection runs. */
+function staticFunctionSeed(): string[] {
+  return [...DUCKDB_FUNCTIONS, ...STATS_DUCK_FUNCTIONS.map((n) => n.toUpperCase())];
+}
+
 export class SqlAutoComplete {
   private duckDBService: DuckDBService;
   private schema: SchemaInfo = { tables: new Map(), lastRefresh: 0 };
+  // Seeded with the static lists (DuckDB built-ins + the stats_duck names we
+  // explicitly know about) so suggestions still work before the first refresh
+  // completes or when introspection fails. Replaced with the union of static
+  // + dynamic names whenever `duckdb_functions()` succeeds — that's how any
+  // extension-contributed functions we didn't pre-list end up in the dropdown.
+  private functions: string[] = staticFunctionSeed();
   private refreshInterval = 10000; // 10 seconds
 
   constructor(duckDBService: DuckDBService) {
@@ -72,6 +84,23 @@ export class SqlAutoComplete {
       this.schema = { tables: newSchema, lastRefresh: Date.now() };
     } catch (e) {
       console.error("Failed to refresh SQL schema:", e);
+    }
+
+    // Pull function names so extension-contributed functions (stats_duck,
+    // etc.) round-trip into autocomplete without us hand-maintaining a list.
+    // Failure leaves the seeded static list in place.
+    try {
+      const rows = await this.duckDBService.executeQuery(
+        "SELECT DISTINCT function_name FROM duckdb_functions()",
+      );
+      const merged = new Set<string>(staticFunctionSeed());
+      for (const row of rows) {
+        const name = (row as { function_name?: unknown }).function_name;
+        if (typeof name === "string" && name.length > 0) merged.add(name.toUpperCase());
+      }
+      this.functions = [...merged].sort();
+    } catch (e) {
+      console.error("Failed to refresh SQL function list:", e);
     }
   }
 
@@ -145,8 +174,9 @@ export class SqlAutoComplete {
         }
       }
 
-      // DuckDB functions
-      for (const fn of DUCKDB_FUNCTIONS) {
+      // DuckDB functions (static set + anything `duckdb_functions()` returned
+      // on the last refresh — covers extension-contributed names too).
+      for (const fn of this.functions) {
         if (fn.startsWith(textUpper)) {
           options.push({
             label: fn,
