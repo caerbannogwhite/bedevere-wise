@@ -211,6 +211,13 @@ export class BedevereApp implements EventHandler {
 
   // EventHandler interface implementation
   public async handleKeyDown(e: KeyboardEvent): Promise<boolean> {
+    // If the focused element (CodeMirror, an <input>, etc.) already consumed
+    // this key, don't double-fire the matching global shortcut. CodeMirror's
+    // defaultKeymap binds emacs-style chords like Ctrl-/, Ctrl-b, Ctrl-e
+    // that overlap with our global keymap (help.toggle, app.togglePanel,
+    // app.toggleSqlEditor); the editor should win when it has focus.
+    if (e.defaultPrevented) return false;
+
     // Alt+1..9 jumps directly to tab N. Handled outside the keymap to avoid
     // nine near-identical entries — see tabs.next / tabs.prev in the keymap
     // for the rebindable cyclical shortcuts.
