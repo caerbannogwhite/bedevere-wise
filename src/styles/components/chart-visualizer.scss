@@ -9,7 +9,12 @@
 .chart-visualizer.tab-manager__dataset-container {
   display: none;
   padding: 16px 24px;
-  overflow: hidden;
+  // Allow the host to scroll when a composite spec (FACET BY … ROWS, large
+  // repeats) renders a canvas taller or wider than the chart pane. With
+  // `overflow: hidden` the bottom panels were silently clipped — the
+  // download-as-PNG showed all 3 rows but the visible canvas cut off at row
+  // 2 with no way to scroll.
+  overflow: auto;
   background: var(--bg);
   position: absolute !important;
   inset: 0 !important;
@@ -20,10 +25,16 @@
 }
 
 // `.chart-wrapper` (NOT `.vega-embed`) is the element vega measures for
-// `width: "container"` / `height: "container"` in the spec.
+// `width: "container"` / `height: "container"` in the spec — keep it sized
+// to the host so non-composite charts continue to fill the pane. Composite
+// charts ignore those container directives and render at vega-lite's
+// natural per-panel size; `text-align: center` centres the canvas
+// horizontally inside the wrapper, and any overflow propagates to the host
+// (above) so it scrolls.
 .chart-visualizer .chart-wrapper {
   width: 100% !important;
   height: 100% !important;
+  text-align: center;
 }
 
 // Soften vega-embed's action menu (top-right "..." → export / source /
