@@ -52,29 +52,51 @@ export class ChartVisualizer {
       this.currentResult.finalize();
       this.currentResult = null;
     }
-    // Vega-Lite supports a top-level `datasets` block ({name: rows[]}) that
-    // is referenced by `data: { name }` inside the spec. stats_duck's spec
-    // already references `layer_0`, `layer_1`, … so we just inline the rows
-    // there alongside the theme config.
-    //
-    // `width: "container"` / `height: "container"` make the chart fill the
-    // host element; we only set them when the spec doesn't already specify
-    // sizes, so a future stats_duck spec that wants explicit dimensions
-    // wins. `autosize: "fit"` re-layouts axes/legends to fit instead of
-    // overflowing.
+    // Wait one paint frame before measuring. The tab activation just
+    // toggled the host from `display: none` to block; without this, vega
+    // can read a zero `clientWidth` on the very first embed and render a
+    // chart that has only the y-axis. For non-faceted specs `autosize:
+    // "fit"` re-layouts after the container settles and the chart self-
+    // corrects; for faceted / repeat / concat specs Vega-Lite ignores
+    // autosize entirely (per its docs), so the bad initial measurement
+    // sticks. Awaiting a frame fixes both paths.
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+
     const themedSpec = this.applyTheme(this.currentSpec);
-    const sized = themedSpec as Record<string, unknown>;
-    const fullSpec = {
-      ...themedSpec,
-      width: sized.width ?? "container",
-      height: sized.height ?? "container",
-      autosize: sized.autosize ?? { type: "fit", contains: "padding" },
-      datasets: this.currentDatasets,
-    } as VisualizationSpec;
+    const fullSpec = this.withSizing(themedSpec);
     this.currentResult = await vegaEmbed(this.host, fullSpec, {
       actions: { export: true, source: true, compiled: true, editor: true },
       renderer: "canvas",
     });
+  }
+
+  /**
+   * Vega-Lite supports a top-level `datasets` block ({name: rows[]}) that
+   * is referenced by `data: { name }` inside the spec — stats_duck's spec
+   * already references `layer_0`, `layer_1`, … so we inline the rows here.
+   *
+   * For mark / layer specs we add `width: "container"` + `height:
+   * "container"` + `autosize: "fit"` so the chart fills the host. For
+   * composite views (`facet`, `repeat`, `concat`, `hconcat`, `vconcat`)
+   * Vega-Lite ignores autosize and the container directives don't apply
+   * cleanly to the inner panels — leaving them in collapses the chart to
+   * its axes. For those specs we let Vega-Lite use its per-panel defaults
+   * (200×200) unless the spec explicitly sets dimensions.
+   */
+  private withSizing(themedSpec: VisualizationSpec): VisualizationSpec {
+    const s = themedSpec as Record<string, unknown>;
+    const isComposite =
+      "facet" in s || "repeat" in s || "concat" in s || "hconcat" in s || "vconcat" in s;
+    if (isComposite) {
+      return { ...themedSpec, datasets: this.currentDatasets } as VisualizationSpec;
+    }
+    return {
+      ...themedSpec,
+      width: s.width ?? "container",
+      height: s.height ?? "container",
+      autosize: s.autosize ?? { type: "fit", contains: "padding" },
+      datasets: this.currentDatasets,
+    } as VisualizationSpec;
   }
 
   /**

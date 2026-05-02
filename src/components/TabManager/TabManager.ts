@@ -22,6 +22,39 @@ import type { VisualizationSpec } from "vega-embed";
 
 const KNOWN_SQL_DIRECTIVES = new Set<string>(KNOWN_DIRECTIVES);
 
+/**
+ * stats_duck v1.5.1 emits faceted (and likely repeat / concat) Vega-Lite
+ * specs with `data: { name: "layer_n" }` on each inner layer rather than
+ * at the outer level. Vega-Lite v6's facet operator groups *outer* data;
+ * with the data only on inner layers it sees zero groups, no panels render,
+ * and only the y-axis ends up on the canvas (the "57px-wide chart" symptom).
+ *
+ * Promote the first layer's data reference to the outer spec and strip the
+ * per-layer ones so all layers inherit the faceted slice. Idempotent —
+ * leaves the spec untouched when it's not composite or already has outer
+ * data. (When stats_duck fixes this upstream, the patch becomes a no-op.)
+ */
+function patchVisualizeSpec(spec: Record<string, unknown>, datasets: Record<string, unknown[]>): void {
+  const isComposite =
+    "facet" in spec || "repeat" in spec || "concat" in spec || "hconcat" in spec || "vconcat" in spec;
+  if (!isComposite) return;
+  if (spec.data) return;
+
+  const inner = (spec.spec as Record<string, unknown> | undefined) ?? spec;
+  const layers = inner.layer as Array<Record<string, unknown>> | undefined;
+  if (!Array.isArray(layers) || layers.length === 0) return;
+
+  const seed = layers
+    .map((layer) => (layer.data as { name?: string } | undefined)?.name)
+    .find((name) => typeof name === "string" && name in datasets);
+  if (!seed) return;
+
+  spec.data = { name: seed };
+  for (const layer of layers) {
+    if (layer.data) delete layer.data;
+  }
+}
+
 interface DatasetTab {
   kind: "dataset";
   metadata: DatasetMetadata;
@@ -713,7 +746,27 @@ export class TabManager {
 
       const datasets: Record<string, unknown[]> = {};
       for (const [name, layerSql] of entries) {
-        datasets[name] = await duckDBService.executeQuery(layerSql);
+        const layerRows = await duckDBService.executeQuery(layerSql);
+        // Apache Arrow's `Table.toArray()` returns Row proxies that delegate
+        // property access to the underlying RecordBatch. Vega-Lite's data
+        // ingestion iterates with `for…of` and reads fields via `row.x`,
+        // `row.species`, etc. — numeric fields tend to work, but string
+        // columns can return an Arrow value wrapper rather than a plain
+        // string. Materializing each row via `toJSON()` (or a shallow
+        // spread fallback) sidesteps the proxy entirely.
+        datasets[name] = layerRows.map((r: any) => {
+          if (r && typeof r.toJSON === "function") return r.toJSON();
+          return { ...r };
+        });
+      }
+
+      patchVisualizeSpec(spec as Record<string, unknown>, datasets);
+
+      if (import.meta.env.DEV) {
+        console.log("[VISUALIZE] spec:", spec);
+        for (const [name, rows] of Object.entries(datasets)) {
+          console.log(`[VISUALIZE] ${name}: ${rows.length} rows, sample:`, rows[0]);
+        }
       }
 
       await this.addChartResult(spec, datasets);
