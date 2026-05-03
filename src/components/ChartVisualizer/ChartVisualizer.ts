@@ -46,6 +46,26 @@ export class ChartVisualizer {
     this.host.innerHTML = "";
   }
 
+  /**
+   * Export the rendered chart as a Blob suitable for download. Mirrors the
+   * options vega-embed's own action menu offers ("Save as PNG / SVG").
+   * Throws if the chart hasn't rendered yet.
+   */
+  public async exportAsBlob(format: "png" | "svg"): Promise<{ blob: Blob; ext: string }> {
+    if (!this.currentResult) throw new Error("Chart hasn't rendered yet");
+    const view = this.currentResult.view;
+    if (format === "svg") {
+      const svg = await view.toSVG();
+      return { blob: new Blob([svg], { type: "image/svg+xml" }), ext: "svg" };
+    }
+    // PNG: vega returns a `data:image/png;base64,…` URL — decode to bytes.
+    const url = await view.toImageURL("png");
+    const m = /^data:([^;]+);base64,(.+)$/.exec(url);
+    if (!m) throw new Error(`unexpected toImageURL output: ${url.slice(0, 32)}…`);
+    const bytes = Uint8Array.from(atob(m[2]), (c) => c.charCodeAt(0));
+    return { blob: new Blob([bytes], { type: m[1] }), ext: "png" };
+  }
+
   private async reembed(): Promise<void> {
     if (!this.currentSpec) return;
     if (this.currentResult) {

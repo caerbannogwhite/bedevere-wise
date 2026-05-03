@@ -194,8 +194,11 @@
   }
 
   &__sample-btn {
-    background: var(--yellow);
-    color: var(--bg-dark);
+    // Match the status-bar version chip — duck-gold brand accent via the
+    // dedicated --version-bg / --version-fg tokens (light theme picks a
+    // brighter gold than --yellow).
+    background: var(--version-bg);
+    color: var(--version-fg);
     border: none;
     padding: 8px 16px;
     font-size: 12px;

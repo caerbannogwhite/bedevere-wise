@@ -913,22 +913,43 @@ export class BedevereApp implements EventHandler {
     commandRegistry.register({
       id: "dataset.exportSelection",
       shellName: "export",
-      title: "Export Selection",
-      description: "Export the current selection (csv | tsv | html | markdown) to clipboard + downloads",
+      title: "Export Selection / Chart",
+      description:
+        "Export the active dataset's selection (csv | tsv | html | markdown — clipboard + downloads) " +
+        "or the active chart (png | svg — downloads only)",
       category: "Dataset",
       parameters: [
         {
           name: "format",
           type: "string",
           required: true,
-          description: "csv | tsv | html | markdown",
-          options: () => ["csv", "tsv", "html", "markdown"],
+          description: "csv | tsv | html | markdown (datasets); png | svg (charts)",
+          // Argument-completion is per-active-tab so the user only sees the
+          // formats that apply right now.
+          options: () =>
+            this.tabManager.getActiveChartTab() !== null
+              ? ["png", "svg"]
+              : ["csv", "tsv", "html", "markdown"],
         },
         { name: "includeHeader", type: "boolean", required: false, default: "true" },
         { name: "includeIndex",  type: "boolean", required: false, default: "true" },
       ],
-      when: () => this.tabManager.getActiveDatasetTab() !== null,
-      execute: (params) => this.exportSelection(params),
+      when: () =>
+        this.tabManager.getActiveDatasetTab() !== null ||
+        this.tabManager.getActiveChartTab() !== null,
+      execute: async (params) => {
+        const chart = this.tabManager.getActiveChartTab();
+        if (chart) {
+          const fmt = String(params?.format ?? "").toLowerCase();
+          if (fmt !== "png" && fmt !== "svg") {
+            throw new Error(`.export on a chart needs format png | svg, got '${fmt}'`);
+          }
+          const filename = await this.tabManager.exportActiveChart(fmt);
+          this.showMessage(`Exported ${filename} to downloads`, "success");
+          return;
+        }
+        await this.exportSelection(params);
+      },
     });
 
     // ---- .clear -------------------------------------------------------

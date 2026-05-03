@@ -699,7 +699,10 @@ export class ControlPanel {
     if (this.isMinimized) {
       this.panelElement.classList.add("control-panel__panel--minimized");
       this.panelElement.style.width = "48px";
-      this.toggleButton.innerHTML = "+";
+      // Show the duck as the affordance to expand — clearer than a "+" and
+      // matches the brand mark in the header when the panel is open.
+      this.toggleButton.innerHTML =
+        `<img class="control-panel__app-icon control-panel__toggle-icon" src="${duckPng}" alt="" />`;
       this.toggleButton.title = "Expand panel";
     } else {
       this.panelElement.classList.remove("control-panel__panel--minimized");

@@ -37,16 +37,72 @@
   text-align: center;
 }
 
-// Soften vega-embed's action menu (top-right "..." → export / source /
-// editor / compiled) to match the rest of the app.
-.chart-visualizer summary {
-  color: var(--fg-muted);
+// vega-embed's action menu (top-right "..." → Save as PNG / SVG / View
+// Source / View Compiled Vega / Open in Vega Editor). Themed to match
+// the rest of the chrome — flat, tokyonight colours, no rounded corners.
+.chart-visualizer details {
+  // Anchor the popout panel relative to the trigger.
+  position: absolute;
+  top: 8px;
+  right: 8px;
 
-  &:hover { color: var(--fg); }
+  > summary {
+    background: var(--bg-float);
+    border: 1px solid var(--border);
+    border-radius: 0;
+    color: var(--fg-muted);
+    cursor: pointer;
+    padding: 4px;
+    line-height: 0;
+    list-style: none;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &::-webkit-details-marker { display: none; }
+
+    svg { width: 14px; height: 14px; display: block; }
+
+    &:hover {
+      background: var(--bg-highlight);
+      color: var(--fg);
+      border-color: var(--border-strong);
+    }
+  }
+
+  &[open] > summary {
+    background: var(--bg-highlight);
+    color: var(--fg);
+    border-color: var(--blue);
+  }
 }
 
-.chart-visualizer details > summary {
+.chart-visualizer .vega-actions {
   background: var(--bg-float);
-  border: 1px solid var(--border);
-  border-radius: 0;
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.25);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  margin-top: 4px;
+  min-width: 180px;
+  padding: 4px 0;
+
+  // vega-embed positions this absolutely; preserve that, just restyle.
+  a {
+    color: var(--fg);
+    display: block;
+    padding: 6px 12px;
+    text-decoration: none;
+    transition: background-color 0.12s ease, color 0.12s ease;
+
+    &:hover {
+      background: var(--bg-highlight);
+      color: var(--cyan);
+      text-decoration: none;
+    }
+
+    &:active { color: var(--blue); }
+  }
+
+  // Vega-embed inserts an `&::before` arrow on the panel for the pointer;
+  // tone it down so it blends with the float background.
+  &::before, &::after { display: none !important; }
 }

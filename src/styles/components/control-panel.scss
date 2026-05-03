@@ -62,6 +62,14 @@
     vertical-align: middle;
   }
 
+  // The minimized toggle button uses the duck as its content; drop the
+  // header-icon margin and let it fill the button square.
+  &__toggle-icon {
+    margin-right: 0 !important;
+    width: 20px;
+    height: 20px;
+  }
+
   &__toggle {
     background: none;
     border: none;

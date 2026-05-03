@@ -332,6 +332,35 @@ export class TabManager {
     return active && active.kind === "dataset" ? active : null;
   }
 
+  public getActiveChartTab(): ChartTab | null {
+    const active = this.tabs.find((t) => t.isActive);
+    return active && active.kind === "chart" ? active : null;
+  }
+
+  /**
+   * Trigger a browser download of the active chart as PNG or SVG. Mirrors
+   * the entry the vega-embed action menu provides, exposed for `.export`.
+   */
+  public async exportActiveChart(format: "png" | "svg"): Promise<string> {
+    const chart = this.getActiveChartTab();
+    if (!chart) throw new Error("No active chart to export");
+    const { blob, ext } = await chart.chartVisualizer.exportAsBlob(format);
+    const filename = `${chart.metadata.name}.${ext}`;
+    const url = URL.createObjectURL(blob);
+    try {
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+    } finally {
+      // setTimeout so the click has a chance to dispatch before revoke.
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    }
+    return filename;
+  }
+
   public setEventDispatcher(eventDispatcher: EventDispatcher): void {
     this.eventDispatcher = eventDispatcher;
 
