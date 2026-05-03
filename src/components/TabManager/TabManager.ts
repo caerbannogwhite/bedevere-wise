@@ -746,7 +746,13 @@ export class TabManager {
 
       const datasets: Record<string, unknown[]> = {};
       for (const [name, layerSql] of entries) {
-        const layerRows = await duckDBService.executeQuery(layerSql);
+        // executeQueryWithSchema gives us per-column DECIMAL scales on top
+        // of the rows. DuckDB infers `DECIMAL(p,s)` for plain literals
+        // (`1.0` → DECIMAL(2,1)) and Arrow exports those as the raw integer
+        // — without scaling, `1.0` lands in the chart at 10 and the whole
+        // axis appears multiplied by 10^scale.
+        const { rows: layerRows, decimalScales } =
+          await duckDBService.executeQueryWithSchema(layerSql);
         // Apache Arrow's `Table.toArray()` returns Row proxies that delegate
         // property access to the underlying RecordBatch. Vega-Lite's data
         // ingestion iterates with `for…of` and reads fields via `row.x`,
@@ -755,8 +761,15 @@ export class TabManager {
         // string. Materializing each row via `toJSON()` (or a shallow
         // spread fallback) sidesteps the proxy entirely.
         datasets[name] = layerRows.map((r: any) => {
-          if (r && typeof r.toJSON === "function") return r.toJSON();
-          return { ...r };
+          const obj: Record<string, unknown> =
+            r && typeof r.toJSON === "function" ? r.toJSON() : { ...r };
+          for (const [col, scale] of Object.entries(decimalScales)) {
+            const raw = obj[col];
+            const divisor = Math.pow(10, scale);
+            if (typeof raw === "number") obj[col] = raw / divisor;
+            else if (typeof raw === "bigint") obj[col] = Number(raw) / divisor;
+          }
+          return obj;
         });
       }
 

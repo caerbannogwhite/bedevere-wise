@@ -65,6 +65,35 @@ export class DuckDBService {
     }
   }
 
+  /**
+   * Run a query and return rows alongside per-column DECIMAL scales lifted
+   * from the Arrow schema. DuckDB infers `DECIMAL(p,s)` for plain literals
+   * like `1.0` and Arrow exports those as the raw integer (10 for `1.0`,
+   * 100 for `2.5`, …); callers that hand the rows to a downstream consumer
+   * (Vega-Lite, etc.) need the scale to recover the original value. For
+   * non-decimal columns no entry is emitted in `decimalScales`.
+   */
+  async executeQueryWithSchema(query: string): Promise<{
+    rows: any[];
+    decimalScales: Record<string, number>;
+  }> {
+    const connection = await this.getConnection();
+    try {
+      const table: any = await connection.query(query);
+      const decimalScales: Record<string, number> = {};
+      const fields: any[] = table?.schema?.fields ?? [];
+      for (const field of fields) {
+        const scale = (field?.type as { scale?: unknown } | undefined)?.scale;
+        if (typeof scale === "number" && scale > 0) {
+          decimalScales[String(field.name)] = scale;
+        }
+      }
+      return { rows: table.toArray(), decimalScales };
+    } finally {
+      await connection.close();
+    }
+  }
+
   public async importFile(file: File, tableName: string, importOptions: ImportOptions): Promise<DuckDBDataProvider> {
     const text = await file.text();
 
