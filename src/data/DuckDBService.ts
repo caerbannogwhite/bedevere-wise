@@ -9,6 +9,25 @@ export interface ImportOptions {
   schema?: string;
 }
 
+/**
+ * Best-effort lift of a DECIMAL scale from an Apache Arrow schema field's
+ * type. Different builds of duckdb-wasm / apache-arrow expose the scale
+ * differently; covers the two we've seen in the wild plus a defensive
+ * `toString()` parse for anything else.
+ */
+function inferDecimalScale(t: any): number | undefined {
+  if (!t || typeof t !== "object") return undefined;
+  if (typeof t.scale === "number") return t.scale;
+  // Some builds nest decimal config under `precision`/`scale` on a `data`
+  // sub-object, others stringify as `Decimal128<10, 2>` or `Decimal(10,2)`.
+  if (typeof t.toString === "function") {
+    const s = String(t);
+    const m = /Decimal\d*\s*[<(]\s*\d+\s*,\s*(\d+)/i.exec(s);
+    if (m) return Number(m[1]);
+  }
+  return undefined;
+}
+
 export class DuckDBService {
   private db: duckdb.AsyncDuckDB | null = null;
   private worker: Worker | null = null;
@@ -72,6 +91,10 @@ export class DuckDBService {
    * 100 for `2.5`, …); callers that hand the rows to a downstream consumer
    * (Vega-Lite, etc.) need the scale to recover the original value. For
    * non-decimal columns no entry is emitted in `decimalScales`.
+   *
+   * Tries `field.type.scale` first (apache-arrow's typed Decimal class) and
+   * falls back to parsing the type's `toString()` form (`Decimal128<p,s>` /
+   * `Decimal(p,s)`) for builds that wrap the type in an opaque object.
    */
   async executeQueryWithSchema(query: string): Promise<{
     rows: any[];
@@ -83,9 +106,11 @@ export class DuckDBService {
       const decimalScales: Record<string, number> = {};
       const fields: any[] = table?.schema?.fields ?? [];
       for (const field of fields) {
-        const scale = (field?.type as { scale?: unknown } | undefined)?.scale;
+        const name = String(field?.name ?? "");
+        if (!name) continue;
+        const scale = inferDecimalScale(field?.type);
         if (typeof scale === "number" && scale > 0) {
-          decimalScales[String(field.name)] = scale;
+          decimalScales[name] = scale;
         }
       }
       return { rows: table.toArray(), decimalScales };

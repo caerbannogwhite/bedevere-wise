@@ -18,6 +18,7 @@ import {
   extractCreateTargetName,
   KNOWN_DIRECTIVES,
 } from "../../data/sqlScript";
+import { unwrapArrowValue } from "../../data/arrowUnwrap";
 import type { VisualizationSpec } from "vega-embed";
 
 const KNOWN_SQL_DIRECTIVES = new Set<string>(KNOWN_DIRECTIVES);
@@ -763,11 +764,12 @@ export class TabManager {
         datasets[name] = layerRows.map((r: any) => {
           const obj: Record<string, unknown> =
             r && typeof r.toJSON === "function" ? r.toJSON() : { ...r };
+          // DECIMAL columns arrive as `Uint32Array(2|4)` — Decimal64 /
+          // Decimal128's little-endian word buffer, not a plain number.
+          // `unwrapArrowValue` combines the words into the raw integer and
+          // applies the column's scale (1.0 → raw 10 ÷ 10^1 = 1.0).
           for (const [col, scale] of Object.entries(decimalScales)) {
-            const raw = obj[col];
-            const divisor = Math.pow(10, scale);
-            if (typeof raw === "number") obj[col] = raw / divisor;
-            else if (typeof raw === "bigint") obj[col] = Number(raw) / divisor;
+            obj[col] = unwrapArrowValue(obj[col], { kind: "decimal", scale });
           }
           return obj;
         });
