@@ -177,11 +177,33 @@ export class StatusBar {
     });
   }
 
+  /**
+   * Repurpose the status bar for a chart tab: show the chart name in the
+   * `dataset-info` slot and hide the cell-related items (position,
+   * selection, cell value) since charts don't have cells. The companion
+   * call when switching back to a spreadsheet is `updateDatasetInfo` plus
+   * `updateSelection(undefined)` etc., which the dataset-tab path already
+   * runs through BedevereApp's onSelect callback.
+   */
+  public showChartContext(chartName: string): void {
+    this.updateItem("dataset-info", {
+      text: chartName,
+      tooltip: `Chart: ${chartName}`,
+    });
+    this.updateItem("position-info", { text: "", visible: false });
+    this.updateItem("selection-info", { text: "", visible: false });
+    this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
+    this.lastComplexCell = null;
+    this.autoPopDisabled = false;
+    if (this.cellValuePopover.isOpen()) this.cellValuePopover.hide();
+  }
+
   public updateSelection(cellSelection?: ICellSelection): void {
     if (!cellSelection) {
       this.updateItem("selection-info", {
         text: "No selection",
         tooltip: "No selection",
+        visible: true,
       });
       return;
     }
@@ -193,6 +215,7 @@ export class StatusBar {
       this.updateItem("selection-info", {
         text,
         tooltip: `Selection: ${text}`,
+        visible: true,
       });
       return;
     }
@@ -206,6 +229,7 @@ export class StatusBar {
         tooltip: cellCount === 1
           ? "Selection: 1 cell selected"
           : `Selection: ${cellSelection.rows.length} rows \u00d7 ${cellSelection.columns.length} columns`,
+        visible: true,
       });
       return;
     }
@@ -213,6 +237,7 @@ export class StatusBar {
     this.updateItem("selection-info", {
       text: "No selection",
       tooltip: "No selection",
+      visible: true,
     });
   }
 

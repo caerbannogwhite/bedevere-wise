@@ -96,6 +96,7 @@ export class TabManager {
   private onCellSelectionCallback?: (cellSelection?: ICellSelection) => void;
   private onCloseTabCallback?: () => void;
   private onSelectCallback?: (dataset: DataProvider) => void;
+  private onChartActivateCallback?: (chartName: string) => void;
   private onQueryErrorCallback?: (error: Error) => void;
   private onQueryCompletedCallback?: (result: { elapsedMs: number; error?: Error }) => void;
   private onShellMessageCallback?: (text: string, details?: string) => void;
@@ -375,6 +376,10 @@ export class TabManager {
     this.onSelectCallback = callback;
   }
 
+  public setOnChartActivateCallback(callback: (chartName: string) => void): void {
+    this.onChartActivateCallback = callback;
+  }
+
   public setOnCloseTabCallback(callback: () => void): void {
     this.onCloseTabCallback = callback;
   }
@@ -457,8 +462,11 @@ export class TabManager {
       }
     } else {
       // Chart tabs have no spreadsheet → hide the column-stats sidebar so
-      // a stale dataset's stats don't sit beside the chart.
+      // a stale dataset's stats don't sit beside the chart, and notify the
+      // host so the status bar shows the chart name instead of a stale
+      // dataset's row/column count + selection info.
       this.sharedStatsVisualizer.hide();
+      this.onChartActivateCallback?.(newTab.metadata.name);
     }
   }
 

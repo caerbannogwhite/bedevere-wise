@@ -1132,10 +1132,20 @@ export class BedevereApp implements EventHandler {
   private setOnSelectDatasetCallback(): void {
     const callback = async (dataset: DataProvider) => {
       await this.updateStatusBarDatasetInfo(dataset);
+      // Re-arm the cell-related items in case we're returning from a chart
+      // tab (which hides them). The spreadsheet itself doesn't re-emit a
+      // selection event on tab activation, so without this the items would
+      // stay invisible until the user clicked a cell.
+      this.statusBar.updateSelection(undefined);
+      this.statusBar.updatePosition(undefined);
+      this.statusBar.updateCellValue(undefined);
     };
 
     this.leftPanel.setOnSelectCallback(callback);
     this.tabManager.setOnSelectCallback(callback);
+    this.tabManager.setOnChartActivateCallback((chartName) => {
+      this.statusBar.showChartContext(chartName);
+    });
   }
 
   private setOnCloseTabCallback(): void {
