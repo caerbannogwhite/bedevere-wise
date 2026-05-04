@@ -1377,7 +1377,17 @@ export class HelpPanel {
 
     body.innerHTML = `
       <p class="help-panel__about-version">v${this.options.version}</p>
-      <p class="help-panel__about-description">Open SAS, SPSS, Stata, Parquet, Excel, and CSV files in your browser. Query them with SQL — no install, no upload.</p>
+      <p class="help-panel__about-description">Open SAS, SPSS, Stata, Parquet, Excel, and CSV files in your browser. Query them with SQL, plot with <code>VISUALIZE</code> — no install, no upload.</p>
+      <div class="help-panel__about-section">
+        <h3 class="help-panel__about-section-title">What's new in 0.9</h3>
+        <ul class="help-panel__about-deps">
+          <li>Charts via <code>VISUALIZE … DRAW &lt;mark&gt;</code> (powered by the
+            <a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck</a> DuckDB extension + Vega-Lite).</li>
+          <li>Multi-statement SQL scripts with directives. <code>.no-output</code> suppresses the next statement's tab; <code>CREATE TABLE</code> auto-opens the new relation.</li>
+          <li>Editor polish: tokyonight syntax highlighting, GGSQL keywords + DuckDB-discovered functions in autocomplete, <kbd>Tab</kbd> inserts tabs, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs once.</li>
+          <li><code>.export &lt;png|svg&gt;</code> works on chart tabs; <code>.alias</code> renames a dataset via DuckDB <code>ALTER TABLE</code>.</li>
+        </ul>
+      </div>
       <div class="help-panel__about-section">
         <h3 class="help-panel__about-section-title">Shell</h3>
         <p class="help-panel__about-shell-intro">
@@ -1391,6 +1401,7 @@ export class HelpPanel {
         <ul class="help-panel__about-deps">
           <li><a href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener noreferrer">DuckDB-WASM</a></li>
           <li><a href="https://codemirror.net/" target="_blank" rel="noopener noreferrer">CodeMirror 6</a></li>
+          <li><a href="https://vega.github.io/vega-lite/" target="_blank" rel="noopener noreferrer">Vega-Lite</a> + <a href="https://github.com/vega/vega-embed" target="_blank" rel="noopener noreferrer">vega-embed</a> (charts; code-split — only loaded on first <code>VISUALIZE</code>)</li>
         </ul>
       </div>
       <div class="help-panel__about-links">

@@ -1,6 +1,6 @@
 # Changelog
 
-## v0.9 (in development)
+## v0.9-king-of-the-britons
 
 - [Feature] **stats_duck plot rendering (Phase 1).** `VISUALIZE … DRAW <mark>` queries detected at dispatch time, routed past the result-table wrapper so stats_duck's parser-extension fires. The returned `(spec, layer_sqls)` row is fanned out: each layer SQL is run via DuckDB-WASM, the rows are inlined into a Vega-Lite `datasets` block, and vega-embed renders the chart in a new ChartTab alongside dataset tabs. Theme-aware (re-embeds on `.theme` flip with Tokyonight-flavoured config). vega-embed is code-split — no bundle hit for users who never plot.
 - [Feature] **Non-SELECT queries.** `CREATE TABLE`, `INSERT`, `UPDATE`, `DELETE`, `DROP`, `ALTER`, `PRAGMA`, `COPY`, `EXPORT`, `SET`, transactions: all execute directly without the `CREATE OR REPLACE TABLE result_<n> AS (…)` wrap. The wrap previously corrupted DDL/DML and silently bypassed parser extensions like stats_duck's VISUALIZE.
