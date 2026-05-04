@@ -426,6 +426,44 @@
     }
   }
 
+  // Vertical bullet list — used for the "What's new" highlights in the
+  // About tab. The horizontal `__about-deps` flex layout above is right
+  // for one-line links but squishes longer prose into 4 narrow columns.
+  &__about-list {
+    list-style: disc;
+    margin: 0;
+    padding: 0 0 0 20px;
+    font-size: 12.5px;
+    color: var(--fg-dark);
+    line-height: 1.55;
+
+    li { margin: 0 0 6px; }
+    li:last-child { margin-bottom: 0; }
+
+    a {
+      color: var(--cyan);
+      text-decoration: none;
+      &:hover { text-decoration: underline; }
+    }
+
+    code {
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      background: var(--bg-highlight);
+      padding: 1px 5px;
+      color: var(--magenta);
+    }
+
+    kbd {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      background: var(--bg-highlight);
+      border: 1px solid var(--border);
+      padding: 1px 5px;
+      color: var(--fg);
+    }
+  }
+
   &__about-links {
     display: flex;
     align-items: center;

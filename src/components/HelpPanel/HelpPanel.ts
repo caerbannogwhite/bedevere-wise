@@ -100,6 +100,7 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
       "-- Tighten categorical text into ENUMs (less memory, only valid values)\n" +
       "-- and cast measurements to DOUBLE. TRY_CAST yields NULL on failure, so\n" +
       "-- the string \"NA\" becomes a real NULL.\n" +
+      "CREATE OR REPLACE TABLE penguins_clean AS\n" +
       "SELECT\n" +
       "    species::ENUM ('Adelie', 'Gentoo', 'Chinstrap') AS species\n" +
       "  , island::ENUM ('Dream', 'Torgersen', 'Biscoe') AS island\n" +
@@ -110,13 +111,8 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
       "  , TRY_CAST(body_mass_g AS DOUBLE) AS body_mass_g\n" +
       "FROM penguins\n" +
       "WHERE sex != 'NA'             -- drop rows with unknown sex\n" +
-      "ORDER BY species, island, sex",
-  },
-  {
-    kind: "tip",
-    html:
-      `Press <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>P</kbd>, run <strong>Create View</strong>, and name it ` +
-      `<code>penguins_clean</code>. The later examples reference that name.`,
+      "ORDER BY species, island, sex\n" +
+      ";",
   },
 
   { kind: "heading", text: "Basic summary" },
@@ -227,6 +223,35 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
     html:
       `For a non-parametric alternative (no normality assumption), replace <code>ttest_2samp</code> with ` +
       `<code>mann_whitney_u</code>.`,
+  },
+
+  { kind: "heading", text: "Plot it" },
+  {
+    kind: "prose",
+    html:
+      `Stats Duck also adds a <code>VISUALIZE … DRAW &lt;mark&gt;</code> clause that compiles to a Vega-Lite spec. ` +
+      `Channels are <code>x</code>, <code>y</code>, <code>color</code> (and a few others); marks include ` +
+      `<code>point</code>, <code>line</code>, <code>bar</code>, <code>area</code>, <code>tick</code>, <code>circle</code>, ` +
+      `<code>square</code>, <code>rect</code>. Run the query and a chart tab opens alongside the dataset tabs.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- Scatter of bill depth vs bill length, coloured by species.\n" +
+      "VISUALIZE\n" +
+      "    bill_depth_mm AS x\n" +
+      "    , bill_length_mm AS y\n" +
+      "    , species AS color\n" +
+      "FROM penguins_clean\n" +
+      "DRAW point\n" +
+      ";",
+  },
+  {
+    kind: "tip",
+    html:
+      `Stack <code>DRAW</code> clauses to layer marks (e.g. <code>DRAW point DRAW line</code>) and add ` +
+      `<code>FACET BY &lt;col&gt;</code> (optionally followed by <code>ROWS</code>) for small multiples. ` +
+      `Use the action menu in the chart's top-right corner — or <code>.export png</code> / <code>.export svg</code> — to save the chart.`,
   },
 ];
 
@@ -1380,7 +1405,7 @@ export class HelpPanel {
       <p class="help-panel__about-description">Open SAS, SPSS, Stata, Parquet, Excel, and CSV files in your browser. Query them with SQL, plot with <code>VISUALIZE</code> — no install, no upload.</p>
       <div class="help-panel__about-section">
         <h3 class="help-panel__about-section-title">What's new in 0.9</h3>
-        <ul class="help-panel__about-deps">
+        <ul class="help-panel__about-list">
           <li>Charts via <code>VISUALIZE … DRAW &lt;mark&gt;</code> (powered by the
             <a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck</a> DuckDB extension + Vega-Lite).</li>
           <li>Multi-statement SQL scripts with directives. <code>.no-output</code> suppresses the next statement's tab; <code>CREATE TABLE</code> auto-opens the new relation.</li>
