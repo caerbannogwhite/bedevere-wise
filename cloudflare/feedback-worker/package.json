@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "deploy": "wrangler deploy",
-    "dev": "wrangler dev",
-    "tail": "wrangler tail",
-    "schema:apply": "wrangler d1 execute bedevere-feedback --file=./schema.sql --remote",
-    "schema:apply-local": "wrangler d1 execute bedevere-feedback --file=./schema.sql --local"
+    "deploy": "wrangler deploy --config ./wrangler.toml",
+    "dev": "wrangler dev --config ./wrangler.toml",
+    "tail": "wrangler tail --config ./wrangler.toml",
+    "schema:apply": "wrangler d1 execute bedevere-feedback --file=./schema.sql --remote --config ./wrangler.toml",
+    "schema:apply-local": "wrangler d1 execute bedevere-feedback --file=./schema.sql --local --config ./wrangler.toml",
+    "secret:put": "wrangler secret put --config ./wrangler.toml"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20250923.0",
