@@ -19,6 +19,7 @@ import {
   KNOWN_DIRECTIVES,
 } from "../../data/sqlScript";
 import { unwrapArrowValue } from "../../data/arrowUnwrap";
+import { getStatsDuckFailureReason } from "../../data/statsDuckStatus";
 import type { VisualizationSpec } from "vega-embed";
 
 const KNOWN_SQL_DIRECTIVES = new Set<string>(KNOWN_DIRECTIVES);
@@ -752,9 +753,9 @@ export class TabManager {
       } catch (parseErr) {
         const msg = parseErr instanceof Error ? parseErr.message : String(parseErr);
         if (/syntax error/i.test(msg) && /VISUALIZE/i.test(msg)) {
+          const reason = getStatsDuckFailureReason() ?? "no startup details captured (check browser console)";
           throw new Error(
-            "VISUALIZE rejected by DuckDB — the stats_duck (ggsql) parser extension " +
-              "didn't load. Check the browser console at startup for a stats_duck warning.",
+            `VISUALIZE rejected by DuckDB — the stats_duck (ggsql) parser extension didn't load: ${reason}`,
           );
         }
         throw parseErr;

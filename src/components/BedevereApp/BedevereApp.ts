@@ -26,6 +26,7 @@ import { DuckDBExtensionLoader } from "@/data/DuckDBExtensionLoader";
 import { ExcelFormatHandler } from "@/data/formats/ExcelFormatHandler";
 import { StatFormatHandler } from "@/data/formats/StatFormatHandler";
 import { AliasManager } from "@/data/AliasManager";
+import { setStatsDuckFailureReason } from "@/data/statsDuckStatus";
 
 export type BedevereAppTheme = "light" | "dark" | "auto";
 
@@ -117,6 +118,8 @@ export class BedevereApp implements EventHandler {
       : rawStatsDuckUrl;
     const installOk = await this.extensionLoader.tryLoad("stats_duck", statsDuckUrl);
     if (!installOk) {
+      const reason = `INSTALL FROM '${statsDuckUrl}' rejected by DuckDB`;
+      setStatsDuckFailureReason(reason);
       console.warn(`stats_duck install failed (URL: ${statsDuckUrl}). VISUALIZE / ggsql disabled.`);
     } else {
       // tryLoad's probe doesn't catch "INSTALL succeeded but parser hooks
@@ -129,6 +132,10 @@ export class BedevereApp implements EventHandler {
       );
       const n = Number((ggsqlFns?.[0] as { n?: unknown })?.n ?? 0);
       if (n === 0) {
+        const reason =
+          `loaded from ${statsDuckUrl} but registered 0 ggsql_mark_v1_* functions ` +
+          "(likely a DuckDB-WASM version mismatch with @duckdb/duckdb-wasm)";
+        setStatsDuckFailureReason(reason);
         console.warn(
           `stats_duck loaded from ${statsDuckUrl} but registered no ggsql_mark_v1_* ` +
             "functions — parser hooks didn't attach. Likely a DuckDB-WASM version " +
