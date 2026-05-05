@@ -26,8 +26,7 @@ compatibility_flags = ["nodejs_compat"]
 [[d1_databases]]
 binding = "DB"
 database_name = "bedevere-feedback"
-# Replace with the id printed by `wrangler d1 create bedevere-feedback`.
-database_id = "REPLACE_WITH_D1_DATABASE_ID"
+database_id = "5a559e6c-70e7-4b73-9390-167d5ede91d1"
 
 # Observability: enable Cloudflare's built-in request tail without paying
 # extra. See dashboard → Workers → Logs.
