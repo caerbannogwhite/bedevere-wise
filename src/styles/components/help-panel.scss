@@ -411,24 +411,6 @@
     }
   }
 
-  &__about-deps {
-    list-style: none;
-    margin: 0;
-    padding: 0;
-    display: flex;
-    gap: 12px;
-    font-size: 12px;
-
-    a {
-      color: var(--cyan);
-      text-decoration: none;
-      &:hover { text-decoration: underline; }
-    }
-  }
-
-  // Vertical bullet list — used for the "What's new" highlights in the
-  // About tab. The horizontal `__about-deps` flex layout above is right
-  // for one-line links but squishes longer prose into 4 narrow columns.
   &__about-list {
     list-style: disc;
     margin: 0;

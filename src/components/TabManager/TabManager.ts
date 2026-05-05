@@ -814,13 +814,6 @@ export class TabManager {
 
       patchVisualizeSpec(spec as Record<string, unknown>, datasets);
 
-      if (import.meta.env.DEV) {
-        console.log("[VISUALIZE] spec:", spec);
-        for (const [name, rows] of Object.entries(datasets)) {
-          console.log(`[VISUALIZE] ${name}: ${rows.length} rows, sample:`, rows[0]);
-        }
-      }
-
       await this.addChartResult(spec, datasets);
       this.onQueryCompletedCallback?.({ elapsedMs: performance.now() - start });
     } catch (error) {
