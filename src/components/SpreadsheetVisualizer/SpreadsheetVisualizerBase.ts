@@ -41,6 +41,7 @@ import { minMax, setMeasureSignature, truncateWithEllipsis } from "./utils/drawi
 import { formatValueIntoScratch, getFormatOptions, makeFormattedScratch } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
+import { ResizeHandles } from "./overlays/ResizeHandles";
 
 export enum ToDraw {
   None = 0,
@@ -116,6 +117,10 @@ export class SpreadsheetVisualizerBase {
   // all draws (one allocation per spreadsheet, not per cell per frame).
   private cellScratch = makeFormattedScratch();
 
+  // Column-resize handles overlay (Phase C item 1). Mounted inside the
+  // canvas group so it shares the sticky-to-viewport coordinate frame.
+  protected resizeHandles!: ResizeHandles;
+
   constructor(container: HTMLElement, dataProvider: DataProvider, options: Partial<SpreadsheetOptions> = {}) {
     this.container = container;
 
@@ -153,6 +158,20 @@ export class SpreadsheetVisualizerBase {
     this.scrollContainer.appendChild(this.scrollSpacer);
     this.container.appendChild(this.scrollContainer);
 
+    // Resize-handle overlay — lazy-reads layout state through closures so
+    // it's safe to instantiate before this.options is set; first call
+    // happens after setData → calculateColumnWidths → relayout.
+    this.resizeHandles = new ResizeHandles(this.canvasGroup, {
+      getColWidths: () => this.colWidths,
+      getColOffsets: () => this.colOffsets,
+      getHeaderHeight: () => this.options.cellHeight,
+      getViewportHeight: () => this.viewportHeight,
+      getScrollX: () => this.scrollX,
+      getMinCellWidth: () => this.options.minCellWidth,
+      getRowHeaderWidth: () => this.options.rowHeaderWidth,
+      applyColumnResize: (col, newWidth) => this.applyColumnResize(col, newWidth),
+    });
+
     // Sync scroll position from native scrollbar to internal state.
     // The draw is deferred to the next animation frame via `scheduleDraw`
     // so a burst of scroll events in one frame collapses to a single
@@ -164,6 +183,7 @@ export class SpreadsheetVisualizerBase {
       this.preloadDataForScroll(this.scrollY);
       this.updateToDraw(ToDraw.Cells);
       this.scheduleDraw();
+      this.resizeHandles.relayout();
     });
 
     // Prevent the scroll container from handling navigation keys synchronously.
@@ -578,6 +598,24 @@ export class SpreadsheetVisualizerBase {
       (this.colWidths[this.colWidths.length - 1] || 0);
     this.totalScrollX = Math.max(0, this.totalWidth - this.viewportWidth);
     this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.viewportWidth)}px`;
+    // Handles ride on the layout — every offset shift moves them.
+    this.resizeHandles?.relayout();
+  }
+
+  /**
+   * Applied by the resize-handle overlay during a drag. Updates the column
+   * width in place, recomputes the layout, and schedules a redraw. The
+   * minCellWidth floor is also enforced inside the overlay so the user
+   * never sees the width drop below it during the drag.
+   */
+  protected applyColumnResize(col: number, newWidth: number): void {
+    if (col < 0 || col >= this.colWidths.length) return;
+    const clamped = Math.max(this.options.minCellWidth, newWidth);
+    if (this.colWidths[col] === clamped) return;
+    this.colWidths[col] = clamped;
+    this.recomputeLayoutFromWidths();
+    this.updateToDraw(ToDraw.Cells);
+    this.scheduleDraw();
   }
 
   protected calculateRowHeight() {

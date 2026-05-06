@@ -33,6 +33,30 @@
 #selection-canvas { z-index: 2; }
 #hover-canvas     { z-index: 1; }
 
+// Column-resize handles (Phase C item 1). Pool of 4px-wide hit strips
+// centred on each column's right edge. Invisible at rest — the cursor
+// change is the primary signal. Hover paints a faint accent line, drag
+// strengthens it, so the user always knows which column they're resizing.
+.spreadsheet-resize-handle {
+  background: transparent;
+  z-index: 3;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 1px;
+    width: 2px;
+    background: var(--blue);
+    opacity: 0;
+    transition: opacity 80ms ease;
+  }
+
+  &:hover::after { opacity: 0.45; }
+  &.is-dragging::after { opacity: 0.85; }
+}
+
 .tab-manager__dataset-container {
   #spreadsheet-container {
     width: 100% !important;
