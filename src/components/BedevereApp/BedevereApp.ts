@@ -28,6 +28,36 @@ import { StatFormatHandler } from "@/data/formats/StatFormatHandler";
 import { AliasManager } from "@/data/AliasManager";
 import { setStatsDuckFailureReason } from "@/data/statsDuckStatus";
 
+// Pre-filled SQL for the /demo route — see runDemo(). Kept verbatim from
+// the user's paste so the comments and formatting render exactly as
+// authored when the editor opens.
+const PENGUINS_DEMO_SQL = `-- Tighten categorical text into ENUMs (less memory, only valid values)
+-- and cast measurements to DOUBLE. TRY_CAST yields NULL on failure, so
+-- the string "NA" becomes a real NULL.
+CREATE OR REPLACE TABLE penguins_clean AS
+SELECT
+    species::ENUM ('Adelie', 'Gentoo', 'Chinstrap') AS species
+  , island::ENUM ('Dream', 'Torgersen', 'Biscoe') AS island
+  , sex::ENUM ('female', 'male') AS sex
+  , TRY_CAST(bill_length_mm AS DOUBLE) AS bill_length_mm
+  , TRY_CAST(bill_depth_mm AS DOUBLE) AS bill_depth_mm
+  , TRY_CAST(flipper_length_mm AS DOUBLE) AS flipper_length_mm
+  , TRY_CAST(body_mass_g AS DOUBLE) AS body_mass_g
+FROM penguins
+WHERE sex != 'NA'             -- drop rows with unknown sex
+ORDER BY species, island, sex
+;
+
+-- Scatter of bill depth vs bill length, coloured by species.
+VISUALIZE
+    bill_depth_mm AS x
+    , bill_length_mm AS y
+    , species AS color
+FROM penguins_clean
+DRAW point
+;
+`;
+
 export type BedevereAppTheme = "light" | "dark" | "auto";
 
 export type BedevereAppMessageType = "info" | "warning" | "error" | "success";
@@ -157,7 +187,10 @@ export class BedevereApp implements EventHandler {
       this.leftPanel.toggleMinimize();
     }
 
-    if (!settings.hasSeenOnboarding) {
+    const path = window.location.pathname.replace(/\/$/, "");
+    if (path === "/demo") {
+      await this.runDemo();
+    } else if (!settings.hasSeenOnboarding) {
       this.helpPanel.show("howto");
       settings.hasSeenOnboarding = true;
       this.persistenceService.saveAppSettings(settings);
@@ -1101,6 +1134,28 @@ export class BedevereApp implements EventHandler {
       const msg = error instanceof Error ? error.message : "unknown error";
       this.showMessage(`Failed to load sample: ${msg}`, "error");
       throw error;
+    }
+  }
+
+  /**
+   * `/demo` route: load the penguins sample, drop the cleanup +
+   * VISUALIZE script into the SQL editor, and leave it for the user to
+   * run with Ctrl+Enter. No auto-execute \u2014 landing on /demo should look
+   * like "the app set itself up for me", not "code ran without my
+   * consent".
+   */
+  private async runDemo(): Promise<void> {
+    try {
+      await this.loadSampleDataset();
+      const editor = this.tabManager.getSqlEditor();
+      if (editor && !editor.isExpanded()) {
+        this.tabManager.toggleSqlEditor();
+      }
+      editor?.setQuery(PENGUINS_DEMO_SQL);
+      editor?.focus();
+      this.showMessage("Demo loaded \u2014 press Ctrl+Enter to run", "info");
+    } catch (error) {
+      // loadSampleDataset already surfaced its own error; nothing to add.
     }
   }
 
