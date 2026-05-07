@@ -837,14 +837,20 @@ export class SpreadsheetVisualizerBase {
       // Reserve right-side space for sort arrow + filter dot + null-count
       // badge so the header text truncates BEFORE running into them.
       let sortDir: "asc" | "desc" | null = null;
+      let sortPosition: number | null = null;
+      let isMultiSort = false;
       let isFiltered = false;
       if (this.filterManager) {
         sortDir = this.filterManager.isColumnSorted(this.datasetName, column.name);
+        sortPosition = this.filterManager.getSortPosition(this.datasetName, column.name);
+        isMultiSort = this.filterManager.getSorts(this.datasetName).length > 1;
         isFiltered = this.filterManager.isColumnFiltered(this.datasetName, column.name);
       }
       const hasNullBadge = column.hasNulls === true;
+      const showSortPosition = sortDir !== null && isMultiSort && sortPosition !== null;
       let indicatorSpace = 0;
       if (sortDir) indicatorSpace += 16;
+      if (showSortPosition) indicatorSpace += 12;
       if (isFiltered) indicatorSpace += 10;
       if (hasNullBadge) indicatorSpace += 10;
 
@@ -876,6 +882,20 @@ export class SpreadsheetVisualizerBase {
         ctx.closePath();
         ctx.fill();
         indicatorRight -= 16;
+
+        // Multi-sort position number (1, 2, 3, ...) sits to the left of
+        // the arrow. Only rendered when the chain has 2+ keys — a lone
+        // "1" superscript next to a single arrow is just clutter.
+        if (showSortPosition) {
+          ctx.save();
+          ctx.font = `9px ${o.fontFamily}`;
+          ctx.fillStyle = o.headerTextColor;
+          ctx.globalAlpha = 0.7;
+          ctx.textAlign = "right";
+          ctx.fillText(String(sortPosition), Math.round(indicatorRight), Math.round(headerY));
+          ctx.restore();
+          indicatorRight -= 12;
+        }
       }
 
       if (isFiltered) {

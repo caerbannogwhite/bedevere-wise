@@ -60,6 +60,25 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
       if (!cell) return false;
       const { col } = cell;
 
+      // Sort-arrow click zone: rightmost slice of the column header.
+      // Plain click cycles the column's sort (asc -> desc -> off);
+      // shift-click does the same in multi-key mode (preserves the
+      // rest of the chain). Anywhere else on the header keeps the
+      // selection behaviour, so shift-click on the header text still
+      // extends the column-selection range.
+      if (this.filterManager && col >= 0 && col < this.columns.length) {
+        const colRight = this.colOffsets[col] + this.colWidths[col] - this.scrollX;
+        const sortZoneWidth = 22;
+        if (x >= colRight - sortZoneWidth) {
+          this.filterManager.cycleSort(
+            this.datasetName,
+            this.columns[col].name,
+            event.shiftKey,
+          );
+          return true;
+        }
+      }
+
       await this.selectColumn(col, {
         shift: event.shiftKey,
         ctrl: event.ctrlKey || event.metaKey,
