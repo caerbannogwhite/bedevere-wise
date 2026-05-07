@@ -71,3 +71,14 @@ export interface ICellSelection {
   values: any[][];
   formatted: string[][];
 }
+
+/**
+ * Payload for "user wants to inspect this cell" events (double-click on
+ * a complex-typed cell). Carries everything the inspector popover needs
+ * so subscribers don't depend on the selection-change pipeline timing.
+ */
+export interface CellInspectInfo {
+  columnName: string;
+  kind: import("../../data/types").ComplexKind;
+  value: any;
+}

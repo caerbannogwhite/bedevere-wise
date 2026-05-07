@@ -95,6 +95,7 @@ export class TabManager {
   private duckDBService: DuckDBService | null = null;
   private eventDispatcher?: EventDispatcher;
   private onCellSelectionCallback?: (cellSelection?: ICellSelection) => void;
+  private onCellInspectCallback?: (info: import("../SpreadsheetVisualizer/types").CellInspectInfo) => void;
   private onCloseTabCallback?: () => void;
   private onSelectCallback?: (dataset: DataProvider) => void;
   private onChartActivateCallback?: (chartName: string) => void;
@@ -225,6 +226,9 @@ export class TabManager {
     // activations.
     if (this.onCellSelectionCallback) {
       spreadsheetVisualizer.addOnSelectionChangeSubscription(this.onCellSelectionCallback);
+    }
+    if (this.onCellInspectCallback) {
+      spreadsheetVisualizer.addOnCellInspectRequestedSubscription(this.onCellInspectCallback);
     }
 
     const tab: DatasetTab = {
@@ -380,6 +384,15 @@ export class TabManager {
     for (const tab of this.tabs) {
       if (tab.kind === "dataset") {
         tab.spreadsheetVisualizer.addOnSelectionChangeSubscription(callback);
+      }
+    }
+  }
+
+  public setOnCellInspectCallback(callback: (info: import("../SpreadsheetVisualizer/types").CellInspectInfo) => void): void {
+    this.onCellInspectCallback = callback;
+    for (const tab of this.tabs) {
+      if (tab.kind === "dataset") {
+        tab.spreadsheetVisualizer.addOnCellInspectRequestedSubscription(callback);
       }
     }
   }

@@ -5,6 +5,7 @@ import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisua
 import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";
 import { keymapService } from "../../data/KeymapService";
 import { persistenceService } from "../../data/PersistenceService";
+import { getComplexKind, isComplexType } from "../../data/types";
 
 export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelection implements FocusableComponent {
   private _isFocused: boolean = false;
@@ -180,6 +181,44 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     this.updateToDraw(ToDraw.CellHover);
 
     this.draw();
+    return true;
+  }
+
+  /**
+   * Double-click on a body cell whose column carries a complex value
+   * (STRUCT / LIST / MAP / JSON / UNION) opens the cell-value inspector
+   * popover directly. Non-complex cells get no special treatment — the
+   * preceding mousedown pair has already moved the cell selection.
+   *
+   * The cell payload is read here and passed through the
+   * `onCellInspectRequested` callback so the popover doesn't have to
+   * race the asynchronous selection-change notification path for its
+   * `lastComplexCell` to be in sync.
+   */
+  public async handleDoubleClick(event: MouseEvent): Promise<boolean> {
+    if (!this._isFocused) return false;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (x < 0 || y < 0 || x > this.viewportWidth || y > this.viewportHeight) return false;
+
+    const cell = this.getCellAtPosition(x, y);
+    if (!cell || cell.col < 0 || cell.row < 1) return false;
+
+    const column = this.columns[cell.col];
+    if (!column || !isComplexType(column.dataType)) return false;
+
+    const kind = getComplexKind(column.dataType);
+    if (!kind) return false; // belt-and-braces: isComplexType guarantees non-null, but the
+    // ComplexKind | null shape forces a check.
+
+    const value = await this.cache.getValue(cell.row - 1, cell.col);
+    this.notifyCellInspectRequested({
+      columnName: column.name,
+      kind,
+      value,
+    });
     return true;
   }
 

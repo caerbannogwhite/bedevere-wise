@@ -1,4 +1,4 @@
-import { ICellSelection, SpreadsheetOptions } from "./types";
+import { CellInspectInfo, ICellSelection, SpreadsheetOptions } from "./types";
 import { DataProvider, Column } from "../../data/types";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
 import { getFormattedValueAndStyle } from "./utils/formatting";
@@ -772,6 +772,23 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   public removeOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
     this.onSelectionChange = this.onSelectionChange.filter((cb) => cb !== callback);
+  }
+
+  // Inspect-requested fires on user-driven double-click of a complex
+  // cell. Carries the cell's payload so subscribers don't have to race
+  // against the selection-change notification path.
+  private onCellInspectRequested: ((info: CellInspectInfo) => void)[] = [];
+
+  public addOnCellInspectRequestedSubscription(callback: (info: CellInspectInfo) => void): void {
+    this.onCellInspectRequested.push(callback);
+  }
+
+  public removeOnCellInspectRequestedSubscription(callback: (info: CellInspectInfo) => void): void {
+    this.onCellInspectRequested = this.onCellInspectRequested.filter((cb) => cb !== callback);
+  }
+
+  protected notifyCellInspectRequested(info: CellInspectInfo): void {
+    this.onCellInspectRequested.forEach((cb) => cb(info));
   }
 
   public getSelectedColumns(): Column[] {
