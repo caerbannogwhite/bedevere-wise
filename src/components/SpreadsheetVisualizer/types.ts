@@ -1,4 +1,4 @@
-import { Column } from "@/data/types";
+import { Column, ComplexKind } from "@/data/types";
 
 export interface SpreadsheetOptions {
   // Viewport options
@@ -70,4 +70,15 @@ export interface ICellSelection {
   columns: Column[];
   values: any[][];
   formatted: string[][];
+}
+
+/**
+ * Payload for "user wants to inspect this cell" events (double-click on
+ * a complex-typed cell). Carries everything the inspector popover needs
+ * so subscribers don't depend on the selection-change pipeline timing.
+ */
+export interface CellInspectInfo {
+  columnName: string;
+  kind: ComplexKind;
+  value: any;
 }

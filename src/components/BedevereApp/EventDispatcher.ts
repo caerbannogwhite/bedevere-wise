@@ -141,6 +141,9 @@ export class EventDispatcher implements IEventDispatcher {
         case "contextmenu":
           handled = (await handler.handleContextMenu?.(event as MouseEvent)) === true;
           break;
+        case "dblclick":
+          handled = (await handler.handleDoubleClick?.(event as MouseEvent)) === true;
+          break;
         case "keydown":
           handled = (await handler.handleKeyDown?.(event as KeyboardEvent)) === true;
           break;
@@ -192,6 +195,7 @@ export class EventDispatcher implements IEventDispatcher {
     document.addEventListener("mouseleave", (e) => this.dispatchEvent(e).catch(console.error));
     document.addEventListener("wheel", (e) => this.dispatchEvent(e).catch(console.error), { passive: false });
     document.addEventListener("contextmenu", (e) => this.dispatchEvent(e).catch(console.error));
+    document.addEventListener("dblclick", (e) => this.dispatchEvent(e).catch(console.error));
 
     // Keyboard events
     document.addEventListener("keydown", (e) => this.dispatchEvent(e));

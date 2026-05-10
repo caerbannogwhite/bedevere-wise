@@ -8,6 +8,7 @@ export interface EventHandler {
   handleMouseLeave?(event: MouseEvent): Promise<boolean>;
   handleWheel?(event: WheelEvent): Promise<boolean>;
   handleContextMenu?(event: MouseEvent): Promise<boolean>;
+  handleDoubleClick?(event: MouseEvent): Promise<boolean>;
 
   // Keyboard events
   handleKeyDown?(event: KeyboardEvent): Promise<boolean>;

@@ -85,9 +85,63 @@ export class ColumnFilterManager {
   }
 
   public setSort(datasetName: string, sort: SortConfig): void {
-    // Replace all sorts with a single sort (for now, single-column sort)
+    // Replace all sorts with a single sort. Used by the column-stats
+    // panel's explicit asc/desc buttons, which always set a single key.
     this.sorts.set(datasetName, [sort]);
     this.notifyChange(datasetName);
+  }
+
+  /**
+   * Header-arrow click entry point. Cycles the column's sort state:
+   *   not-sorted -> asc -> desc -> not-sorted
+   *
+   * `multi` (shift held) preserves the rest of the sort chain so the
+   * column slots in/out of a multi-key ORDER BY in place. When false,
+   * the click resets all other sorts and treats this column as the
+   * sole key.
+   */
+  public cycleSort(datasetName: string, columnName: string, multi: boolean): void {
+    const current = this.sorts.get(datasetName) || [];
+    const idx = current.findIndex((s) => s.columnName === columnName);
+    const dir = idx === -1 ? null : current[idx].direction;
+
+    const next: "asc" | "desc" | null =
+      dir === null ? "asc" : dir === "asc" ? "desc" : null;
+
+    if (!multi) {
+      if (next === null) {
+        this.sorts.delete(datasetName);
+      } else {
+        this.sorts.set(datasetName, [{ columnName, direction: next }]);
+      }
+      this.notifyChange(datasetName);
+      return;
+    }
+
+    if (next === null) {
+      const updated = current.filter((_, i) => i !== idx);
+      if (updated.length === 0) this.sorts.delete(datasetName);
+      else this.sorts.set(datasetName, updated);
+    } else if (idx === -1) {
+      this.sorts.set(datasetName, [...current, { columnName, direction: next }]);
+    } else {
+      const updated = [...current];
+      updated[idx] = { columnName, direction: next };
+      this.sorts.set(datasetName, updated);
+    }
+    this.notifyChange(datasetName);
+  }
+
+  /**
+   * 1-indexed position of the column in the sort chain, or `null` if
+   * the column isn't sorted. Used by the header renderer to draw the
+   * superscript number (1, 2, 3, ...) when a multi-key sort is active.
+   */
+  public getSortPosition(datasetName: string, columnName: string): number | null {
+    const sorts = this.sorts.get(datasetName);
+    if (!sorts) return null;
+    const idx = sorts.findIndex((s) => s.columnName === columnName);
+    return idx === -1 ? null : idx + 1;
   }
 
   public removeSort(datasetName: string, columnName: string): void {

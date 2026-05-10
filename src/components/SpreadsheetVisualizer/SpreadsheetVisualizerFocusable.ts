@@ -5,6 +5,7 @@ import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisua
 import { SpreadsheetVisualizerSelection } from "./SpreadsheetVisualizerSelection";
 import { keymapService } from "../../data/KeymapService";
 import { persistenceService } from "../../data/PersistenceService";
+import { getComplexKind, isComplexType } from "../../data/types";
 
 export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelection implements FocusableComponent {
   private _isFocused: boolean = false;
@@ -59,7 +60,44 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
       if (!cell) return false;
       const { col } = cell;
 
-      await this.selectColumn(col);
+      // Sort-arrow click zone: rightmost slice of the column header.
+      // Plain click cycles the column's sort (asc -> desc -> off);
+      // shift-click does the same in multi-key mode (preserves the
+      // rest of the chain). Anywhere else on the header keeps the
+      // selection behaviour, so shift-click on the header text still
+      // extends the column-selection range.
+      if (this.filterManager && col >= 0 && col < this.columns.length) {
+        const colRight = this.colOffsets[col] + this.colWidths[col] - this.scrollX;
+        const sortZoneWidth = 22;
+        if (x >= colRight - sortZoneWidth) {
+          this.filterManager.cycleSort(
+            this.datasetName,
+            this.columns[col].name,
+            event.shiftKey,
+          );
+          return true;
+        }
+      }
+
+      await this.selectColumn(col, {
+        shift: event.shiftKey,
+        ctrl: event.ctrlKey || event.metaKey,
+      });
+    }
+
+    // Row gutter (left-side index strip, excluding the top-left corner
+    // which is part of the column-header zone). Click selects, shift
+    // extends from the last-clicked row, ctrl/cmd toggles.
+    else if (x <= this.options.rowHeaderWidth && y >= this.options.cellHeight) {
+      const cell = this.getCellAtPosition(x, y);
+      if (cell && cell.row >= 1 && cell.row <= this.totalRows) {
+        await this.selectRow(cell.row, {
+          shift: event.shiftKey,
+          ctrl: event.ctrlKey || event.metaKey,
+        });
+        await this.draw();
+        return true;
+      }
     }
 
     // Handle cell selection
@@ -162,6 +200,45 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
     this.updateToDraw(ToDraw.CellHover);
 
     this.draw();
+    return true;
+  }
+
+  /**
+   * Double-click on a body cell whose column carries a complex value
+   * (STRUCT / LIST / MAP / JSON / UNION) opens the cell-value inspector
+   * popover directly. Non-complex cells get no special treatment — the
+   * preceding mousedown pair has already moved the cell selection.
+   *
+   * The cell payload is read here and passed through the
+   * `onCellInspectRequested` callback so the popover doesn't have to
+   * race the asynchronous selection-change notification path for its
+   * `lastComplexCell` to be in sync.
+   */
+  public async handleDoubleClick(event: MouseEvent): Promise<boolean> {
+    if (!this._isFocused) return false;
+
+    const rect = this.canvas.getBoundingClientRect();
+    const x = event.clientX - rect.left;
+    const y = event.clientY - rect.top;
+    if (x < 0 || y < 0 || x > this.viewportWidth || y > this.viewportHeight) return false;
+
+    const cell = this.getCellAtPosition(x, y);
+    if (!cell || cell.col < 0 || cell.row < 1) return false;
+
+    const column = this.columns[cell.col];
+    if (!column || !isComplexType(column.dataType)) return false;
+
+    // isComplexType already screened the column, but getComplexKind
+    // returns ComplexKind | null so TS still needs the check.
+    const kind = getComplexKind(column.dataType);
+    if (!kind) return false;
+
+    const value = await this.cache.getValue(cell.row - 1, cell.col);
+    this.notifyCellInspectRequested({
+      columnName: column.name,
+      kind,
+      value,
+    });
     return true;
   }
 

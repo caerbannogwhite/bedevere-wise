@@ -1248,6 +1248,9 @@ export class BedevereApp implements EventHandler {
       this.statusBar.updatePosition(cellSelection);
       this.statusBar.updateCellValue(cellSelection);
     });
+    this.tabManager.setOnCellInspectCallback((info) => {
+      this.statusBar.openCellPopover(info);
+    });
   }
 
   /**

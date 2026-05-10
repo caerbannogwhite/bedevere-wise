@@ -41,6 +41,7 @@ import { minMax, setMeasureSignature, truncateWithEllipsis } from "./utils/drawi
 import { formatValueIntoScratch, getFormatOptions, makeFormattedScratch } from "./utils/formatting";
 import { SpreadsheetCache } from "./SpreadsheetCache";
 import { ColumnFilterManager } from "../../data/ColumnFilterManager";
+import { ResizeHandles } from "./overlays/ResizeHandles";
 
 export enum ToDraw {
   None = 0,
@@ -116,6 +117,10 @@ export class SpreadsheetVisualizerBase {
   // all draws (one allocation per spreadsheet, not per cell per frame).
   private cellScratch = makeFormattedScratch();
 
+  // Column-resize handles overlay (Phase C item 1). Mounted inside the
+  // canvas group so it shares the sticky-to-viewport coordinate frame.
+  protected resizeHandles!: ResizeHandles;
+
   constructor(container: HTMLElement, dataProvider: DataProvider, options: Partial<SpreadsheetOptions> = {}) {
     this.container = container;
 
@@ -153,6 +158,20 @@ export class SpreadsheetVisualizerBase {
     this.scrollContainer.appendChild(this.scrollSpacer);
     this.container.appendChild(this.scrollContainer);
 
+    // Resize-handle overlay — lazy-reads layout state through closures so
+    // it's safe to instantiate before this.options is set; first call
+    // happens after setData → calculateColumnWidths → relayout.
+    this.resizeHandles = new ResizeHandles(this.canvasGroup, {
+      getColWidths: () => this.colWidths,
+      getColOffsets: () => this.colOffsets,
+      getHeaderHeight: () => this.options.cellHeight,
+      getViewportHeight: () => this.viewportHeight,
+      getScrollX: () => this.scrollX,
+      getMinCellWidth: () => this.options.minCellWidth,
+      getRowHeaderWidth: () => this.options.rowHeaderWidth,
+      applyColumnResize: (col, newWidth) => this.applyColumnResize(col, newWidth),
+    });
+
     // Sync scroll position from native scrollbar to internal state.
     // The draw is deferred to the next animation frame via `scheduleDraw`
     // so a burst of scroll events in one frame collapses to a single
@@ -164,6 +183,7 @@ export class SpreadsheetVisualizerBase {
       this.preloadDataForScroll(this.scrollY);
       this.updateToDraw(ToDraw.Cells);
       this.scheduleDraw();
+      this.resizeHandles.relayout();
     });
 
     // Prevent the scroll container from handling navigation keys synchronously.
@@ -530,6 +550,9 @@ export class SpreadsheetVisualizerBase {
     const COLS_PER_CHUNK = 16;
     const total = this.columns.length;
 
+    const isMultiSort =
+      this.filterManager !== null && this.filterManager.getSorts(this.datasetName).length > 1;
+
     for (let chunkStart = 0; chunkStart < total; chunkStart += COLS_PER_CHUNK) {
       const chunkEnd = Math.min(chunkStart + COLS_PER_CHUNK, total);
       for (let i = chunkStart; i < chunkEnd; i++) {
@@ -539,7 +562,13 @@ export class SpreadsheetVisualizerBase {
         // Widen columns with active sort/filter to fit indicators.
         if (this.filterManager) {
           let indicatorSpace = 0;
-          if (this.filterManager.isColumnSorted(this.datasetName, col.name)) indicatorSpace += 16;
+          if (this.filterManager.isColumnSorted(this.datasetName, col.name)) {
+            indicatorSpace += 16;
+            // Multi-sort: the position-number superscript adds another
+            // ~12px to the right-side indicator stack. Without this the
+            // header text truncates on top of the number.
+            if (isMultiSort) indicatorSpace += 12;
+          }
           if (this.filterManager.isColumnFiltered(this.datasetName, col.name)) indicatorSpace += 10;
           if (indicatorSpace > 0) {
             col.widthPx = Math.min(col.widthPx + indicatorSpace, this.options.maxCellWidth);
@@ -555,8 +584,13 @@ export class SpreadsheetVisualizerBase {
 
       // Yield between chunks so input / paint can run. The first chunk
       // runs without yielding so the very first frame has reasonable
-      // widths.
+      // widths. The Cells-level bump ensures the rAF-scheduled draw
+      // actually repaints the cell canvas with the chunk's new widths
+      // — without it, the next draw sees toDraw=None and no-ops, so
+      // chunks 2+ silently mutate `colOffsets/colWidths` without ever
+      // hitting the screen.
       if (chunkEnd < total) {
+        this.updateToDraw(ToDraw.Cells);
         this.scheduleDraw();
         await this.yieldToBrowser();
       }
@@ -578,6 +612,24 @@ export class SpreadsheetVisualizerBase {
       (this.colWidths[this.colWidths.length - 1] || 0);
     this.totalScrollX = Math.max(0, this.totalWidth - this.viewportWidth);
     this.scrollSpacer.style.width = `${Math.max(this.totalWidth, this.viewportWidth)}px`;
+    // Handles ride on the layout — every offset shift moves them.
+    this.resizeHandles?.relayout();
+  }
+
+  /**
+   * Applied by the resize-handle overlay during a drag. Updates the column
+   * width in place, recomputes the layout, and schedules a redraw. The
+   * minCellWidth floor is also enforced inside the overlay so the user
+   * never sees the width drop below it during the drag.
+   */
+  protected applyColumnResize(col: number, newWidth: number): void {
+    if (col < 0 || col >= this.colWidths.length) return;
+    const clamped = Math.max(this.options.minCellWidth, newWidth);
+    if (this.colWidths[col] === clamped) return;
+    this.colWidths[col] = clamped;
+    this.recomputeLayoutFromWidths();
+    this.updateToDraw(ToDraw.Cells);
+    this.scheduleDraw();
   }
 
   protected calculateRowHeight() {
@@ -799,14 +851,20 @@ export class SpreadsheetVisualizerBase {
       // Reserve right-side space for sort arrow + filter dot + null-count
       // badge so the header text truncates BEFORE running into them.
       let sortDir: "asc" | "desc" | null = null;
+      let sortPosition: number | null = null;
+      let isMultiSort = false;
       let isFiltered = false;
       if (this.filterManager) {
         sortDir = this.filterManager.isColumnSorted(this.datasetName, column.name);
+        sortPosition = this.filterManager.getSortPosition(this.datasetName, column.name);
+        isMultiSort = this.filterManager.getSorts(this.datasetName).length > 1;
         isFiltered = this.filterManager.isColumnFiltered(this.datasetName, column.name);
       }
       const hasNullBadge = column.hasNulls === true;
+      const showSortPosition = sortDir !== null && isMultiSort && sortPosition !== null;
       let indicatorSpace = 0;
       if (sortDir) indicatorSpace += 16;
+      if (showSortPosition) indicatorSpace += 12;
       if (isFiltered) indicatorSpace += 10;
       if (hasNullBadge) indicatorSpace += 10;
 
@@ -838,6 +896,20 @@ export class SpreadsheetVisualizerBase {
         ctx.closePath();
         ctx.fill();
         indicatorRight -= 16;
+
+        // Multi-sort position number (1, 2, 3, ...) sits to the left of
+        // the arrow. Only rendered when the chain has 2+ keys — a lone
+        // "1" superscript next to a single arrow is just clutter.
+        if (showSortPosition) {
+          ctx.save();
+          ctx.font = `9px ${o.fontFamily}`;
+          ctx.fillStyle = o.headerTextColor;
+          ctx.globalAlpha = 0.7;
+          ctx.textAlign = "right";
+          ctx.fillText(String(sortPosition), Math.round(indicatorRight), Math.round(headerY));
+          ctx.restore();
+          indicatorRight -= 12;
+        }
       }
 
       if (isFiltered) {
