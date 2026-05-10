@@ -43,10 +43,30 @@ export class FileImportService {
       throw new Error(`No handler registered for file type: ${fileType}`);
     }
 
-    const name = tableName ?? file.name.replace(/\.[^/.]+$/, "");
+    const preferred = tableName ?? file.name.replace(/\.[^/.]+$/, "");
+    const name = await this.resolveUniqueTableName(preferred);
 
     await handler.import(file, name, this.duckDBService, options);
     return new DuckDBDataProvider(this.duckDBService, name, file.name);
+  }
+
+  /**
+   * Pick a DuckDB table name that doesn't clash with anything already
+   * registered. Same-named files in different sub-folders (a common
+   * shape in clinical-data trees) used to collide on the basename and
+   * either fail or silently overwrite the earlier import; now the
+   * later one becomes `<base>__2`, `<base>__3`, ...
+   *
+   * The user can rename via `.alias <auto-name> <preferred>` after the
+   * fact (which calls DuckDB's real ALTER TABLE … RENAME, so existing
+   * SQL keeps working).
+   */
+  private async resolveUniqueTableName(preferred: string): Promise<string> {
+    const taken = new Set(await this.duckDBService.listTables());
+    if (!taken.has(preferred)) return preferred;
+    let i = 2;
+    while (taken.has(`${preferred}__${i}`)) i++;
+    return `${preferred}__${i}`;
   }
 
   public async getSheetNames(file: File): Promise<string[]> {
