@@ -1476,13 +1476,15 @@ export class HelpPanel {
       <p class="help-panel__about-version">v${this.options.version}</p>
       <p class="help-panel__about-description">Open SAS, SPSS, Stata, Parquet, Excel, and CSV files in your browser. Query them with SQL, plot with <code>VISUALIZE</code> — no install, no upload.</p>
       <div class="help-panel__about-section">
-        <h3 class="help-panel__about-section-title">What's new in 0.9</h3>
+        <h3 class="help-panel__about-section-title">What's new in 0.10</h3>
         <ul class="help-panel__about-list">
-          <li>Charts via <code>VISUALIZE … DRAW &lt;mark&gt;</code> (powered by the
-            <a href="https://github.com/caerbannogwhite/the-stats-duck" target="_blank" rel="noopener noreferrer">Stats Duck</a> DuckDB extension + Vega-Lite).</li>
-          <li>Multi-statement SQL scripts with directives. <code>.no-output</code> suppresses the next statement's tab; <code>CREATE TABLE</code> auto-opens the new relation.</li>
-          <li>Editor polish: tokyonight syntax highlighting, GGSQL keywords + DuckDB-discovered functions in autocomplete, <kbd>Tab</kbd> inserts tabs, <kbd>Ctrl</kbd>+<kbd>Enter</kbd> runs once.</li>
-          <li><code>.export &lt;png|svg&gt;</code> works on chart tabs; <code>.alias</code> renames a dataset via DuckDB <code>ALTER TABLE</code>.</li>
+          <li>Drag the right edge of any column header to <strong>resize the column</strong>; click the right-edge sort-arrow to <strong>sort</strong> (shift-click for multi-key, with <code>1</code> / <code>2</code> superscripts on each header).</li>
+          <li>Click a row index to select the <strong>whole row</strong> (shift to extend, ctrl/cmd to toggle). Selection survives sort and filter.</li>
+          <li><strong>Double-click a STRUCT / LIST / MAP / JSON cell</strong> to open the inspector popover, even after dismissing the auto-open.</li>
+          <li><strong>Recent folders</strong> shortcut in the Import tab — pick once, reopen with one click (Chrome / Edge).</li>
+          <li><code>.export</code> with no selection now exports the <strong>whole dataset</strong>; complex cells serialise as full JSON in CSV / TSV / HTML / Markdown (was: truncated <code>{ k: v, … N more }</code> preview).</li>
+          <li>Same-named files from different folders import as <code>study</code>, <code>study__2</code>, <code>study__3</code>; rename via <code>.alias</code>.</li>
+          <li>Configurable CSV / TSV quote-escape (<code>""</code> RFC 4180 or <code>\"</code> JSON-style) in Settings → "Copy &amp; export format".</li>
         </ul>
       </div>
       <div class="help-panel__about-section">
