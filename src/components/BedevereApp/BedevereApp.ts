@@ -314,6 +314,14 @@ export class BedevereApp implements EventHandler {
       onShowMessage: (msg, type) => this.showMessage(msg, type),
       onBrowseFolder: () => this.leftPanel?.openFolderPicker(),
       onFilesReceived: (files) => this.leftPanel?.addFilesFromDrop(files, true),
+      getRecentFolders: () => {
+        // Only surface the recents shortcut on browsers where the FSA
+        // directory handle could be persisted. The webkitdirectory
+        // fallback can't re-open a folder without a fresh user pick.
+        if (typeof window === "undefined" || !("showDirectoryPicker" in window)) return [];
+        return this.persistenceService.getRecentFolders().map((e) => ({ id: e.id, name: e.name }));
+      },
+      onRecentFolderClick: (id: string) => this.leftPanel?.openRecentFolder(id),
       supportedFormats: this.fileImportService.getSupportedExtensions(),
       initialTheme: this.persistenceService.loadAppSettings().theme ?? "auto",
       onThemeChange: (theme) => {
@@ -332,12 +340,14 @@ export class BedevereApp implements EventHandler {
         return {
           delimiter: s.copyDelimiter ?? "tab",
           includeHeader: s.copyIncludeHeader ?? true,
+          quoteEscape: s.csvQuoteEscape ?? "double",
         };
       },
       setCopyOptions: (opts) => {
         const s = this.persistenceService.loadAppSettings();
         s.copyDelimiter = opts.delimiter;
         s.copyIncludeHeader = opts.includeHeader;
+        s.csvQuoteEscape = opts.quoteEscape;
         this.persistenceService.saveAppSettings(s);
       },
       getFormatOptions: () => {
@@ -1163,24 +1173,33 @@ export class BedevereApp implements EventHandler {
     const activeDataset = this.tabManager.getActiveDatasetTab();
 
     if (activeDataset) {
-      const selection = await activeDataset.spreadsheetVisualizer.getSelection();
+      // No selection -> fall back to the whole dataset. Matches the
+      // mental model "running .export with nothing selected exports the
+      // whole table"; an explicit row/col/cell selection still scopes
+      // the export down.
+      let selection = await activeDataset.spreadsheetVisualizer.getSelection();
       if (!selection) {
-        this.showMessage("No selection to export", "warning");
+        selection = await activeDataset.spreadsheetVisualizer.exportFullDataset();
+      }
+      if (!selection) {
+        this.showMessage("Nothing to export (dataset is empty)", "warning");
         return;
       }
 
       const { includeHeader, includeIndex, format } = params || {};
       const datasetName = activeDataset.metadata.name;
+      const settings = this.persistenceService.loadAppSettings();
+      const quoteEscape = settings.csvQuoteEscape ?? "double";
 
       let ext = "";
       switch (format) {
         case "csv":
           ext = "csv";
-          await exportAsText(selection, includeHeader, includeIndex, ",", "\n", datasetName);
+          await exportAsText(selection, includeHeader, includeIndex, ",", "\n", datasetName, quoteEscape);
           break;
         case "tsv":
           ext = "tsv";
-          await exportAsText(selection, includeHeader, includeIndex, "\t", "\n", datasetName);
+          await exportAsText(selection, includeHeader, includeIndex, "\t", "\n", datasetName, quoteEscape);
           break;
         case "html":
           ext = "html";
@@ -1247,6 +1266,9 @@ export class BedevereApp implements EventHandler {
       this.statusBar.updateSelection(cellSelection);
       this.statusBar.updatePosition(cellSelection);
       this.statusBar.updateCellValue(cellSelection);
+    });
+    this.tabManager.setOnCellInspectCallback((info) => {
+      this.statusBar.openCellPopover(info);
     });
   }
 

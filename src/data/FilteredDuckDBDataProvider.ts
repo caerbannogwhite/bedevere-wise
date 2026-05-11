@@ -3,6 +3,7 @@ import { Column, ColumnStats, DataProvider, DatasetMetadata, normalizeDuckDBType
 import { ColumnFilterManager } from "./ColumnFilterManager";
 import { unwrapArrowValue } from "./arrowUnwrap";
 import { parseDuckDBType, TypeNode } from "./duckdbTypeParser";
+import { quoteIdent } from "./sqlIdent";
 
 export class FilteredDuckDBDataProvider implements DataProvider {
   private name: string;
@@ -113,11 +114,63 @@ export class FilteredDuckDBDataProvider implements DataProvider {
     );
   }
 
+  /**
+   * Unfiltered stats — drives the filter UI's value list and slider
+   * bounds. The categorical filter needs to render checkboxes for the
+   * categories the user *deselected*, otherwise they can't add them
+   * back; numeric / temporal sliders need the unfiltered min/max as
+   * outer bounds for the same reason.
+   */
   public async getColumnStats(column: string | Column): Promise<ColumnStats | null> {
-    // Delegate to the original table's stats (filters don't change column-level stats display)
     const { DuckDBDataProvider } = await import("./DuckDBDataProvider");
-    const originalProvider = new DuckDBDataProvider(this.duckDBService, this.sourceTableName, this.fileName);
-    return originalProvider.getColumnStats(column);
+    const sourceProvider = new DuckDBDataProvider(this.duckDBService, this.sourceTableName, this.fileName);
+    return sourceProvider.getColumnStats(column);
+  }
+
+  /**
+   * Filtered stats — runs the existing stats queries against a temp
+   * view that applies the same WHERE clause the cell grid uses. Drives
+   * the side-panel display (mean / median / counts / histogram). Sort
+   * isn't relevant for aggregates so we skip the ORDER BY.
+   *
+   * The view name is random-suffixed per call so concurrent stats
+   * fetches (the common pattern: showStats fires in response to a
+   * selection change that's racing the filter-change reinitialize)
+   * don't drop each other's views mid-query. Best-effort cleanup in
+   * `finally`; orphan temp views auto-clear on session end.
+   */
+  public async getColumnStatsFiltered(column: string | Column): Promise<ColumnStats | null> {
+    const { DuckDBDataProvider } = await import("./DuckDBDataProvider");
+    const whereClause = this.filterManager.buildWhereClause(this.name);
+
+    if (!whereClause) {
+      const sourceProvider = new DuckDBDataProvider(this.duckDBService, this.sourceTableName, this.fileName);
+      return sourceProvider.getColumnStats(column);
+    }
+
+    // Regular (non-TEMP) view: `DuckDBService.executeQuery` opens and
+    // closes a fresh connection per call, and TEMP views are
+    // connection-scoped — they'd evaporate between the CREATE and the
+    // first stats query. Database-scoped views survive that, at the
+    // cost of brief visibility in SHOW TABLES while the stats fetch
+    // is in flight. The random suffix keeps concurrent callers from
+    // tripping over each other.
+    const viewName = `__bedevere_stats_${this.name}_${Math.random().toString(36).slice(2, 10)}`;
+    try {
+      await this.duckDBService.executeQuery(
+        `CREATE OR REPLACE VIEW ${quoteIdent(viewName)} AS ` +
+          `SELECT * FROM ${quoteIdent(this.sourceTableName)} ${whereClause}`,
+      );
+      const tempProvider = new DuckDBDataProvider(this.duckDBService, viewName, this.fileName);
+      return await tempProvider.getColumnStats(column);
+    } finally {
+      try {
+        await this.duckDBService.executeQuery(`DROP VIEW IF EXISTS ${quoteIdent(viewName)}`);
+      } catch {
+        // best-effort cleanup; an orphan view is harmless beyond
+        // showing up once in SHOW TABLES until the page reloads
+      }
+    }
   }
 
   public getSourceTableName(): string {

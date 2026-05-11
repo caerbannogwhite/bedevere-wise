@@ -1,7 +1,7 @@
-import { ICellSelection, SpreadsheetOptions } from "./types";
+import { CellInspectInfo, ICellSelection, SpreadsheetOptions } from "./types";
 import { DataProvider, Column } from "../../data/types";
 import { ColumnStatsVisualizer } from "../ColumnStatsVisualizer/ColumnStatsVisualizer";
-import { getFormattedValueAndStyle } from "./utils/formatting";
+import { formatForExport, getFormattedValueAndStyle } from "./utils/formatting";
 import { SpreadsheetVisualizerBase, ToDraw, MouseState } from "./SpreadsheetVisualizerBase";
 import {
   DEFAULT_IMAGE_SMOOTHING_ENABLED,
@@ -21,9 +21,17 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   protected dragStartY = 0;
   protected lastScrollX = 0;
   protected lastScrollY = 0;
-  protected singleColSelectionMode: boolean = true;
   protected selectedRows: number[] = [];
   protected selectedCols: number[] = [];
+
+  // Anchor for shift-extend on row-gutter clicks. Set on every plain or
+  // ctrl click; shift-click extends from this anchor without overwriting
+  // it, so successive shift-clicks pivot around the same origin (Excel
+  // behaviour). Null until the user has clicked at least once.
+  protected lastRowAnchor: number | null = null;
+
+  // Same anchor concept for column-header shift-extend.
+  protected lastColAnchor: number | null = null;
 
   // Stats visualizer (now lives in the ControlPanel, not as an overlay)
   protected statsVisualizer: ColumnStatsVisualizer;
@@ -101,36 +109,17 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   public async getSelectedFormattedValues(): Promise<{ headers: string[]; indices: number[]; data: string[][] }> {
-    if (!this.selectedCells) return { headers: [], indices: [], data: [] };
-
-    const { startRow, endRow, startCol, endCol } = this.selectedCells;
-    const minRow = Math.min(startRow, endRow);
-    const maxRow = Math.max(startRow, endRow);
-    const minCol = Math.min(startCol, endCol);
-    const maxCol = Math.max(startCol, endCol);
-
-    // selectedCells rows are 1-indexed (row 0 = header), cache is 0-indexed
-    const data = (await this.cache.getData(minRow - 1, maxRow)).map((row) =>
-      row.slice(minCol, maxCol + 1),
-    );
-
-    const formattedData = data.map((row) =>
-      row.map((cell, col) => getFormattedValueAndStyle(cell, this.columns[col + minCol], this.options).formatted),
-    );
-
-    // Get column headers for the selected range
-    const headers = [];
-    for (let col = minCol; col <= maxCol; col++) {
-      headers.push(this.columns[col].name);
-    }
-
-    // Get row indices for the selected range
-    const rowIndices = [];
-    for (let row = minRow; row <= maxRow; row++) {
-      rowIndices.push(row);
-    }
-
-    return { headers, indices: rowIndices, data: formattedData };
+    // Delegates to getSelection so all three selection modes (cells /
+    // rows / cols) flow through the same fetch + format pipeline. The
+    // copy keymap action (Ctrl+C) was wired to this method and would
+    // silently return empty for row/col selections before.
+    const sel = await this.getSelection();
+    if (!sel) return { headers: [], indices: [], data: [] };
+    return {
+      headers: sel.columns.map((c) => c.name),
+      indices: sel.rows,
+      data: sel.formatted,
+    };
   }
 
   protected updateToDraw(newToDraw: ToDraw) {
@@ -155,6 +144,8 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     // Cells (5) → Selection (4) → CellHover (1). ColHover is independent.
     if (this.toDraw === ToDraw.ColHover) {
       this.drawColHover();
+    } else if (this.toDraw === ToDraw.RowHover) {
+      this.drawRowHover(visibleStartRow);
     } else {
       if (this.toDraw >= ToDraw.Cells) {
         // Sync now — cache misses no longer block the frame, they render
@@ -175,22 +166,83 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     this.toDraw = ToDraw.None;
   }
 
-  protected async selectColumn(col: number) {
-    if (this.selectedCols.includes(col)) {
-      this.selectedCols = this.selectedCols.filter((i) => i !== col);
-      this.statsVisualizer?.hide();
-    } else {
-      if (this.singleColSelectionMode) {
-        this.selectedCols = [col];
+  protected async selectColumn(col: number, mods: { shift: boolean; ctrl: boolean } = { shift: false, ctrl: false }) {
+    if (mods.shift && this.lastColAnchor !== null) {
+      const start = Math.min(this.lastColAnchor, col);
+      const end = Math.max(this.lastColAnchor, col);
+      const range: number[] = [];
+      for (let c = start; c <= end; c++) range.push(c);
+      this.selectedCols = range;
+      this.selectedRows = [];
+      this.selectedCells = null;
+    } else if (mods.ctrl) {
+      if (this.selectedCols.includes(col)) {
+        this.selectedCols = this.selectedCols.filter((c) => c !== col);
+      } else {
+        this.selectedCols = [...this.selectedCols, col];
         this.selectedRows = [];
         this.selectedCells = null;
-      } else {
-        this.selectedCols.push(col);
       }
+      this.lastColAnchor = col;
+    } else {
+      this.selectedCols = [col];
+      this.selectedRows = [];
+      this.selectedCells = null;
+      this.lastColAnchor = col;
+    }
 
-      if (this.statsVisualizer) {
-        await this.statsVisualizer.showStats(this.columns[col]);
+    // Stats panel: pin to the first selected column (click order). Hide
+    // when the last column is deselected. With multi-column selections
+    // this avoids the N-stats-panes problem and gives the user a stable
+    // reading even as they ctrl-click around.
+    if (this.statsVisualizer) {
+      if (this.selectedCols.length > 0) {
+        await this.statsVisualizer.showStats(this.columns[this.selectedCols[0]]);
+      } else {
+        this.statsVisualizer.hide();
       }
+    }
+
+    this.updateToDraw(ToDraw.Selection);
+    this.notifySelectionChange();
+  }
+
+  /**
+   * Row-gutter click handler. `row` is the absolute row index returned by
+   * `getCellAtPosition` (1-indexed; row 0 is the column-header strip and
+   * is filtered out by the caller).
+   *
+   * Modifier semantics mirror Excel:
+   *   - plain click   → replace selection with just `row`, set anchor
+   *   - shift click   → extend from anchor to `row` (anchor unchanged)
+   *   - ctrl click    → toggle `row` in the current selection, set anchor
+   *
+   * Selecting a row clears any cell or column selection — the three
+   * selection modes are mutually exclusive.
+   */
+  protected async selectRow(row: number, mods: { shift: boolean; ctrl: boolean }) {
+    if (mods.shift && this.lastRowAnchor !== null) {
+      const start = Math.min(this.lastRowAnchor, row);
+      const end = Math.max(this.lastRowAnchor, row);
+      const range: number[] = [];
+      for (let r = start; r <= end; r++) range.push(r);
+      this.selectedRows = range;
+      this.selectedCols = [];
+      this.selectedCells = null;
+    } else if (mods.ctrl) {
+      if (this.selectedRows.includes(row)) {
+        this.selectedRows = this.selectedRows.filter((r) => r !== row);
+      } else {
+        this.selectedRows = [...this.selectedRows, row];
+        this.selectedCols = [];
+        this.selectedCells = null;
+      }
+      this.lastRowAnchor = row;
+    } else {
+      this.selectedRows = [row];
+      this.selectedCols = [];
+      this.selectedCells = null;
+      this.lastRowAnchor = row;
     }
 
     this.updateToDraw(ToDraw.Selection);
@@ -319,7 +371,6 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
     const rhw = this.options.rowHeaderWidth;
     const height = Math.min(this.totalHeight, this.hoverCanvas.height);
-    const overflows = this.totalHeight > this.hoverCanvas.height;
 
     let x = this.colOffsets[col] - this.scrollX;
     let width = this.colWidths[col];
@@ -329,30 +380,74 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
     }
     if (width <= 0) return;
 
-    const atBoundary = x === rhw;
-    // Inner stroke base height: when the column overflows the viewport,
-    // the right edge runs to y=height (signals "continues below"); when
-    // it fits, the right edge stops at y=height-1 like a closed rect.
-    const innerH = overflows ? height - 1 : height - 2;
-
     this.withCellAreaClip(this.hoverCtx, () => {
       this.hoverCtx.fillStyle = this.options.hoverColor;
-      this.hoverCtx.strokeStyle = this.options.hoverBorderColor || this.options.borderColor;
       this.hoverCtx.fillRect(x, 0, width, height);
-
-      this.hoverCtx.lineWidth = 2;
-      this.strokeRectEdges(this.hoverCtx, x, 0, width, height, atBoundary, overflows);
-
-      this.hoverCtx.lineWidth = 1;
-      this.strokeRectEdges(this.hoverCtx, x + 1, 1, width - 2, innerH, atBoundary, overflows);
     });
+  }
+
+  /**
+   * Row-gutter hover: paints across the full width including the gutter,
+   * matching `drawRowSelection`'s borderless fill style. Header strip
+   * stays uncovered via the same Math.max-clip the row selection uses.
+   */
+  private drawRowHover(visibleStartRow: number) {
+    this.hoverCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+    this.lastCellHoverRect = null;
+
+    if (!this.hoveredCell) return;
+    const { row } = this.hoveredCell;
+    if (row < 1) return; // header row is not a body row
+
+    const cellH = this.options.cellHeight;
+    const headerH = this.options.cellHeight;
+    const width = Math.min(this.totalWidth, this.viewportWidth);
+
+    const y = (row - visibleStartRow) * cellH;
+    if (y + cellH <= headerH) return;
+    if (y >= this.viewportHeight) return;
+
+    const drawY = Math.max(y, headerH);
+    const drawH = y + cellH - drawY;
+    if (drawH <= 0) return;
+
+    this.hoverCtx.fillStyle = this.options.hoverColor;
+    this.hoverCtx.fillRect(0, drawY, width, drawH);
   }
 
   private drawSelection(visibleStartRow: number) {
     this.selectionCtx.clearRect(0, 0, this.viewportWidth, this.viewportHeight);
+    // Row selection extends across the full width including the gutter
+    // (clicking a row index highlights the index too), so it paints
+    // *outside* the cell-area clip the cell/col selections are scoped to.
+    this.drawRowSelection(visibleStartRow);
     this.withCellAreaClip(this.selectionCtx, () => {
       this.drawCellSelection(visibleStartRow);
       this.drawColSelection();
+    });
+  }
+
+  private drawRowSelection(visibleStartRow: number) {
+    if (this.selectedRows.length === 0) return;
+
+    this.selectionCtx.fillStyle = this.options.selectionColor;
+
+    const cellH = this.options.cellHeight;
+    const headerH = this.options.cellHeight; // header row occupies y=0..cellHeight
+    const width = Math.min(this.totalWidth, this.viewportWidth);
+
+    this.selectedRows.forEach((row) => {
+      const y = (row - visibleStartRow) * cellH;
+      if (y + cellH <= headerH) return; // entirely behind the header
+      if (y >= this.viewportHeight) return; // off-screen below
+
+      // Clip the top of the row when it's partly behind the header so we
+      // don't paint over the column-name strip.
+      const drawY = Math.max(y, headerH);
+      const drawH = y + cellH - drawY;
+      if (drawH <= 0) return;
+
+      this.selectionCtx.fillRect(0, drawY, width, drawH);
     });
   }
 
@@ -428,13 +523,11 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   private drawColSelection() {
+    if (this.selectedCols.length === 0) return;
     this.selectionCtx.fillStyle = this.options.selectionColor;
-    this.selectionCtx.strokeStyle = this.options.selectionBorderColor || this.options.borderColor;
 
     const rhw = this.options.rowHeaderWidth;
     const height = Math.min(this.totalHeight, this.selectionCanvas.height);
-    const overflows = this.totalHeight > this.selectionCanvas.height;
-    const innerH = overflows ? height - 1 : height - 2;
 
     this.selectedCols.forEach((col) => {
       if (this.colOffsets[col + 1] - this.scrollX < rhw) return; // off-screen
@@ -446,26 +539,120 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
         width = this.colOffsets[col + 1] - this.scrollX - rhw;
       }
       if (width <= 0) return;
-      const atBoundary = x === rhw;
 
       this.selectionCtx.fillRect(x, 0, width, height);
-
-      this.selectionCtx.lineWidth = 2;
-      this.strokeRectEdges(this.selectionCtx, x, 0, width, height, atBoundary, overflows);
-      this.selectionCtx.lineWidth = 1;
-      this.strokeRectEdges(this.selectionCtx, x + 1, 1, width - 2, innerH, atBoundary, overflows);
     });
   }
 
-  public async getSelection(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
-    if (this.selectedCols.length > 0) {
+  /**
+   * Whole-dataset selection shape for `.export` when no rows/cols/cells
+   * are selected — every row, every column, formatted via
+   * `formatForExport` so complex cells JSON-serialise the same way they
+   * do for partial-selection exports.
+   */
+  public async exportFullDataset(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
+    if (this.totalRows === 0 || this.columns.length === 0) return null;
+    try {
+      const allRows = await this.cache.getData(0, this.totalRows);
+      const formatted = allRows.map((row) =>
+        row.map((cell, idx) => {
+          const column = this.columns[idx];
+          if (!column) return "";
+          return formatForExport(cell, column, this.options);
+        }),
+      );
+      const indices = Array.from({ length: allRows.length }, (_, i) => i + 1);
       return {
-        rows: [],
-        columns: this.selectedCols.map((col) => this.columns[col] as Column),
-        values: [],
-        formatted: [],
+        rows: indices,
+        columns: this.columns as Column[],
+        values: allRows,
+        formatted,
       };
-    } else if (this.selectedCells) {
+    } catch (error) {
+      console.error("Failed to fetch full dataset for export:", error);
+      return null;
+    }
+  }
+
+  public async getSelection(): Promise<{ rows: number[]; columns: Column[]; values: any[][]; formatted: string[][] } | null> {
+    // Column selection: every row, sliced to the selected columns. Cols
+    // are emitted in left-to-right visual order regardless of click order
+    // so exports are deterministic.
+    if (this.selectedCols.length > 0) {
+      try {
+        const sortedCols = [...this.selectedCols].sort((a, b) => a - b);
+        const allRows = await this.cache.getData(0, this.totalRows);
+        const data = allRows.map((row) => sortedCols.map((c) => row[c]));
+        const formatted = data.map((row) =>
+          row.map((cell, idx) => {
+            const column = this.columns[sortedCols[idx]];
+            if (!column) return "";
+            return formatForExport(cell, column, this.options);
+          }),
+        );
+        const columns = sortedCols.map((c) => this.columns[c]) as Column[];
+        const indices = Array.from({ length: allRows.length }, (_, i) => i + 1);
+        return { rows: indices, columns, values: data, formatted };
+      } catch (error) {
+        console.error("Failed to fetch column data for selection:", error);
+        return null;
+      }
+    }
+
+    // Row selection: fetch each contiguous run of selected rows, concat
+    // the results, emit every column. Splitting by run keeps shift-extend
+    // selections to a single fetch and ctrl-click selections to as many
+    // fetches as there are gaps — both better than over-fetching the
+    // outer hull when the selection is sparse.
+    if (this.selectedRows.length > 0) {
+      try {
+        const sorted = [...this.selectedRows].sort((a, b) => a - b);
+        const runs: { start: number; end: number }[] = [];
+        let curStart = sorted[0];
+        let curEnd = sorted[0];
+        for (let i = 1; i < sorted.length; i++) {
+          if (sorted[i] === curEnd + 1) {
+            curEnd = sorted[i];
+          } else {
+            runs.push({ start: curStart, end: curEnd });
+            curStart = sorted[i];
+            curEnd = sorted[i];
+          }
+        }
+        runs.push({ start: curStart, end: curEnd });
+
+        const data: any[][] = [];
+        const indices: number[] = [];
+        for (const run of runs) {
+          // selectedRows are 1-indexed (row 0 = header), cache is 0-indexed.
+          const rows = await this.cache.getData(run.start - 1, run.end);
+          for (let i = 0; i < rows.length; i++) {
+            data.push(rows[i]);
+            indices.push(run.start + i);
+          }
+        }
+
+        const formatted = data.map((row) =>
+          row.map((cell, idx) => {
+            const column = this.columns[idx];
+            if (!column) return "";
+            return formatForExport(cell, column, this.options);
+          }),
+        );
+
+        return {
+          rows: indices,
+          columns: this.columns as Column[],
+          values: data,
+          formatted,
+        };
+      } catch (error) {
+        console.error("Failed to fetch row data for selection:", error);
+        return null;
+      }
+    }
+
+    if (this.selectedCells) {
       try {
         const firstVisibleColumnIndex = this.getFirstVisibleColumnIndex();
         const lastVisibleColumnIndex = this.getLastVisibleColumnIndex();
@@ -479,7 +666,7 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
           row.map((cell, index) => {
             const column = this.columns[index + this.selectedCells!.startCol];
             if (!column) return "";
-            return getFormattedValueAndStyle(cell, column, this.options).formatted;
+            return formatForExport(cell, column, this.options);
           }),
         );
 
@@ -507,8 +694,64 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   protected async notifySelectionChange(): Promise<void> {
-    const selection = await this.getSelection();
-    this.onSelectionChange.forEach((callback) => callback(selection as ICellSelection | undefined));
+    // IMPORTANT: must NOT call getSelection() here. The col-selection
+    // branch of getSelection fetches every row in the dataset to build
+    // the full data matrix — fine for a copy/export call site, fatal for
+    // a notification fired on every click (column clicks would trigger
+    // a full-dataset cache load + skeleton placeholders + redraws).
+    //
+    // The status-bar / command-bar listeners only need counts + column
+    // metadata + (optionally) the first cell's formatted value. Build
+    // that summary cheaply without touching the cache except for the
+    // single first-cell preview.
+    const selection = await this.buildSelectionSummary();
+    this.onSelectionChange.forEach((callback) => callback(selection));
+  }
+
+  /**
+   * Cheap selection metadata for change notifications. Skips the full
+   * data fetch `getSelection()` does. Cells mode delegates to
+   * getSelection (its fetch is bounded to the selected range, not the
+   * whole dataset). Rows mode fetches one cell for the status-bar
+   * preview. Cols mode returns metadata only — the status bar's
+   * cell-value display ignores col selections anyway.
+   */
+  private async buildSelectionSummary(): Promise<ICellSelection | undefined> {
+    if (this.selectedCols.length > 0) {
+      const sortedCols = [...this.selectedCols].sort((a, b) => a - b);
+      return {
+        rows: [],
+        columns: sortedCols.map((c) => this.columns[c]).filter(Boolean) as Column[],
+        values: [],
+        formatted: [],
+      };
+    }
+    if (this.selectedRows.length > 0) {
+      const sortedRows = [...this.selectedRows].sort((a, b) => a - b);
+      let values: any[][] = [];
+      let formatted: string[][] = [];
+      try {
+        const firstRow = await this.cache.getData(sortedRows[0] - 1, sortedRows[0]);
+        if (firstRow.length > 0 && this.columns.length > 0) {
+          const firstValue = firstRow[0][0];
+          values = [[firstValue]];
+          formatted = [[getFormattedValueAndStyle(firstValue, this.columns[0], this.options).formatted]];
+        }
+      } catch {
+        // Preview is optional — fall through with empty values.
+      }
+      return {
+        rows: sortedRows,
+        columns: this.columns as Column[],
+        values,
+        formatted,
+      };
+    }
+    if (this.selectedCells) {
+      const sel = await this.getSelection();
+      return sel ?? undefined;
+    }
+    return undefined;
   }
 
   // Public methods for external access to selection state
@@ -558,6 +801,23 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
 
   public removeOnSelectionChangeSubscription(callback: (selection?: ICellSelection) => void): void {
     this.onSelectionChange = this.onSelectionChange.filter((cb) => cb !== callback);
+  }
+
+  // Inspect-requested fires on user-driven double-click of a complex
+  // cell. Carries the cell's payload so subscribers don't have to race
+  // against the selection-change notification path.
+  private onCellInspectRequested: ((info: CellInspectInfo) => void)[] = [];
+
+  public addOnCellInspectRequestedSubscription(callback: (info: CellInspectInfo) => void): void {
+    this.onCellInspectRequested.push(callback);
+  }
+
+  public removeOnCellInspectRequestedSubscription(callback: (info: CellInspectInfo) => void): void {
+    this.onCellInspectRequested = this.onCellInspectRequested.filter((cb) => cb !== callback);
+  }
+
+  protected notifyCellInspectRequested(info: CellInspectInfo): void {
+    this.onCellInspectRequested.forEach((cb) => cb(info));
   }
 
   public getSelectedColumns(): Column[] {

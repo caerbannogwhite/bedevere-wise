@@ -350,6 +350,28 @@ export class StatusBar {
     this.updateItem("cell-value", { text: "", html: undefined, visible: false, expandable: false });
   }
 
+  /**
+   * Open the inspector popover with an explicit payload. Wired to the
+   * spreadsheet's double-click-on-complex-cell event so the user can
+   * always re-open the popover even after dismissing it (resets the
+   * `autoPopDisabled` streak). Updates `lastComplexCell` so a subsequent
+   * `toggleCellValuePopover` keymap toggle has a valid target.
+   */
+  public openCellPopover(info: { columnName: string; kind: ComplexKind; value: any }): void {
+    this.autoPopDisabled = false;
+    this.lastComplexCell = {
+      columnName: info.columnName,
+      kind: info.kind,
+      raw: info.value,
+    };
+    this.cellValuePopover.show({
+      columnName: info.columnName,
+      kind: info.kind,
+      value: info.value,
+      options: this.spreadsheetOptions,
+    });
+  }
+
   /** Toggle the inspector popover for the currently selected complex cell. */
   private toggleCellValuePopover(): void {
     if (!this.lastComplexCell || !this.lastComplexCell.kind) return;
