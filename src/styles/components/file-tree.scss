@@ -1,3 +1,26 @@
+.file-tree__search {
+  display: block;
+  width: calc(100% - 16px);
+  margin: 6px 8px 4px;
+  padding: 4px 8px;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+
+  &:focus {
+    outline: none;
+    border-color: var(--blue);
+  }
+
+  &::placeholder { color: var(--fg-muted); }
+}
+
+.file-tree__tree {
+  // Container for the rendered nodes — siblings the search input.
+}
+
 .file-tree__node {
   user-select: none;
 
