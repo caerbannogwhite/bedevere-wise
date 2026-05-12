@@ -102,7 +102,7 @@ export class TabManager {
   private onQueryErrorCallback?: (error: Error) => void;
   private onQueryCompletedCallback?: (result: { elapsedMs: number; error?: Error }) => void;
   private onShellMessageCallback?: (text: string, details?: string) => void;
-  private onDatasetAddedCallback?: (metadata: DatasetMetadata) => void;
+  private onBeforeAddDatasetCallback?: (metadata: DatasetMetadata) => void;
   // Monotonic counter for default result-tab names (`result_1`, `result_2`,
   // …). Resets per session — these tables don't survive a page reload.
   private resultCounter = 0;
@@ -162,6 +162,29 @@ export class TabManager {
   }
 
   public async addDataset(metadata: DatasetMetadata, dataProvider: DataProvider): Promise<void> {
+    // Pre-add hook fires before the visualizer is constructed so
+    // consumers (e.g. BedevereApp restoring persisted hidden-columns)
+    // can populate `filterManager` synchronously. The callback fires
+    // `onChange` → `handleFilterChange`, but the tab isn't in
+    // `this.tabs` yet, so handleFilterChange no-ops; the swap below
+    // does the real work in a single render pass.
+    this.onBeforeAddDatasetCallback?.(metadata);
+
+    // If filter / sort / hide state already exists for this dataset,
+    // route the visualizer through the filtered provider from the
+    // start. Source table for a fresh add is the dataset's own name
+    // (all callers pass an unfiltered DuckDBDataProvider).
+    let effectiveProvider = dataProvider;
+    if (this.filterManager.hasAnyState(metadata.name) && this.duckDBService) {
+      effectiveProvider = new FilteredDuckDBDataProvider(
+        this.duckDBService,
+        metadata.name,
+        this.filterManager,
+        metadata.name,
+        metadata.fileName ?? "",
+      );
+    }
+
     // Create a separate container for this dataset's spreadsheet visualizer
     const datasetContainer = document.createElement("div");
     datasetContainer.className = "tab-manager__dataset-container";
@@ -203,7 +226,7 @@ export class TabManager {
     // Create wrapper for event handling
     const spreadsheetVisualizer = new SpreadsheetVisualizer(
       datasetContainer,
-      dataProvider,
+      effectiveProvider,
       spreadsheetOptions,
       this.sharedStatsVisualizer,
       `spreadsheet-${metadata.name}`
@@ -235,7 +258,7 @@ export class TabManager {
     const tab: DatasetTab = {
       kind: "dataset",
       metadata,
-      dataProvider,
+      dataProvider: effectiveProvider,
       spreadsheetVisualizer,
       container: datasetContainer,
       isActive: false,
@@ -256,11 +279,6 @@ export class TabManager {
     if (this.tabs.length === 1) {
       await this.activateTab(metadata.name);
     }
-
-    // Fire after the visualizer is on screen so consumers (e.g.
-    // BedevereApp restoring persisted hidden-columns) can call into
-    // the filter manager and trigger a clean handleFilterChange swap.
-    this.onDatasetAddedCallback?.(metadata);
   }
 
   public async switchToDataset(id: string): Promise<void> {
@@ -441,8 +459,8 @@ export class TabManager {
     this.onQueryCompletedCallback = callback;
   }
 
-  public setOnDatasetAddedCallback(callback: (metadata: DatasetMetadata) => void): void {
-    this.onDatasetAddedCallback = callback;
+  public setOnBeforeAddDatasetCallback(callback: (metadata: DatasetMetadata) => void): void {
+    this.onBeforeAddDatasetCallback = callback;
   }
 
   private createTabElement(tab: Tab): void {

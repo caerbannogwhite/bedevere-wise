@@ -409,13 +409,13 @@ export class BedevereApp implements EventHandler {
       this.showMessage(text, "info", { details, duration: 0 });
     });
 
-    // Restore persisted per-dataset hide state when a dataset opens.
-    // Fires after the visualizer's first init, so the user sees the
-    // unfiltered view momentarily before the filtered re-init kicks in.
-    // That's intentional: the alternative (pre-restore inside addDataset)
-    // requires TabManager to know about persistence, which we keep
-    // outside the tab/visualizer layer.
-    this.tabManager.setOnDatasetAddedCallback((metadata) => {
+    // Restore persisted per-dataset hide state before the dataset's
+    // visualizer is constructed. Setting on the filter manager here
+    // fires `onChange`, but `handleFilterChange` no-ops because the
+    // tab isn't registered yet — `addDataset` then sees `hasAnyState`
+    // and constructs the filtered provider directly, so the first
+    // render is already projected.
+    this.tabManager.setOnBeforeAddDatasetCallback((metadata) => {
       const persisted = this.persistenceService.loadAppSettings().hiddenColumns?.[metadata.name];
       if (!persisted || persisted.length === 0) return;
       // Filter to columns that still exist in the current metadata —
