@@ -46,6 +46,14 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
   public async handleMouseDown(event: MouseEvent): Promise<boolean> {
     if (!this._isFocused) return false;
 
+    // Skip clicks targeting a sibling element (e.g. an overlay
+    // positioned over the canvas — context menu, dialog backdrop,
+    // help panel). The bounds check below catches clicks physically
+    // outside the canvas; this catches clicks on overlays that sit
+    // *above* the canvas, where bounds still pass. Mirrors the
+    // existing `handleWheel` pattern.
+    if (!this.container.contains(event.target as Node)) return false;
+
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
     const y = event.clientY - rect.top;
@@ -140,6 +148,12 @@ export class SpreadsheetVisualizerFocusable extends SpreadsheetVisualizerSelecti
 
   public async handleMouseMove(event: MouseEvent): Promise<boolean> {
     if (!this._isFocused) return false;
+
+    // Cursor over an overlay (context menu, dialog, help panel) must
+    // not update the canvas hover highlight. Drag-select past the
+    // canvas edge stops updating once the cursor enters the overlay
+    // and resumes when it returns — acceptable trade-off.
+    if (!this.container.contains(event.target as Node)) return false;
 
     const rect = this.canvas.getBoundingClientRect();
     const x = event.clientX - rect.left;
