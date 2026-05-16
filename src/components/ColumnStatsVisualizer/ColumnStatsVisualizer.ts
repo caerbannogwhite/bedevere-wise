@@ -395,10 +395,16 @@ export class ColumnStatsVisualizer {
     });
 
     // Apply filter — semantics depend on column type.
-    //   - String (categorical): use `excludedValues` as an exclude-set.
-    //     The user uncheckes values they don't want; we write an
-    //     exclude filter so the selection state survives across
-    //     server-side searches.
+    //   - String (categorical):
+    //       • Search active → write an *include* filter of
+    //         (currently matching values) ∩ (checked). The search
+    //         narrows the candidate set; checkboxes refine within it.
+    //         This is what the user means by "show only the values
+    //         matching the search and selected among them".
+    //       • No search    → write an *exclude* filter of unchecks,
+    //         so opening on a high-cardinality column and unchecking
+    //         a few values doesn't accidentally collapse the filter
+    //         to just the top-N.
     //   - Boolean: keep the legacy include semantics (small fixed
     //     value space — TRUE/FALSE — so the include list is trivial
     //     to read straight from the DOM).
@@ -406,6 +412,32 @@ export class ColumnStatsVisualizer {
       if (!this.filterManager || !this.currentColumn) return;
 
       if (dt && isStringType(dt)) {
+        const searchActive = this.valueSearchQuery !== "";
+
+        if (searchActive) {
+          // "Visible" = the values currently rendered in the filter
+          // list — either the server-side search results or, if the
+          // debounced fetch hasn't resolved yet, the static top-N.
+          const visible: string[] =
+            this.valueSearchResults !== null
+              ? this.valueSearchResults.map((r) => r.value)
+              : Array.from(_stats.valueCounts.keys());
+          const checked = visible.filter((v) => !this.excludedValues.has(v));
+
+          if (checked.length === 0) {
+            this.filterManager.removeFilter(this.datasetName, this.currentColumn.name);
+          } else {
+            const filter: ColumnFilter = {
+              columnName: this.currentColumn.name,
+              dataType: dt,
+              filterType: "include",
+              values: checked,
+            };
+            this.filterManager.setFilter(this.datasetName, filter);
+          }
+          return;
+        }
+
         if (this.excludedValues.size === 0) {
           this.filterManager.removeFilter(this.datasetName, this.currentColumn.name);
         } else {
