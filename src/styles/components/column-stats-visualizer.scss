@@ -344,23 +344,30 @@
     font-style: italic;
   }
 
-  // Categorical horizontal bars
+  // Categorical horizontal bars. CSS Grid (not flex) so the label
+  // column sizes to the widest row's content — every bar then starts
+  // and ends at the same x-coordinate, like a proper bar chart. The
+  // first column uses `minmax(0, max-content)` so labels grow to fit
+  // text on wide panels but can shrink (with ellipsis) when the
+  // panel is narrow. The bar column takes remaining space.
   &__chart {
-    display: flex;
-    flex-direction: column;
-    gap: 3px;
+    display: grid;
+    grid-template-columns: minmax(0, max-content) minmax(40px, 1fr) auto;
+    column-gap: 6px;
+    row-gap: 3px;
+    align-items: center;
   }
 
+  // `display: contents` makes each row's children participate
+  // directly in the parent grid, so the three columns line up across
+  // every row without giving up the per-row wrapper element (kept
+  // for the DOM hooks the visualizer attaches to).
   &__row {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-height: 18px;
+    display: contents;
   }
 
   &__label {
-    width: 70px;
-    flex-shrink: 0;
+    min-width: 0;
     font-size: 0.7rem;
     color: var(--fg-muted);
     text-align: right;
@@ -371,7 +378,6 @@
   }
 
   &__bar-track {
-    flex: 1;
     height: 14px;
     background: var(--bg);
     border-radius: 0;
@@ -402,8 +408,11 @@
     font-size: 0.65rem;
   }
 
-  // Numerical vertical histogram
+  // Numerical vertical histogram. Override the categorical chart's
+  // grid layout — numerical buckets are a flat sequence of bars
+  // (one per bucket) and need a flex row, not a 3-column grid.
   &__chart--numerical {
+    display: flex;
     flex-direction: row;
     align-items: flex-end;
     gap: 1px;
