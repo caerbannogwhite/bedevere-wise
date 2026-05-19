@@ -50,9 +50,15 @@ export class SpreadsheetVisualizerSelection extends SpreadsheetVisualizerBase {
   }
 
   protected async updateLayout() {
-    // Always use container dimensions for responsive behavior, but respect min/max constraints
-    let width = Math.floor(minMax(this.container.clientWidth, this.options.minWidth, this.options.maxWidth));
-    let height = Math.floor(minMax(this.container.clientHeight, this.options.minHeight, this.options.maxHeight));
+    // Use the scroll container's content-box dimensions, not the outer
+    // container's — `scrollContainer.clientWidth/Height` is the visible
+    // area *excluding* the native scrollbars. The outer container's
+    // `clientWidth/Height` includes whatever space the scrollbars
+    // currently occupy, which used to leave the bottom row half-covered
+    // by the horizontal scrollbar (and the rightmost column shifted
+    // under the vertical scrollbar).
+    let width = Math.floor(minMax(this.scrollContainer.clientWidth, this.options.minWidth, this.options.maxWidth));
+    let height = Math.floor(minMax(this.scrollContainer.clientHeight, this.options.minHeight, this.options.maxHeight));
 
     // Fallback to options dimensions if container has no size (e.g., during initialization)
     if (width <= 0 && this.options.width !== undefined) {

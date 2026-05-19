@@ -316,14 +316,23 @@ export class SpreadsheetVisualizerBase {
       this.resizeObserver = new ResizeObserver(() => {
         // Defensive: only react if dimensions actually changed. ResizeObserver
         // fires on layout passes that may produce identical sizes.
+        //
+        // We compare against the scroll container's content-box dims (not
+        // the outer container's), matching what `updateLayout` measures
+        // from. Observing the scrollContainer additionally catches
+        // scrollbar-toggle events — when the spacer grows enough for the
+        // horizontal scrollbar to appear, the scrollContainer's
+        // clientHeight shrinks even though the outer container's stays
+        // put, and we re-layout the canvas to fit the new content box.
         if (
-          this.container.clientWidth !== this.viewportWidth ||
-          this.container.clientHeight !== this.viewportHeight
+          this.scrollContainer.clientWidth !== this.viewportWidth ||
+          this.scrollContainer.clientHeight !== this.viewportHeight
         ) {
           this.requestRelayout();
         }
       });
       this.resizeObserver.observe(this.container);
+      this.resizeObserver.observe(this.scrollContainer);
     }
 
     this.armDprListener();

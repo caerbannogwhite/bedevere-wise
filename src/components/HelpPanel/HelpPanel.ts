@@ -101,6 +101,8 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
   {
     kind: "snippet",
     sql:
+      "CREATE OR REPLACE TYPE sex_type AS ENUM ('female', 'male');\n" +
+      "\n" +
       "-- Tighten categorical text into ENUMs (less memory, only valid values)\n" +
       "-- and cast measurements to DOUBLE. TRY_CAST yields NULL on failure, so\n" +
       "-- the string \"NA\" becomes a real NULL.\n" +
@@ -108,13 +110,12 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
       "SELECT\n" +
       "    species::ENUM ('Adelie', 'Gentoo', 'Chinstrap') AS species\n" +
       "  , island::ENUM ('Dream', 'Torgersen', 'Biscoe') AS island\n" +
-      "  , sex::ENUM ('female', 'male') AS sex\n" +
+      "  , TRY_CAST(sex AS sex_type) AS sex\n" +
       "  , TRY_CAST(bill_length_mm AS DOUBLE) AS bill_length_mm\n" +
       "  , TRY_CAST(bill_depth_mm AS DOUBLE) AS bill_depth_mm\n" +
       "  , TRY_CAST(flipper_length_mm AS DOUBLE) AS flipper_length_mm\n" +
       "  , TRY_CAST(body_mass_g AS DOUBLE) AS body_mass_g\n" +
       "FROM penguins\n" +
-      "WHERE sex != 'NA'             -- drop rows with unknown sex\n" +
       "ORDER BY species, island, sex\n" +
       ";",
   },
@@ -128,8 +129,9 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
     kind: "snippet",
     sql:
       "-- Mean and standard deviation of every measurement, broken down by\n" +
-      "-- species x island x sex. The penguins_clean view already excludes\n" +
-      "-- rows with sex = 'NA', so no WHERE clause is needed.\n" +
+      "-- species x island x sex. Rows where sex couldn't be parsed are\n" +
+      "-- NULL after the TRY_CAST in penguins_clean — GROUP BY drops them\n" +
+      "-- into their own bucket, which is usually what you want.\n" +
       "SELECT species, island, sex\n" +
       "  , AVG(bill_length_mm)    AS mean_bill_length\n" +
       "  , STDDEV(bill_length_mm) AS std_bill_length\n" +
@@ -173,6 +175,47 @@ const PENGUINS_TUTORIAL: TutorialNode[] = [
     html:
       `Each result cell is a STRUCT. Click the cell, then click the value in the status bar to open an inspector ` +
       `with every field on its own row.`,
+  },
+
+  { kind: "heading", text: "Publication-style \"Table 1\"" },
+  {
+    kind: "prose",
+    html:
+      `Stats Duck's <code>TABLE_ONE()</code> produces a long-format summary — one row per ` +
+      `(variable × level × statistic) — that you can pivot into the wide layout most papers use. ` +
+      `Variables are passed by name; the <code>by</code> argument splits the summary by a stratifier ` +
+      `(here, <code>species</code>). Display strings are already formatted (e.g. <code>"45.32 ± 5.46"</code>); ` +
+      `the <code>PIVOT … USING FIRST(display)</code> step reshapes them into one column per stratum.`,
+  },
+  {
+    kind: "snippet",
+    sql:
+      "-- Build the long-format summary silently — we only want to see the\n" +
+      "-- pivoted result, so .no-output suppresses the intermediate tab.\n" +
+      ".no-output\n" +
+      "CREATE OR REPLACE TABLE penguins_temp AS\n" +
+      "SELECT * FROM TABLE_ONE(\n" +
+      "  'penguins_clean'\n" +
+      "  , variables := ['island', 'sex', 'bill_length_mm', 'flipper_length_mm', 'body_mass_g']\n" +
+      "  , by := 'species'\n" +
+      ")\n" +
+      ";\n" +
+      "\n" +
+      "-- Reshape into one column per species. Each row carries the\n" +
+      "-- variable, its level (for categoricals) or NULL (for numerics),\n" +
+      "-- and the statistic name; FIRST(display) picks up the pre-formatted\n" +
+      "-- value for each stratum.\n" +
+      "CREATE OR REPLACE TABLE penguins_summ AS\n" +
+      "PIVOT penguins_temp ON stratum USING FIRST(display)\n" +
+      "GROUP BY variable, level, statistic\n" +
+      ";",
+  },
+  {
+    kind: "tip",
+    html:
+      `Drop the <code>by</code> argument to get an overall (unstratified) Table 1. Pass ` +
+      `<code>by := ['species', 'sex']</code> to stratify on two factors at once — the pivot still works ` +
+      `because each row's stratum string carries the combination.`,
   },
 
   { kind: "heading", text: "All in one query" },
@@ -462,9 +505,17 @@ export class HelpPanel {
       <div class="help-panel__callout help-panel__callout--deps">
         <div class="help-panel__callout-title">\u2696\uFE0F Minimal dependencies</div>
         <p>
-          Built on just two libraries: <a href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener noreferrer">DuckDB-WASM</a>
-          (SQL engine) and <a href="https://codemirror.net/" target="_blank" rel="noopener noreferrer">CodeMirror 6</a> (editor).
-          No frameworks, no analytics, no tracking.
+          Built on three libraries:
+          <a href="https://duckdb.org/docs/api/wasm/overview" target="_blank" rel="noopener noreferrer">DuckDB-WASM</a>
+          (SQL engine),
+          <a href="https://codemirror.net/" target="_blank" rel="noopener noreferrer">CodeMirror 6</a>
+          (editor), and
+          <a href="https://vega.github.io/vega-lite/" target="_blank" rel="noopener noreferrer">Vega-Lite</a>
+          (charts &mdash; lazy-loaded on first <code>VISUALIZE</code>).
+          No frameworks, no analytics, no tracking. A small, well-known
+          dependency set means a small <strong>attack surface</strong>
+          &mdash; easier to audit, fewer transitive vulnerabilities, no
+          mystery code shipping in your tab.
         </p>
       </div>
 
@@ -1479,8 +1530,8 @@ export class HelpPanel {
         <h3 class="help-panel__about-section-title">What's new in 0.11</h3>
         <ul class="help-panel__about-list">
           <li>The <strong>SQL editor autosaves</strong> while you type and restores the draft on reload. Press <code>Ctrl+S</code> to save the current query as a named bookmark; <code>Ctrl+F</code> opens an in-editor find panel.</li>
-          <li><strong>Import HTML tables</strong> from the clipboard (<code>.paste</code>) or from a saved <code>.html</code> file — multi-table pages open a picker; image-only cells (e.g. flag icons) fall back to the <code>alt</code> attribute or the <code>src</code> basename so a column of icons still carries data.</li>
-          <li><strong>Fetch remote files by URL</strong> (<code>.fetch &lt;url&gt;</code>) — CSV / JSON / Parquet / HTML routed through the same handlers as local files. CORS-blocked sources surface a clear "save and drag it in" hint.</li>
+          <li><em>(preview)</em> <strong>Import HTML tables</strong> from the clipboard (<code>.paste</code>) or from a saved <code>.html</code> file — multi-table pages open a picker; image-only cells (e.g. flag icons) fall back to the <code>alt</code> attribute or the <code>src</code> basename so a column of icons still carries data.</li>
+          <li><em>(preview)</em> <strong>Fetch remote files by URL</strong> (<code>.fetch &lt;url&gt;</code>) — CSV / JSON / Parquet / HTML routed through the same handlers as local files. CORS-blocked sources surface a clear "save and drag it in" hint.</li>
           <li><strong>Drag-to-reorder columns</strong> in the spreadsheet header; the order persists per dataset alongside hide / sort / filter.</li>
           <li><strong>Click-to-copy</strong> on the column-stats panel — clicking the column name or any categorical histogram value copies it to the clipboard with a brief flash.</li>
           <li><strong>Ctrl+C respects text selections outside the spreadsheet</strong> — drag-select text in the column-stats panel, status bar, help panel, etc. and Ctrl+C copies that instead of the spreadsheet cells.</li>
