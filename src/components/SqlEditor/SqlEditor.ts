@@ -11,7 +11,7 @@ import {
   addCursorAbove,
   addCursorBelow,
 } from "@codemirror/commands";
-import { searchKeymap } from "@codemirror/search";
+import { searchKeymap, selectNextOccurrence } from "@codemirror/search";
 import { HighlightStyle, syntaxHighlighting } from "@codemirror/language";
 import { tags as t } from "@lezer/highlight";
 import { FocusableComponent } from "../BedevereApp/types";
@@ -113,10 +113,17 @@ export class SqlEditor implements FocusableComponent {
     // Restore the in-flight draft from the previous session, if any.
     // Done after initializeEditor so the EditorView exists and silently
     // so the user sees their text reappear without an "imported X" toast.
+    // Also expand the editor so the restored text is visible immediately
+    // — a draft that lives behind a collapsed panel is functionally
+    // invisible. The expand is deferred so the parent's
+    // `setOnToggleCallback` (TabManager wires it right after construction)
+    // has a chance to land first; otherwise the CommandBar's SQL-toggle
+    // chip wouldn't sync with the editor's actual state.
     const draft = persistenceService.loadEditorAutoSaveDraft();
     if (draft) {
       this.setQuery(draft);
       this.lastAutoSavedText = draft;
+      setTimeout(() => this.expand(), 0);
     }
 
     // Refresh schema for autocompletion
@@ -346,10 +353,19 @@ export class SqlEditor implements FocusableComponent {
       EditorView.updateListener.of((update) => {
         if (update.docChanged) this.scheduleAutoSave();
       }),
-      // Tab needs an explicit binding because defaultKeymap omits it — without
-      // this, Tab falls through to the browser and moves focus out of the
-      // editor. Mod-Enter must beat defaultKeymap's `Mod-Enter -> insertBlankLine`,
-      // hence Prec.high on the whole block.
+      // The Prec.high block owns every chord that would otherwise lose
+      // to either the browser's built-in shortcut (Ctrl+S → "Save Page
+      // As", Ctrl+D → "Add Bookmark") or to a lower-precedence
+      // CodeMirror keymap (defaultKeymap's `Mod-Enter -> insertBlankLine`).
+      //
+      // Routing the save through CodeMirror's keymap instead of the
+      // document-level `handleKeyDown` matters because the SqlEditor
+      // isn't tracked by the FocusManager — so the
+      // EventDispatcher → handleKeyDown path never fires when the user
+      // is typing in CM. CM's own keymap, on the other hand, runs
+      // synchronously inside the editor's `keydown` handler before the
+      // event bubbles, and the `preventDefault: true` flag stops the
+      // browser shortcut cold.
       Prec.high(
         keymap.of([
           { key: "Tab", run: insertTab, shift: indentLess },
@@ -360,13 +376,45 @@ export class SqlEditor implements FocusableComponent {
               return true;
             },
           },
-          // Explicit Alt+ArrowUp/Down → drop a cursor above / below
-          // the current line. CodeMirror's default binding for these
-          // commands is Ctrl+Alt+ArrowUp/Down; the user asked for the
-          // plain Alt variant (matches the convention used in VS Code
-          // and several other editors).
+          // Multi-cursor: drop a cursor above / below the current line.
+          // CodeMirror's defaults for these commands are
+          // Ctrl+Alt+ArrowUp/Down; the user asked for plain Alt+arrow
+          // (matches VS Code's convention).
           { key: "Alt-ArrowUp", run: addCursorAbove },
           { key: "Alt-ArrowDown", run: addCursorBelow },
+          // Ctrl+D → if there's no current selection, select the word
+          // at the cursor; otherwise extend the selection to the next
+          // occurrence (VS Code / Sublime behaviour). CodeMirror's
+          // built-in `selectNextOccurrence` bails with `false` when
+          // every range is empty, which used to drop us through to
+          // the browser's bookmark default. Wrapping it here keeps
+          // both common workflows working from the same chord.
+          // High precedence with `preventDefault: true` so the
+          // browser's bookmark shortcut never wins.
+          {
+            key: "Mod-d",
+            preventDefault: true,
+            run: (view) => {
+              const { state } = view;
+              if (state.selection.ranges.every((r) => r.empty)) {
+                const word = state.wordAt(state.selection.main.head);
+                if (!word) return true; // nothing selectable; still swallow the chord
+                view.dispatch({ selection: { anchor: word.from, head: word.to } });
+                return true;
+              }
+              return selectNextOccurrence(view);
+            },
+          },
+          // Ctrl+S → open the "Save query as…" dialog. preventDefault
+          // suppresses the browser's "Save Page As" dialog.
+          {
+            key: "Mod-s",
+            preventDefault: true,
+            run: () => {
+              this.openSaveDialog();
+              return true;
+            },
+          },
         ])
       ),
     ];
